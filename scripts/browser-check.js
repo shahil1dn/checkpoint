@@ -93,13 +93,17 @@ async function main() {
     await sleep(300);
     for (let i = 1; i <= 5; i += 1) {
       await ask(`Question ${i}?`);
-      await sleep(150);
-      // Offline, Max's 2nd answer offers a bribe (src/travellers/max.js).
+      // Offline answers land at once; a short wait keeps the whole run well inside the 2 s shift.
+      await sleep(40);
+      // Offline, Max's 2nd answer offers a bribe (src/travellers/max.js). One
+      // round trip, because the sped-up clock leaves little time to spare.
       if (i === 2) {
-        const offered = await page.evaluate(`!document.getElementById('bribe').hidden`);
-        await page.evaluate(`document.getElementById('take-bribe').click(); true`);
-        const after = await page.evaluate(`({ gone: document.getElementById('bribe').hidden, hint: document.getElementById('hint').textContent })`);
-        check('a bribe offer shows Take and Ignore, and taking it closes the offer', offered && after.gone && after.hint.includes('record'), { offered, ...after });
+        const bribe = await page.evaluate(`(() => {
+          const offered = !document.getElementById('bribe').hidden;
+          document.getElementById('take-bribe').click();
+          return { offered, gone: document.getElementById('bribe').hidden, hint: document.getElementById('hint').textContent };
+        })()`);
+        check('a bribe offer shows Take and Ignore, and taking it closes the offer', bribe.offered && bribe.gone && bribe.hint.includes('record'), bribe);
       }
     }
     // A 6th question can only come by voice (the Ask button is greyed out);
