@@ -22,11 +22,11 @@ export function checkQuestion(text) {
 
 function checkPastExchange(item) {
   if (!isPlainObject(item)) return null;
-  const { question, reply, mood = 'neutral', cracked = false } = item;
+  const { question, reply, mood = 'neutral', cracked = false, bribe = false } = item;
   if (!checkQuestion(question).ok) return null;
   if (typeof reply !== 'string' || reply.length === 0 || charCount(reply) > MAX_REPLY_CHARS) return null;
-  if (!MOODS.includes(mood) || typeof cracked !== 'boolean') return null;
-  return { question, reply, mood, cracked };
+  if (!MOODS.includes(mood) || typeof cracked !== 'boolean' || typeof bribe !== 'boolean') return null;
+  return { question, reply, mood, cracked, bribe };
 }
 
 // ---- Confessions belong to the code (C3) ----
@@ -136,7 +136,7 @@ export function newShift(queue = DEMO_QUEUE, { firstRequestId = 1 } = {}) {
     pending: null,
     hearing: false,
     nextRequestId: firstRequestId,
-    cases: Object.fromEntries(queue.map((id) => [id, { history: [], notes: [], stamp: null }])),
+    cases: Object.fromEntries(queue.map((id) => [id, { history: [], notes: [], stamp: null, bribeTaken: false, bribeAnsweredAt: 0 }])),
   };
 }
 
@@ -158,7 +158,7 @@ export function startQuestion(shift, text) {
   if (questionsLeft(shift, travellerId) <= 0) return { shift, error: 'outOfQuestions' };
   const pending = { id: shift.nextRequestId, travellerId, question: checked.question };
   const record = shift.cases[travellerId];
-  const request = { ...pending, history: record.history.map(({ question, reply, mood, cracked }) => ({ question, reply, mood, cracked })), notes: record.notes };
+  const request = { ...pending, history: record.history.map(({ question, reply, mood, cracked, bribe }) => ({ question, reply, mood, cracked, bribe })), notes: record.notes };
   return { shift: { ...shift, pending, nextRequestId: shift.nextRequestId + 1 }, request };
 }
 
@@ -168,7 +168,7 @@ export function finishQuestion(shift, requestId, reply) {
   if (!shift.pending || shift.pending.id !== requestId) return shift;
   const { travellerId, question } = shift.pending;
   if (!reply) return { ...shift, pending: null };
-  const exchange = { question, reply: reply.reply, mood: reply.mood, cracked: reply.cracked };
+  const exchange = { question, reply: reply.reply, mood: reply.mood, cracked: reply.cracked, bribe: reply.bribe === true };
   const record = shift.cases[travellerId];
   const notes = [...record.notes, ...(reply.notes ?? []).slice(0, MAX_NOTES_PER_ANSWER)];
   return {
@@ -176,6 +176,29 @@ export function finishQuestion(shift, requestId, reply) {
     pending: null,
     cases: { ...shift.cases, [travellerId]: { ...record, history: [...record.history, exchange], notes } },
   };
+}
+
+// ---- Bribes ----
+// The model only says that a reply offers one. Whether the inspector took it
+// is the game's fact, kept here like the truth (ADR-2), and it never changes
+// whether a stamp was right.
+
+// The offer on the table: the current traveller's latest answer, until the
+// inspector takes it, ignores it or asks something else. One bribe a traveller.
+export function bribeOffer(shift) {
+  const travellerId = currentTravellerId(shift);
+  if (!travellerId || shift.pending) return null;
+  const { history, bribeTaken, bribeAnsweredAt } = shift.cases[travellerId];
+  if (bribeTaken || bribeAnsweredAt === history.length || !history.at(-1)?.bribe) return null;
+  return { travellerId, reply: history.at(-1).reply };
+}
+
+export function answerBribe(shift, take) {
+  const offer = bribeOffer(shift);
+  if (!offer) return { shift, error: 'noBribe' };
+  const record = shift.cases[offer.travellerId];
+  const answered = { ...record, bribeTaken: take === true, bribeAnsweredAt: record.history.length };
+  return { shift: { ...shift, cases: { ...shift.cases, [offer.travellerId]: answered } } };
 }
 
 // Speech-to-text is a Mistral call too, so the clock waits for it as well.
@@ -208,11 +231,12 @@ export function stamp(shift, verdict) {
 export function shiftReport(shift) {
   const rows = shift.queue.map((id) => {
     const traveller = getTraveller(id);
-    const { stamp: verdict } = shift.cases[id];
+    const { stamp: verdict, bribeTaken } = shift.cases[id];
     const honest = traveller.truth.honest;
-    return { id, name: traveller.name, stamp: verdict, honest, secret: traveller.truth.secret, correct: verdict !== null && (verdict === 'through') === honest };
+    return { id, name: traveller.name, stamp: verdict, honest, secret: traveller.truth.secret, correct: verdict !== null && (verdict === 'through') === honest, bribeTaken };
   });
-  return { rows, correct: rows.filter((r) => r.correct).length, total: rows.length };
+  const bribesTaken = rows.filter((r) => r.bribeTaken).length;
+  return { rows, correct: rows.filter((r) => r.correct).length, total: rows.length, bribesTaken, record: bribesTaken > 0 ? 'corrupt' : 'clean' };
 }
 
 // Markdown would be read aloud as symbols, so it goes before the length cut.
@@ -237,5 +261,6 @@ export function parseReply(raw) {
     reply,
     mood: MOODS.includes(data.mood) ? data.mood : 'neutral',
     cracked: data.cracked === true,
+    bribe: data.bribe === true,
   };
 }

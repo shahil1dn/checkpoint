@@ -31,7 +31,7 @@ export default {
   // Canned replies for playing offline and for tests, in order.
   offlineLines: [
     { reply: 'Inspector! What a magnificent hat. I am here for the Mistral hackathon, naturally.', mood: 'excited' },
-    { reply: 'Mistral facts? I know them all. Would you like a sticker? Or a croissant?', mood: 'confident' },
+    { reply: 'Mistral facts? I know them all. Would you like a sticker? Or a croissant?', mood: 'confident', bribe: true },
     { reply: 'Frontier who? Never heard of them. Probably a typo on the ticket.', mood: 'frustrated' },
   ],
 };
