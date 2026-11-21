@@ -99,19 +99,26 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
 #you-said { background: var(--paper); color: var(--muted); font-size: 16px; }
 #subtitle { background: var(--ink); color: #ffffff; font-size: 22px; line-height: 1.35; }
 #subtitle:empty { display: none; }
+/* In the 3D booth the conversation is on the paper transcript; the text stays for screen readers. */
+.screen-reader-only { position: fixed !important; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 #controls {
   position: fixed; z-index: 2; left: 12px; right: 12px; bottom: 12px;
   display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px; pointer-events: none;
 }
 #ask-form, #tools { pointer-events: auto; }
-/* Hints and hover tips sit on the desk, so they need their own dark backing. */
-#lines { flex-basis: 100%; order: -2; text-align: center; pointer-events: none; }
-#lines p {
-  margin: 4px auto; padding: 4px 12px; border-radius: 4px; width: fit-content; max-width: min(900px, 100%); box-sizing: border-box;
-  background: var(--ink); color: #ffffff; font-size: 16px; font-weight: 600;
+
+/* Turning arrows at the screen edges, clear of the top bar and the toolbar. */
+.look { position: fixed; z-index: 2; top: 45%; transform: translateY(-50%); min-height: 44px; padding: 8px 16px; font-size: 16px; }
+#look-left { left: 12px; }
+#look-right { right: 12px; }
+/* One status line at a time, always in the same place: bottom centre, level
+   with the question box and clear of it. The hover label rides next to the
+   pointer instead. Both sit on the desk, so they have their own dark backing. */
+#hint, #tool-tip {
+  position: fixed; z-index: 2; margin: 0; padding: 6px 12px; border-radius: 4px; box-sizing: border-box; pointer-events: none;
+  background: var(--ink); color: #ffffff; font-size: 16px; font-weight: 600; line-height: 1.5;
 }
-#lines p:empty { display: none; }
 #hint[data-mode="listening"] { background: #6f211e; }
 #hint[data-mode="listening"]::before {
   content: ''; display: inline-block; width: 11px; height: 11px; margin-right: 9px;
@@ -128,6 +135,10 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
 @media (prefers-reduced-motion: reduce) {
   #hint[data-mode="listening"]::before, #hint[data-mode="thinking"]::after, #hint[data-mode="transcribing"]::after { animation: none; }
 }
+#hint:empty, #tool-tip:empty { display: none; }
+#hint { left: 50%; bottom: 12px; transform: translateX(-50%); width: max-content; max-width: max(200px, 100% - 2 * (min(320px, 50vw) + 40px)); text-align: center; }
+#tool-tip { transform: translate(16px, calc(-100% - 8px)); white-space: nowrap; }
+#tool-tip.flip { transform: translate(calc(-100% - 16px), calc(-100% - 8px)); }
 #ask-form { display: flex; gap: 6px; }
 #tools { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 

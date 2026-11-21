@@ -64,7 +64,10 @@ test('a good question reaches Mistral and the checked, spoken reply comes back',
   nextRaw = GOOD_RAW;
   const res = await post(valid);
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false, audio: 'QUJD', notes: [NOTE] });
+  const { timings, ...answer } = await res.json();
+  assert.deepEqual(answer, { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false, audio: 'QUJD', notes: [NOTE] });
+  // Real timings for the inspector's computer: whole milliseconds for each call.
+  for (const name of ['answerMs', 'speechMs', 'notesMs']) assert.ok(Number.isInteger(timings[name]) && timings[name] >= 0, name);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].traveller.id, 'max');
   assert.equal(calls[0].question, 'Why are you here?');
@@ -238,7 +241,9 @@ test('a recorded clip is passed on as audio and its words come back', async () =
   nextTranscript = '  Who paid   for_your ticket?  ';
   const res = await postClip(new Uint8Array([1, 2, 3]));
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { text: 'Who paid for your ticket?' });
+  const { ms, ...transcript } = await res.json();
+  assert.deepEqual(transcript, { text: 'Who paid for your ticket?' });
+  assert.ok(Number.isInteger(ms) && ms >= 0);
   assert.equal(heard.length, 1);
   assert.equal(heard[0].type, 'audio/webm');
   assert.equal(heard[0].audio.length, 3);
@@ -283,6 +288,19 @@ test('the key never appears in any page file or API response', async () => {
     fetch(`${base}/src/rules.js`), fetch(`${base}/api/health`), post(valid), post('{nope'),
   ].map(async (p) => (await p).text()));
   for (const body of bodies) assert.ok(!body.includes(FAKE_KEY));
+});
+
+// The answer the page gets (and the computer screen reads) never carries a
+// traveller's truth or prompt.
+test('an answer never carries the traveller\'s secret or prompt', async () => {
+  for (const id of ['max', 'colin']) {
+    nextRaw = GOOD_RAW;
+    const body = await (await post({ ...valid, travellerId: id })).text();
+    const t = getTraveller(id);
+    assert.ok(!body.includes(t.truth.secret), `${id}: secret`);
+    assert.ok(!body.includes(t.prompt.slice(0, 60)), `${id}: prompt`);
+    assert.doesNotMatch(body, /"truth"|"secret"|"prompt"|"honest"/);
+  }
 });
 
 test('with no key the server says live is off and refuses to ask', async () => {

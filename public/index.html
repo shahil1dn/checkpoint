@@ -44,19 +44,23 @@
     <ul id="notes"></ul>
   </section>
 
+  <nav id="look" aria-label="Look around the booth" hidden>
+    <button id="look-left" class="look" type="button"></button>
+    <button id="look-right" class="look" type="button"></button>
+  </nav>
+
+  <p id="hint" role="status" hidden></p>
+  <p id="tool-tip" aria-hidden="true" hidden></p>
+
   <div id="controls" hidden>
-    <div id="lines">
-      <p id="hint" role="status"></p>
-      <p id="tool-tip" aria-hidden="true"></p>
-    </div>
     <div id="captions" hidden>
       <p id="you-said"></p>
       <p id="subtitle"></p>
     </div>
     <form id="ask-form">
-      <input id="question" type="text" maxlength="300" autocomplete="off" placeholder="Or type a question" aria-label="Type a question">
-      <button id="ask" type="submit">Ask</button>
+      <input id="question" type="text" maxlength="300" autocomplete="off" placeholder="Or type a question and press Enter" aria-label="Type a question and press Enter">
     </form>
+    <!-- Only for browsers that can't draw the 3D desk: in the booth, you click the desk itself. -->
     <nav id="tools" aria-label="Desk tools">
       <button id="talk" type="button">Hold to talk</button>
       <button id="show-papers" type="button">Papers (P)</button>

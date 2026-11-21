@@ -7,16 +7,19 @@ import * as THREE from 'three';
 import { createEngine, part, box, ball, mat, textPlane } from '/penguins/engine.js';
 import { makePenguin } from '/penguins/penguin.js';
 import { buildScenery } from '/scenery.js';
+import { FORM_TITLE, NOTICES, RULE_SPOT, TIN_LABEL } from '/notices.js';
 import { getTraveller } from '/src/travellers/index.js';
 
 const COLORS = {
-  booth: '#8fb3a8', frame: '#e8e2d4', desk: '#a8794f', deskTop: '#c8955f',
+  booth: '#8fb3a8', inside: '#c9d6d0', floor: '#7d8a8f', frame: '#e8e2d4', desk: '#a8794f', deskTop: '#c8955f',
   paper: '#f4efe2', cover: '#3f6e8c', micBody: '#343845', micGrille: '#5a5f6b', wood: '#8c6448',
   through: '#3f8f5a', away: '#c0453a', live: '#d8433a', off: '#6b6f78',
 };
 const INK = '#1f2126';
 const TYPEWRITER = '"American Typewriter", "Courier New", monospace';
 const HANDWRITING = '"Noteworthy", "Bradley Hand", "Marker Felt", cursive';
+const TERMINAL = 'Menlo, "Courier New", monospace';
+const AMBER = '#f2b544';
 
 
 // One face per mood, the same for every traveller, so the face is a fair tell.
@@ -31,14 +34,32 @@ const FACES = {
 const STAMP_WORDS = { through: 'THROUGH', away: 'TURNED AWAY' };
 
 const SILL = 1.0;
-const TRAVELLER_AT = new THREE.Vector3(0, 0, -1.1);
-const EYE = new THREE.Vector3(0, 1.95, 2.25);
-// Looking slightly down keeps the bottom of the screen clear desk, where the
-// subtitles and the toolbar sit; held papers are raised above that strip too.
-const LOOK_AT = new THREE.Vector3(0, 1.0, -0.6);
-const READ_DISTANCE = 0.97;
-const READ_RAISE = 0.07;
+// The window view (SPEC "Looking around the booth"): the camera at the
+// traveller's eye level, face to face. He stands on a step so his upper body
+// clears the sill; the desk sits above the subtitles and the toolbar.
+const FRAMING = {
+  eye: new THREE.Vector3(0, 1.5, 2.25),
+  lookAt: new THREE.Vector3(0, 1.08, -1.1),
+  fov: 50,
+  step: 0.22,
+};
+const TRAVELLER_AT = new THREE.Vector3(0, FRAMING.step, -1.1);
+const EYE = FRAMING.eye;
+const LOOK_AT = FRAMING.lookAt;
+// Held papers fill the same share of the screen whatever the field of view,
+// raised a little so they clear the subtitles.
+const READ_HEIGHT = 0.745;
+const READ_DISTANCE = READ_HEIGHT / (2 * Math.tan(THREE.MathUtils.degToRad(FRAMING.fov / 2)));
+const READ_RAISE = READ_DISTANCE * 0.072;
 const WALK_OFF_X = 3.2;
+const SIDE_WALL_X = 1.85;
+const BOOTH_DEPTH = 4.6;   // deep enough that a side view never sees past the back wall
+
+// Three ways to face (SPEC "Looking around the booth"): the computer on the
+// left wall, the window, and the notice board on the right wall.
+const VIEWS = { left: Math.PI / 2, window: 0, right: -Math.PI / 2 };
+const VIEW_ORDER = ['left', 'window', 'right'];
+const UP = new THREE.Vector3(0, 1, 0);
 
 // ---------- drawing the papers and the scratchpad ----------
 
@@ -126,17 +147,21 @@ function buildRoom(group) {
   for (const s of [-1, 1]) part(box(0.08, top - SILL, 0.24), frame, group, [s * half, (SILL + top) / 2, 0]);
   part(box(3.4, 0.1, 1.4, 0.04), mat(COLORS.deskTop), group, [0, SILL - 0.05, 0.75]);
   part(box(3.3, SILL - 0.1, 1.3, 0.04), mat(COLORS.desk), group, [0, (SILL - 0.1) / 2, 0.75]);
+  // The inside of the booth, for turning to the left and right walls.
+  for (const s of [-1, 1]) part(box(0.16, 3.4, BOOTH_DEPTH), mat(COLORS.inside), group, [s * SIDE_WALL_X, 1.7, BOOTH_DEPTH / 2]);
+  part(box(SIDE_WALL_X * 2, 0.1, BOOTH_DEPTH), mat(COLORS.floor), group, [0, -0.05, BOOTH_DEPTH / 2]);
+  part(box(SIDE_WALL_X * 2, 3.4, 0.16), mat(COLORS.inside), group, [0, 1.7, BOOTH_DEPTH]);
   // The booth throws no shadow outside, or the traveller would stand in the dark.
   group.traverse((o) => { o.castShadow = false; });
 }
 
-// A flat thing that lies on the desk and can be lifted up to the eyes.
-// Its face is local +z, so lying down is a quarter turn about x.
-function liftable(group, name, at, yaw, deskScale) {
+// A flat thing on the desk that can be lifted up to the eyes. Its face is
+// local +z, so lying down is a quarter turn back about x (tilt -π/2).
+function liftable(group, name, at, yaw, deskScale, tilt = -Math.PI / 2) {
   const holder = new THREE.Group();
   holder.userData.tool = name;
   group.add(holder);
-  const desk = { position: at.clone(), quaternion: new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, yaw, 'XYZ')), scale: deskScale };
+  const desk = { position: at.clone(), quaternion: new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, 0, yaw, 'XYZ')), scale: deskScale };
   return { name, holder, desk, t: 0 };
 }
 
@@ -167,6 +192,80 @@ function buildNotebook(group) {
   item.page = page.mesh;
   item.redraw = page.redraw;
   return item;
+}
+
+// ---------- the transcript (Shahil 13:40) ----------
+// The conversation prints onto a slip rising out of a little printer at the
+// front of the desk: newest line at the bottom by the printer, older lines
+// pushed up and off the top. The slip leans back only part way, so its newest
+// lines read from the chair; clicking lifts a full page of the conversation.
+const SLIP = { width: 0.86, height: 0.22, tilt: -0.9, front: 1.4 };
+const SAID_BY_YOU = '#6b6457';
+
+// Every line of the conversation as printed rows: [text, colour, bold].
+function transcriptRows(g, name, lines, maxWidth, size) {
+  const rows = [];
+  g.font = `bold ${size}px ${TYPEWRITER}`;
+  rows.push([`TRANSCRIPT: ${name ?? ''}`, SAID_BY_YOU, true]);
+  g.font = `${size}px ${TYPEWRITER}`;
+  for (const { who, text } of lines) {
+    const colour = who === 'You' ? SAID_BY_YOU : INK;
+    wrap(g, `${who}: ${text}`, maxWidth).forEach((row, i) => rows.push([i ? `   ${row}` : row, colour, false]));
+  }
+  return rows;
+}
+
+function printRow(g, [text, colour, bold], x, y, size) {
+  g.fillStyle = colour; g.font = `${bold ? 'bold ' : ''}${size}px ${TYPEWRITER}`;
+  g.fillText(text, x, y);
+}
+
+function drawSlip(g, w, h, name, lines = []) {
+  g.fillStyle = COLORS.paper; g.fillRect(0, 0, w, h);
+  const size = h * 0.11;
+  const step = size * 1.28;
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  const rows = transcriptRows(g, name, lines, w * 0.92, size);
+  let y = h - step * 0.75;   // clear of the printer's lip
+  for (const row of rows.reverse()) {
+    if (y < size) break;
+    printRow(g, row, w * 0.04, y, size);
+    y -= step;
+  }
+}
+
+// Lifted: the whole conversation on a page, oldest at the top. If a long
+// shift overflows the page, the oldest lines give way.
+function drawTranscriptPage(g, w, h, name, lines = []) {
+  g.fillStyle = COLORS.paper; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#c9bfa8'; g.lineWidth = w * 0.006; g.strokeRect(w * 0.04, h * 0.03, w * 0.92, h * 0.94);
+  const size = w * 0.042;
+  const step = size * 1.3;
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  const rows = transcriptRows(g, name, lines, w * 0.82, size);
+  const fit = Math.floor((h * 0.9) / step);
+  const shown = rows.length > fit ? [rows[0], ['   …', SAID_BY_YOU, false], ...rows.slice(rows.length - fit + 2)] : rows;
+  shown.forEach((row, i) => printRow(g, row, w * 0.09, h * 0.09 + i * step, size));
+}
+
+function buildTranscript(group) {
+  const bottom = new THREE.Vector3(0, SILL + 0.03, SLIP.front);
+  const up = new THREE.Vector3(0, Math.cos(SLIP.tilt), Math.sin(SLIP.tilt));
+  const item = liftable(group, 'transcript', bottom.clone().addScaledVector(up, SLIP.height / 2), 0, 1, SLIP.tilt);
+  const slip = textPlane(SLIP.width, SLIP.height, drawSlip, 2400);
+  item.holder.add(slip.mesh);
+  const page = textPlane(0.42, 0.56, drawTranscriptPage, 2048);
+  page.mesh.visible = false;
+  item.holder.add(page.mesh);
+  Object.assign(item, { slip: slip.mesh, page: page.mesh, redraw: (name, lines) => { slip.redraw(name, lines); page.redraw(name, lines); } });
+  item.redraw('', []);
+  // The printer it feeds out of; clicking the printer lifts the slip too.
+  const printer = new THREE.Group();
+  printer.userData.tool = 'transcript';
+  group.add(printer);
+  // A thin part (ART-DIRECTION section 1): no ink hull, which drew a line across the slip.
+  part(box(SLIP.width + 0.03, 0.03, 0.05, 0.01), mat(COLORS.micBody), printer, [0, SILL + 0.015, SLIP.front + 0.02], undefined, undefined, false);
+  return { item, printer };
 }
 
 function buildMic(group) {
@@ -214,6 +313,193 @@ function buildThoughtBubble(group) {
   bubble.mesh.userData.noLines = true;
   group.add(bubble.mesh);
   return bubble.mesh;
+}
+
+// The inspector's computer on the left wall. Its screen lists the real
+// Mistral calls, one line each (lines come from public/computer.js).
+function drawComputer(g, w, h, lines = []) {
+  g.fillStyle = '#14161a'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h * 0.11);
+  g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.fillStyle = '#f4efe2'; g.font = `600 ${h * 0.055}px system-ui, sans-serif`;
+  g.fillText('INSPECTOR TERMINAL  ·  live Mistral calls', w * 0.04, h * 0.058, w * 0.92);
+  const row = h * 0.088;
+  g.font = `${h * 0.046}px ${TERMINAL}`;
+  if (!lines.length) {
+    g.fillStyle = '#8a8f98';
+    g.fillText('Waiting for the first question…', w * 0.04, h * 0.11 + row);
+    return;
+  }
+  lines.forEach(({ who, what }, i) => {
+    const y = h * 0.11 + row * (i + 0.9);
+    const label = `${who} `;
+    g.fillStyle = AMBER;
+    g.fillText(label, w * 0.04, y);
+    const x = w * 0.04 + g.measureText(label).width;
+    g.fillStyle = '#e8e2d4';
+    g.fillText(what, x, y, w * 0.96 - x);
+  });
+}
+
+function buildComputer(group) {
+  const z = 2.25;   // straight ahead when the inspector turns left
+  const wallX = -SIDE_WALL_X + 0.08;
+  part(box(0.6, 0.95, 2.35, 0.03), mat(COLORS.desk), group, [wallX + 0.3, 0.475, 2.72]);
+  part(box(0.62, 0.05, 2.37, 0.02), mat(COLORS.deskTop), group, [wallX + 0.3, 0.97, 2.72]);
+  part(box(0.06, 0.22, 0.12), mat(COLORS.micBody), group, [wallX + 0.16, 1.1, z]);
+  part(box(0.05, 0.74, 1.14, 0.02), mat(COLORS.micBody), group, [wallX + 0.2, 1.4, z]);
+  const screen = textPlane(1.06, 0.66, drawComputer, 1600);
+  screen.redraw([]);
+  screen.mesh.position.set(wallX + 0.23, 1.4, z);
+  screen.mesh.rotation.y = Math.PI / 2;
+  group.add(screen.mesh);
+  part(box(0.18, 0.025, 0.5, 0.01), mat(COLORS.micGrille), group, [wallX + 0.42, 1.005, z]);
+  part(ball(0.035, 12, 8), mat(COLORS.micGrille), group, [wallX + 0.42, 1.0, z + 0.4], [0, 0, 0], [1, 0.5, 1.4]);
+  const note = textPlane(0.13, 0.13, (g, w, h) => {
+    g.fillStyle = '#f2d96b'; g.fillRect(0, 0, w, h);
+    g.fillStyle = INK; g.font = `${h * 0.17}px ${HANDWRITING}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText("Don't feed", w / 2, h * 0.38); g.fillText('the walrus', w / 2, h * 0.62);
+  }, 1024);
+  note.redraw();
+  note.mesh.position.set(wallX + 0.235, 1.62, z + 0.62);
+  note.mesh.rotation.set(0, Math.PI / 2, 0.08);
+  group.add(note.mesh);
+  return screen;
+}
+
+// The right wall: a notice board and the inspector's clutter. Flavour only; the
+// words come from public/notices.js, which is tested to give nothing away.
+const CORK = '#b98d5e';
+const PIN = '#c0453a';
+const NOTE_PAPER = { typed: '#fbf8ef', clipping: '#e6e1d3', sticky: '#f2d96b' };
+const NOTE_SPOTS = [   // [x, y, width, height, tilt] as fractions of the board
+  [0.03, 0.07, 0.36, 0.5, -0.02],
+  [0.42, 0.06, 0.3, 0.42, 0.03],
+  [0.07, 0.63, 0.25, 0.32, 0.04],
+  [0.38, 0.55, 0.34, 0.4, -0.03],
+];
+
+function drawPin(g, x, y, r) {
+  g.fillStyle = PIN; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+}
+
+// A snapshot of this month's winner: a grey seal, pleased with himself.
+function drawSeal(g, x, y, size) {
+  g.fillStyle = '#dfe6ea'; g.fillRect(x - size, y - size * 0.8, size * 2, size * 1.6);
+  g.fillStyle = '#7d8a8f';
+  g.beginPath(); g.ellipse(x, y + size * 0.3, size * 0.75, size * 0.42, 0, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(x + size * 0.38, y - size * 0.18, size * 0.32, 0, Math.PI * 2); g.fill();
+  g.fillStyle = INK;
+  for (const dx of [0.28, 0.5]) { g.beginPath(); g.arc(x + size * dx, y - size * 0.24, size * 0.05, 0, Math.PI * 2); g.fill(); }
+}
+
+function drawNotice(g, w, h, { style, title, lines, picture }, [x, y, nw, nh, tilt]) {
+  const [width, height] = [nw * w, nh * h];
+  g.save();
+  g.translate(x * w + width / 2, y * h + height / 2); g.rotate(tilt); g.translate(-width / 2, -height / 2);
+  g.fillStyle = NOTE_PAPER[style]; g.fillRect(0, 0, width, height);
+  const pad = width * 0.07;
+  const font = style === 'sticky' ? HANDWRITING : TYPEWRITER;
+  g.fillStyle = INK; g.textAlign = 'left'; g.textBaseline = 'top';
+  g.font = `bold ${h * 0.058}px ${style === 'clipping' ? 'Georgia, serif' : font}`;
+  g.fillText(title, pad, pad * 1.2, width - pad * 2);
+  if (style === 'clipping') g.fillRect(pad, pad * 1.2 + h * 0.072, width - pad * 2, h * 0.005);
+  g.font = `${h * 0.046}px ${font}`;
+  let lineY = pad * 1.2 + h * 0.1;
+  for (const text of lines) {
+    for (const line of wrap(g, text, width - pad * 2)) {
+      g.fillText(line, pad, lineY);
+      lineY += h * 0.058;
+    }
+  }
+  if (picture === 'seal') drawSeal(g, width * 0.72, height * 0.68, height * 0.2);
+  drawPin(g, width / 2, h * 0.025, h * 0.016);
+  g.restore();
+}
+
+// The rule card's place (SPEC stretch 11): a pinned label over an empty patch.
+function drawRuleSpot(g, w, h) {
+  const [x, y, width, height] = [w * 0.75, h * 0.08, w * 0.22, h * 0.6];
+  g.strokeStyle = '#6b4f33'; g.lineWidth = h * 0.006; g.setLineDash([h * 0.03, h * 0.02]);
+  g.strokeRect(x, y, width, height);
+  g.setLineDash([]);
+  g.fillStyle = INK; g.font = `bold ${h * 0.05}px ${TYPEWRITER}`; g.textAlign = 'center'; g.textBaseline = 'top';
+  g.fillText(RULE_SPOT, x + width / 2, y + h * 0.04, width * 0.9);
+}
+
+function drawNoticeBoard(g, w, h) {
+  g.fillStyle = CORK; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#a57b4f';
+  for (let i = 0; i < 400; i++) g.fillRect((i * 7919) % w, (i * 104729) % h, h * 0.006, h * 0.006);   // fixed speckle
+  NOTICES.forEach((notice, i) => drawNotice(g, w, h, notice, NOTE_SPOTS[i]));
+  drawRuleSpot(g, w, h);
+}
+
+function buildNoticeBoard(group, wallX, z) {
+  part(box(0.04, 0.93, 1.58, 0.01), mat(COLORS.wood), group, [wallX - 0.02, 1.57, z]);
+  const board = textPlane(1.5, 0.85, drawNoticeBoard, 1400);
+  board.redraw();
+  board.mesh.position.set(wallX - 0.045, 1.57, z);
+  board.mesh.rotation.y = -Math.PI / 2;
+  group.add(board.mesh);
+}
+
+// A sardine tin far too shallow to be a pen pot, used as one anyway.
+function buildPenPot(group, at) {
+  part(box(0.12, 0.04, 0.2, 0.02), mat('#b8bfc4'), group, [at.x, at.y + 0.02, at.z]);
+  part(box(0.1, 0.004, 0.18), mat('#6b747a'), group, [at.x, at.y + 0.041, at.z], undefined, undefined, false);
+  part(new THREE.CylinderGeometry(0.014, 0.014, 0.12, 10), mat('#b8bfc4'), group, [at.x, at.y + 0.05, at.z + 0.1], [0, 0, Math.PI / 2]);
+  for (const [dz, colour, lean] of [[-0.04, '#3f6e8c', 0.35], [0, INK, -0.2], [0.04, PIN, 0.15]]) {
+    part(new THREE.CylinderGeometry(0.007, 0.007, 0.17, 8), mat(colour), group, [at.x, at.y + 0.1, at.z + dz], [lean, 0, 0.12]);
+  }
+  const label = textPlane(0.17, 0.034, (g, w, h) => {
+    g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#f4efe2'; g.font = `bold ${h * 0.7}px ${TYPEWRITER}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(TIN_LABEL, w / 2, h * 0.55, w * 0.9);
+  }, 1024);
+  label.redraw();
+  label.mesh.position.set(at.x - 0.061, at.y + 0.02, at.z);
+  label.mesh.rotation.y = -Math.PI / 2;
+  group.add(label.mesh);
+}
+
+function buildMug(group, at) {
+  part(new THREE.CylinderGeometry(0.05, 0.045, 0.11, 18), mat(COLORS.frame), group, [at.x, at.y + 0.055, at.z]);
+  part(new THREE.CylinderGeometry(0.044, 0.044, 0.005, 18), mat(COLORS.wood), group, [at.x, at.y + 0.106, at.z], undefined, undefined, false);
+  part(new THREE.TorusGeometry(0.032, 0.01, 8, 16), mat(COLORS.frame), group, [at.x, at.y + 0.055, at.z + 0.05], [0, Math.PI / 2, 0], undefined, false);   // thin: no ink hull
+}
+
+function drawForm(g, w, h) {
+  g.fillStyle = COLORS.paper; g.fillRect(0, 0, w, h);
+  g.fillStyle = INK; g.font = `bold ${w * 0.075}px ${TYPEWRITER}`; g.textAlign = 'center';
+  g.fillText(FORM_TITLE, w / 2, h * 0.1, w * 0.9);
+  g.strokeStyle = '#b5ab96'; g.lineWidth = w * 0.006;
+  for (let y = h * 0.2; y < h * 0.95; y += h * 0.08) { g.beginPath(); g.moveTo(w * 0.08, y); g.lineTo(w * 0.92, y); g.stroke(); }
+}
+
+// Flat sheets read with their top away from the inspector, who faces +x here.
+function buildForms(group, at) {
+  for (let i = 0; i < 7; i++) {
+    const sheet = part(box(0.3, 0.006, 0.4, 0.002), mat(COLORS.paper), group, [at.x, at.y + 0.003 + i * 0.007, at.z], [0, Math.PI / 2 + (i % 3 - 1) * 0.06, 0], undefined, false);
+    sheet.castShadow = sheet.receiveShadow = false;
+  }
+  const top = textPlane(0.3, 0.4, drawForm, 1024);
+  top.redraw();
+  top.mesh.position.set(at.x, at.y + 0.05, at.z);
+  top.mesh.rotation.set(-Math.PI / 2, 0, -Math.PI / 2, 'XYZ');
+  group.add(top.mesh);
+}
+
+function buildRightWall(group) {
+  const z = 2.25;   // straight ahead when the inspector turns right
+  const wallX = SIDE_WALL_X - 0.08;
+  part(box(0.6, 0.95, 2.35, 0.03), mat(COLORS.desk), group, [wallX - 0.3, 0.475, 2.72]);
+  part(box(0.62, 0.05, 2.37, 0.02), mat(COLORS.deskTop), group, [wallX - 0.3, 0.97, 2.72]);
+  const top = 0.995;
+  buildNoticeBoard(group, wallX, z);
+  buildPenPot(group, new THREE.Vector3(wallX - 0.32, top, z - 0.15));
+  buildMug(group, new THREE.Vector3(wallX - 0.38, top, z - 0.6));
+  buildForms(group, new THREE.Vector3(wallX - 0.3, top, z + 0.45));
 }
 
 function buildStamp(group, verdict, x) {
@@ -276,7 +562,11 @@ export function createBooth(container, handlers = {}) {
   }
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   engine.controls.enabled = false;   // the inspector sits still: no orbiting
-  engine.camera.fov = 42;
+  // The engine keeps an orbiting camera above the floor; even switched off, that
+  // limit tips an eye-level camera up into a look-down when the world is set.
+  engine.controls.minPolarAngle = 0;
+  engine.controls.maxPolarAngle = Math.PI;
+  engine.camera.fov = FRAMING.fov;
   const group = new THREE.Group();
   engine.scene.add(group);
   buildRoom(group);
@@ -287,11 +577,14 @@ export function createBooth(container, handlers = {}) {
 
   const papers = buildPapers(group);
   const notebook = buildNotebook(group);
-  const liftables = [papers, notebook];
+  const { item: transcript, printer } = buildTranscript(group);
+  const liftables = [papers, notebook, transcript];
   const mic = buildMic(group);
   const thoughtBubble = buildThoughtBubble(group);
+  const computer = buildComputer(group);
+  buildRightWall(group);
   const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };
-  const tools = [papers.holder, notebook.holder, mic.holder, stamps.through.holder, stamps.away.holder];
+  const tools = [papers.holder, notebook.holder, transcript.holder, printer, mic.holder, stamps.through.holder, stamps.away.holder];
 
   let lifted = null;
   let traveller = null;
@@ -345,7 +638,7 @@ export function createBooth(container, handlers = {}) {
       return;
     }
     const tool = toolAt(event);
-    if (tool === 'papers' || tool === 'notebook') booth.toggle(tool);
+    if (tool === 'papers' || tool === 'notebook' || tool === 'transcript') booth.toggle(tool);
     else if (tool?.startsWith('stamp-')) handlers.onStampClick?.(tool.slice(6));
     else if (lifted) booth.putDown();
   });
@@ -355,6 +648,10 @@ export function createBooth(container, handlers = {}) {
   const readPos = new THREE.Vector3();
   const forward = new THREE.Vector3();
   const upward = new THREE.Vector3();
+  const baseForward = LOOK_AT.clone().sub(EYE).normalize();
+  const facing = new THREE.Vector3();
+  let view = 'window';
+  let yaw = 0;
   function frame() {
     const dt = Math.min(clock.getDelta(), 0.1);
     const t = clock.elapsedTime;
@@ -364,6 +661,10 @@ export function createBooth(container, handlers = {}) {
       if (tw.age >= tw.seconds) { tweens.splice(tweens.indexOf(tw), 1); tw.resolve(); }
     }
     // Lifted things come up in front of the eyes, facing the inspector.
+    // Turning eases the head round; the camera stays in the chair.
+    yaw += (VIEWS[view] - yaw) * Math.min(dt * 5, 1);
+    facing.copy(baseForward).applyAxisAngle(UP, yaw);
+    engine.camera.lookAt(facing.add(engine.camera.position));
     engine.camera.getWorldDirection(forward);
     upward.copy(engine.camera.up).applyQuaternion(engine.camera.quaternion);
     readPos.copy(engine.camera.position).addScaledVector(forward, READ_DISTANCE).addScaledVector(upward, READ_RAISE);
@@ -377,6 +678,8 @@ export function createBooth(container, handlers = {}) {
     }
     notebook.cover.visible = notebook.t < 0.5;
     notebook.page.visible = notebook.t >= 0.5;
+    transcript.slip.visible = transcript.t < 0.5;
+    transcript.page.visible = transcript.t >= 0.5;
     for (const [verdict, s] of Object.entries(stamps)) {
       if (!stamping) s.holder.position.y = s.home.y + (hovered === `stamp-${verdict}` ? 0.03 : 0);
     }
@@ -501,7 +804,19 @@ export function createBooth(container, handlers = {}) {
     },
     setPapers(paperFields, stamp = null) { papers.redraw(paperFields, stamp); },
     setNotes(name, notes) { notebook.redraw(name, notes); },
+    // lines: [{ who, text }], oldest first; 'You' marks the inspector's own words.
+    setTranscript(name, lines) { transcript.redraw(name, lines); },
+    setComputer(lines) { computer.redraw(lines); },
     toggle(name) { lifted = lifted === name ? null : name; },
+    // Turns one view left (-1) or right (+1); papers in hand go back on the desk.
+    look(step) {
+      const next = VIEW_ORDER[VIEW_ORDER.indexOf(view) + step];
+      if (!next) return;
+      view = next;
+      lifted = null;
+      handlers.onView?.(view);
+    },
+    view: () => view,
     putDown() { lifted = null; },
     lifted: () => lifted,
     // The stamp comes down on the papers, leaves its mark, and goes home.
@@ -509,6 +824,12 @@ export function createBooth(container, handlers = {}) {
       if (stamping) return;
       stamping = true;
       lifted = null;
+      // Stamping happens at the window, so turn back to it first.
+      if (view !== 'window') {
+        view = 'window';
+        handlers.onView?.(view);
+        await tween(0.6, () => {});
+      }
       const s = stamps[verdict];
       const over = papers.desk.position.clone().setY(SILL + 0.06);
       const lift = (a, b, p, h) => s.holder.position.lerpVectors(a, b, p).setY(s.holder.position.y + Math.sin(p * Math.PI) * h);

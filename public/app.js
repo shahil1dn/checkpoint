@@ -5,6 +5,7 @@ import { getTraveller } from '/src/travellers/index.js';
 import { mockReply } from '/src/mockBrain.js';
 import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
 import { createBooth } from '/booth.js';
+import { MAX_LINES, lineForHeard, lineForSpeech, lineForTyped, linesForAnswer, modelName } from '/computer.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -12,6 +13,8 @@ let shift = R.newShift();
 let started = false;
 let live = false;
 let voice = null;
+let models = null;      // which Mistral model does which job, from /api/health
+const callLog = [];     // the lines on the inspector's computer
 let stampingNow = false;
 let talkingTo = null;
 let micSetup = false;
@@ -32,6 +35,7 @@ const HINTS = {
 const TOOL_TIPS = {
   papers: 'Papers: click to read',
   notebook: 'Scratchpad: click to open',
+  transcript: 'Transcript: click to read it all',
   mic: 'Microphone: hold to ask (or hold Space)',
   'stamp-through': 'Stamp: let them through',
   'stamp-away': 'Stamp: turn them away',
@@ -51,13 +55,28 @@ function renderActivity() {
   booth?.setThinking(mode === 'thinking');
 }
 
-// The 3D booth is scenery and controls together; without it the plain papers
-// panel and the toolbar still run the whole game.
+// What each edge arrow turns to, from each view.
+const LOOK_LABELS = {
+  left: [null, 'Window ›'],
+  window: ['‹ Computer', 'Notices ›'],
+  right: ['‹ Window', null],
+};
+function renderLook(view) {
+  const [left, right] = LOOK_LABELS[view];
+  $('look-left').textContent = left ?? '';
+  $('look-right').textContent = right ?? '';
+  $('look-left').hidden = !left;
+  $('look-right').hidden = !right;
+}
+
+// The 3D booth is scenery and controls together: you click the desk itself.
+// Without it, the plain papers panel and a button row run the whole game.
 const booth = createBooth($('booth'), {
   onMicDown: () => beginTalking(),
   onMicUp: () => finishTalking(),
   onStampClick: (verdict) => stampTraveller(verdict),
   onHover: (tool) => { $('tool-tip').textContent = TOOL_TIPS[tool] ?? ''; },
+  onView: (view) => renderLook(view),
 });
 
 // ---- Server calls. Each returns a value or an error name, never throws. ----
@@ -80,7 +99,7 @@ async function fetchTranscript(clip) {
   try {
     const res = await fetch('/api/hear', { method: 'POST', headers: { 'content-type': clip.type }, body: clip });
     const body = await res.json();
-    return res.ok && body.text ? { text: body.text } : { error: 'notHeard' };
+    return res.ok && body.text ? { text: body.text, ms: body.ms } : { error: 'notHeard' };
   } catch {
     return { error: 'notHeard' };
   }
@@ -88,10 +107,20 @@ async function fetchTranscript(clip) {
 
 // ---- Voice out ----
 
-function playVoice(base64Mp3) {
+// The inspector's computer shows each real Mistral call as it happens.
+function logCall(...lines) {
+  callLog.push(...lines);
+  callLog.splice(0, Math.max(0, callLog.length - MAX_LINES));
+  booth?.setComputer(callLog);
+}
+
+function playVoice(base64Mp3, speechMs) {
   stopVoice();
   const clip = new Audio(`data:audio/mpeg;base64,${base64Mp3}`);
   voice = clip;
+  if (speechMs !== undefined) {
+    clip.addEventListener('loadedmetadata', () => logCall(lineForSpeech(clip.duration, speechMs, models)), { once: true });
+  }
   clip.addEventListener('ended', () => { if (voice === clip) booth?.setTalking(false); });
   booth?.setTalking(true);
   clip.play().catch(() => {
@@ -109,10 +138,11 @@ function stopVoice() {
 // ---- Actions ----
 
 // Typed and spoken questions both end up here.
-async function askQuestion(text) {
+async function askQuestion(text, { typed = false } = {}) {
   const asked = R.startQuestion(shift, text);
   if (asked.error) return hint(HINTS[asked.error]);
   shift = asked.shift;
+  if (typed && live) logCall(lineForTyped(asked.request.question));
   const traveller = getTraveller(asked.request.travellerId);
   hint(`${traveller.name} is thinking`);
   render();
@@ -123,10 +153,12 @@ async function askQuestion(text) {
   shift = R.finishQuestion(shift, asked.request.id, reply && !reply.fallback ? reply : null);
   // Unchanged means the traveller was stamped while we waited: stay quiet.
   if (shift === before) return;
+  if (reply?.timings) logCall(...linesForAnswer(reply, traveller.name, models));
+  else if (error && live) logCall({ who: modelName(models?.answer), what: 'call failed, so nothing was counted' });
   if (error) hint(HINTS[error]);
   else hint(reply.fallback ? `${traveller.name}: "${reply.reply}" (that question wasn't counted)` : '');
   if (reply) booth?.setMood(reply.mood);
-  if (reply?.audio) playVoice(reply.audio);
+  if (reply?.audio) playVoice(reply.audio, reply.timings?.speechMs);
   render();
 }
 
@@ -167,10 +199,11 @@ async function finishTalking() {
   shift = R.setHearing(shift, true);
   hint('Transcribing your question');
   render();
-  const { text, error } = await fetchTranscript(clip);
+  const { text, ms, error } = await fetchTranscript(clip);
   shift = R.setHearing(shift, false);
   render();
   if (error) return hint(HINTS[error]);
+  logCall(lineForHeard({ text, ms }, models));
   // A question meant for someone already stamped is not passed to the next one.
   if (R.currentTravellerId(shift) !== talkingTo) return hint('');
   await askQuestion(text);
@@ -225,8 +258,20 @@ function renderFallbackPanel(traveller) {
   }));
 }
 
-// Subtitles: the last question and the last answer. No mood label: mood
-// comes through the voice and the face, never as text.
+// The conversation prints on the transcript slip on the desk. The caption
+// lines keep the last question and answer as text: on screen only without
+// 3D, and always there for screen readers. No mood label: mood comes through
+// the voice and the face, never as text.
+function renderTranscript(traveller) {
+  const { history } = shift.cases[traveller.id];
+  const lines = history.flatMap((turn) => [
+    { who: 'You', text: turn.question },
+    { who: traveller.name, text: `${turn.reply}${turn.cracked ? ' [He cracked!]' : ''}` },
+  ]);
+  if (shift.pending) lines.push({ who: 'You', text: shift.pending.question }, { who: traveller.name, text: '…' });
+  booth?.setTranscript(traveller.name, lines);
+}
+
 function renderCaptions(traveller) {
   const { history } = shift.cases[traveller.id];
   const last = history.at(-1);
@@ -241,6 +286,7 @@ function renderCaptions(traveller) {
     $('subtitle').textContent = '';
   }
   $('captions').hidden = !$('you-said').textContent;
+  $('captions').classList.toggle('screen-reader-only', Boolean(booth));
 }
 
 function renderReport() {
@@ -279,7 +325,11 @@ function render() {
   $('report').hidden = !started || !over;
   $('shift-info').hidden = !playing;
   $('controls').hidden = !playing;
+  $('look').hidden = !playing || !booth;
   $('fallback').hidden = Boolean(booth) || !playing;
+  $('tools').hidden = Boolean(booth);
+  $('hint').hidden = !playing;
+  $('tool-tip').hidden = !playing;
   renderClock();
   if (!stampingNow) booth?.show(over ? null : R.currentTravellerId(shift));
   if (over) {
@@ -296,9 +346,8 @@ function render() {
   booth?.setNotes(traveller.name, shift.cases[traveller.id].notes);
   if (!booth) renderFallbackPanel(traveller);
   renderCaptions(traveller);
-  const busy = Boolean(shift.pending || shift.hearing);
-  $('ask').disabled = busy || left === 0;
-  $('talk').disabled = busy || left === 0 || !micReady();
+  renderTranscript(traveller);
+  $('talk').disabled = Boolean(shift.pending || shift.hearing) || left === 0 || !micReady();
 }
 
 function frame(now) {
@@ -328,6 +377,15 @@ document.addEventListener('keydown', (event) => {
   } else if (event.code === 'KeyP') booth?.toggle('papers');
   else if (event.code === 'KeyN') booth?.toggle('notebook');
   else if (event.code === 'Escape') booth?.putDown();
+  else if (event.code === 'ArrowLeft') booth?.look(-1);
+  else if (event.code === 'ArrowRight') booth?.look(1);
+});
+// The hover label follows the pointer, flipping to its left near the right edge.
+document.addEventListener('pointermove', (event) => {
+  const tip = $('tool-tip');
+  tip.style.left = `${event.clientX}px`;
+  tip.style.top = `${event.clientY}px`;
+  tip.classList.toggle('flip', event.clientX > innerWidth - 260);
 });
 document.addEventListener('keyup', (event) => {
   if (event.code !== 'Space' || typingInBox(event) || !micReady()) return;
@@ -341,24 +399,28 @@ $('ask-form').addEventListener('submit', (event) => {
   event.preventDefault();
   const text = $('question').value;
   $('question').value = '';
-  askQuestion(text);
+  askQuestion(text, { typed: true });
 });
 $('show-papers').addEventListener('click', () => booth?.toggle('papers'));
 $('show-notes').addEventListener('click', () => booth?.toggle('notebook'));
 $('stamp-through').addEventListener('click', () => stampTraveller('through'));
 $('stamp-away').addEventListener('click', () => stampTraveller('away'));
+$('look-left').addEventListener('click', () => booth?.look(-1));
+$('look-right').addEventListener('click', () => booth?.look(1));
 $('start').addEventListener('click', startShift);
 $('again').addEventListener('click', playAgain);
 
 async function checkLive() {
   try {
-    ({ live } = await (await fetch('/api/health')).json());
+    ({ live, models } = await (await fetch('/api/health')).json());
   } catch {
     live = false;
   }
+  logCall(live ? { who: 'Mistral', what: 'connected: waiting for the first question' } : { who: 'Offline', what: 'no key, so no Mistral calls: canned replies' });
   $('status').textContent = live ? 'Live: Mistral connected.' : 'Offline: canned replies, no voices.';
 }
 
+if (booth) renderLook(booth.view());
 render();
 checkLive();
 requestAnimationFrame(frame);
