@@ -37,7 +37,7 @@ function buildIce(group) {
 }
 
 function buildSign(group) {
-  const at = new THREE.Vector3(-1.55, 1.5, SIGNS_Z);
+  const at = new THREE.Vector3(-1.55, 2.3, SIGNS_Z);
   const sign = textPlane(1.1, 0.24, (g, w, h) => {
     g.fillStyle = COLORS.sign; g.fillRect(0, 0, w, h);
     g.fillStyle = '#f4efe2'; g.font = `600 ${h * 0.44}px system-ui, sans-serif`;
