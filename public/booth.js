@@ -1270,6 +1270,8 @@ export function createBooth(container, handlers = {}) {
       if (!stamping) s.holder.position.y = s.home.y + (hovered === `stamp-${verdict}` ? 0.03 : 0);
     }
     mic.holder.position.y = SILL + (hovered === 'mic' && !micHeld ? 0.02 : 0);
+    // Its ink outline is drawn in a separate pass and shows through the open folder's edge.
+    mic.holder.visible = papers.t < 0.05 || micHeld;
     bribe.holder.position.y = LEDGE.y + (hovered === 'bribe' ? 0.02 : 0);
     if (recording) {
       const pulse = reducedMotion ? 0 : Math.sin(t * 5);
