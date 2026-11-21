@@ -4,6 +4,8 @@ The shared rules for this folder are in `AGENTS.md`:
 
 ## How Claude Code works here
 
+Teammates using Claude Code: follow `TEAM.md`. The rest of this section is about Shahil's setup.
+
 Shahil directs; a Claude Code build session writes the code, one slice of
 `docs/checkpoint-plan.md` at a time. Mistral is the product's AI and voice layer only.
 Vibe was dropped on 21 Nov at 10:30; `scripts/vibe.sh` and `logs/vibe/` are left as they are.

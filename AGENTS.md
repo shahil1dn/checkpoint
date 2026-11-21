@@ -7,7 +7,8 @@ change a rule here, nowhere else.
 
 Mistral Vibe Hackathon, London, Sat 21 Nov 2026. Open track. **Judged on creativity.**
 Judges prefer projects built with Mistral's own tools, so the product's AI and voice run on the
-Mistral API. **The code is written by Claude Code**, not Mistral Vibe (Shahil's call, 21 Nov 10:30).
+Mistral API. Shahil's build is written by Claude Code (his call, 21 Nov 10:30). Teammates may use
+any agent; these rules apply to all of them.
 
 | Time | What |
 |---|---|
@@ -38,7 +39,10 @@ Mistral API. **The code is written by Claude Code**, not Mistral Vibe (Shahil's 
 
 - **The API key lives only in `.env`** (`MISTRAL_API_KEY=`). Never print it, log it, commit it,
   or put it in code sent to a browser. A browser page calls our own server, which calls Mistral.
-- `./check.sh` must pass before every commit. It blocks a leaked key and failing tests.
+- `./check.sh` must pass before every commit (on Windows: `bash check.sh`). It blocks a leaked
+  key and failing tests.
+- **Team work (Hamzah, Maleeka):** never push to `main`. Work on a branch and open a pull
+  request; Shahil merges. Claiming features, branch names and who owns which files: `TEAM.md`.
 - Small steps. Each change leaves the demo working; if it breaks, fix it before the next feature.
 - No new dependency without a reason it's needed; prefer what's already installed.
 - Plain names, short functions, comments only for *why*.
