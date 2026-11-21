@@ -5,9 +5,18 @@
   position: relative; z-index: 1;
   width: min(380px, 100% - 32px); max-height: calc(100vh - 32px); overflow-y: auto;
   margin: 16px; padding: 12px 16px;
-  background: rgba(255, 255, 255, 0.92); color: #1f2126;
+  background: #ffffff; color: #1f2126;
   font: 15px/1.4 system-ui, sans-serif; border-radius: 6px;
 }
+/* Big enough to read and hit on a projector; one plain treatment for now. */
+#panel button {
+  min-height: 36px; padding: 6px 14px; margin: 2px 4px 2px 0;
+  font: 600 15px/1 system-ui, sans-serif;
+  color: #ffffff; background: #1f2126; border: 0; border-radius: 4px; cursor: pointer;
+}
+#panel button:disabled { background: #8a8f98; cursor: default; }
+#panel button:focus-visible { outline: 3px solid #e8743b; outline-offset: 2px; }
+#panel input { min-height: 34px; padding: 4px 8px; font: 15px system-ui, sans-serif; width: 60%; }
 #panel h1 { font-size: 22px; margin: 0 0 4px; }
 #panel h2 { font-size: 18px; margin: 12px 0 4px; }
 #panel h3 { font-size: 15px; margin: 10px 0 4px; }
