@@ -83,8 +83,17 @@ and there's no walking.
     reacts and leaves, and the next one steps up.
 - **The traveller** is a Fang Street penguin (ADR-6). His face follows `mood`, and he turns to
   face you while talking.
-- **Subtitles:** each reply also appears as a line of text at the bottom of the screen, because
-  the pitch room will be loud.
+- ~~Subtitles~~ **Transcript on paper (Shahil, 13:40):** instead of subtitle boxes, the
+  conversation prints onto a paper transcript slip on the desk, both what the player said and
+  the reply, line by line as it happens. The newest lines must be readable at 1440 wide without
+  clicking, because the pitch room will be loud; click the slip to lift it and read the whole
+  conversation. It's in our own paper style, like the travel papers, and imitates no game.
+- **No on-screen buttons (Shahil, 13:40).** The row of HTML buttons (hold to talk, papers,
+  scratchpad, stamps) is removed: everything is done by clicking objects on the desk. Keyboard
+  shortcuts stay (Space to talk, P papers, N scratchpad, ← → to turn). The small "type a
+  question" box stays as the backup for a failed microphone, sent with Enter.
+- **One message at a time.** Hints never stack: at most one status hint is shown, in one fixed
+  place, and hover labels appear next to the object under the cursor.
 - **Look:** the penguin art direction (`system-design-lab/docs/ART-DIRECTION.md` section 3) and
   the Fang Street room and palette helpers (`fang-street-mvp/src/penguins/engine.js`). It's our
   own look, with nothing drawn from any existing game. Where the checkpoint stands is still open
@@ -95,7 +104,8 @@ and there's no walking.
 **Looking around the booth (Shahil, 13:28).**
 - **Better framing at the window.** The camera sits at the traveller's eye level, so it feels
   face to face. His whole head and upper body are in view with a little room above; the desk
-  tools are still easy to see and click.
+  tools are still easy to see and click. **Shahil picked option B (13:40):** a step back with a
+  50° lens, so the traveller is bigger in the window; the edge signs may be cropped.
 - **Three views you turn between:** left, window (where you start) and right. Arrows at the
   screen edges, or the ← and → keys, turn the camera smoothly. Questions, subtitles and the
   shift clock keep working in every view, and stamping happens at the window.
