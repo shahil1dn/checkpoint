@@ -31,7 +31,7 @@ for (const t of TRAVELLERS) {
   // A bribe is optional (Shahil 16:05): with one, his first TURNED AWAY brings
   // it out instead of landing (ADR-13); without one, the stamp lands at once.
   // The format, in the traveller file:
-  //   bribe: { line: 'Wait, wait! ...', item: 'croissant', mood: 'excited' }
+  //   bribe: { line: 'Wait, wait! ...', item: 'sticker', mood: 'excited' }
   test(`${t.id}: a bribe, if he has one, is well formed`, () => {
     if (!('bribe' in t)) return;
     assert.ok(t.bribe !== null && typeof t.bribe === 'object', 'bribe: leave it out for no bribe, or give { line, item, mood }');
