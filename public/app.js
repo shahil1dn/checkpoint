@@ -30,6 +30,8 @@ const HINTS = {
   notHeard: "Didn't catch that. Try again.",
   noMic: 'No microphone, so type your questions.',
   blocked: 'Click the page once so the browser lets them speak.',
+  noBribe: 'Nothing is on offer.',
+  bribeTaken: 'You pocket it. That goes on your record.',
 };
 const TOOL_TIPS = {
   papers: 'Papers: click to read',
@@ -38,11 +40,18 @@ const TOOL_TIPS = {
   mic: 'Microphone: hold to ask (or hold Space)',
   'stamp-through': 'Stamp: let them through',
   'stamp-away': 'Stamp: turn them away',
+  bribe: 'Bribe: click to pocket it (or press B)',
 };
 const STAMP_WORDS = { through: 'Through', away: 'Turned away' };
 const END_REASONS = { queueEmpty: 'Queue cleared.', time: "Time's up. Anyone not stamped counts as wrong." };
 
-const hint = (text) => { $('hint').textContent = text; };
+// One message at a time (Shahil 13:40): while a bribe is on the desk and
+// nothing else needs saying, the one status line says so.
+function bribeLine() {
+  const offer = R.bribeOffer(shift);
+  return offer ? `A bribe from ${getTraveller(offer.travellerId).name}: click the envelope (or B) to pocket it.` : '';
+}
+const hint = (text) => { $('hint').textContent = text || bribeLine(); };
 
 // What each edge arrow turns to, from each view.
 const LOOK_LABELS = {
@@ -66,6 +75,7 @@ const booth = createBooth($('booth'), {
   onStampClick: (verdict) => stampTraveller(verdict),
   onHover: (tool) => { $('tool-tip').textContent = TOOL_TIPS[tool] ?? ''; },
   onView: (view) => renderLook(view),
+  onBribeClick: () => takeBribe(),
 });
 
 // ---- Server calls. Each returns a value or an error name, never throws. ----
@@ -166,6 +176,16 @@ async function stampTraveller(verdict) {
   booth?.show(R.currentTravellerId(shift), { reaction: verdict });
   $('last-stamp').textContent = `${getTraveller(travellerId).name}: stamped ${STAMP_WORDS[verdict].toUpperCase()}`;
   hint('');
+  render();
+}
+
+// The rules record that a bribe was taken; the report shows it at the end.
+// Passing one over needs no click: ask something else, or stamp.
+function takeBribe() {
+  const result = R.answerBribe(shift, true);
+  if (result.error) return hint(HINTS[result.error]);
+  shift = result.shift;
+  hint(HINTS.bribeTaken);
   render();
 }
 
@@ -278,7 +298,7 @@ function renderReport() {
     const tr = document.createElement('tr');
     const cells = [
       row.name,
-      row.stamp ? STAMP_WORDS[row.stamp] : 'Not stamped',
+      `${row.stamp ? STAMP_WORDS[row.stamp] : 'Not stamped'}${row.bribeTaken ? ' (took a bribe)' : ''}`,
       row.honest ? `Honest. ${row.secret}` : `Lying. ${row.secret}`,
       row.correct ? 'Right' : 'Wrong',
     ];
@@ -290,6 +310,11 @@ function renderReport() {
     return tr;
   }));
   $('score').textContent = `You got ${report.correct} of ${report.total} right.`;
+  const bribers = report.rows.filter((row) => row.bribeTaken).map((row) => row.name).join(', ');
+  $('bribes').textContent = report.record === 'corrupt'
+    ? `Bribes taken: ${report.bribesTaken} (${bribers}). Inspector's record: CORRUPT.`
+    : "No bribes taken. Inspector's record: clean.";
+  $('bribes').className = report.record;
 }
 
 function renderClock() {
@@ -314,6 +339,7 @@ function render() {
   if (!stampingNow) booth?.show(over ? null : R.currentTravellerId(shift));
   if (over) {
     booth?.putDown();
+    booth?.setBribe(false);
     $('captions').hidden = true;
     return renderReport();
   }
@@ -327,6 +353,9 @@ function render() {
   if (!booth) renderFallbackPanel(traveller);
   renderCaptions(traveller);
   renderTranscript(traveller);
+  const offered = Boolean(R.bribeOffer(shift));
+  booth?.setBribe(offered);
+  $('take-bribe').hidden = !offered;
   $('talk').disabled = Boolean(shift.pending || shift.hearing) || left === 0 || !micReady();
 }
 
@@ -356,6 +385,7 @@ document.addEventListener('keydown', (event) => {
     beginTalking();
   } else if (event.code === 'KeyP') booth?.toggle('papers');
   else if (event.code === 'KeyN') booth?.toggle('notebook');
+  else if (event.code === 'KeyB' && R.bribeOffer(shift)) takeBribe();
   else if (event.code === 'Escape') booth?.putDown();
   else if (event.code === 'ArrowLeft') booth?.look(-1);
   else if (event.code === 'ArrowRight') booth?.look(1);
@@ -385,6 +415,7 @@ $('show-papers').addEventListener('click', () => booth?.toggle('papers'));
 $('show-notes').addEventListener('click', () => booth?.toggle('notebook'));
 $('stamp-through').addEventListener('click', () => stampTraveller('through'));
 $('stamp-away').addEventListener('click', () => stampTraveller('away'));
+$('take-bribe').addEventListener('click', takeBribe);
 $('look-left').addEventListener('click', () => booth?.look(-1));
 $('look-right').addEventListener('click', () => booth?.look(1));
 $('start').addEventListener('click', startShift);

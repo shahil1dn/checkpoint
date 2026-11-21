@@ -519,6 +519,27 @@ const ease = (t) => t * t * (3 - 2 * t);
 
 // ---------- the booth ----------
 
+// A bribe on offer: an envelope the traveller pushes across the sill. It is
+// only on the desk, and only clickable, while the offer stands.
+const BRIBE_AT = new THREE.Vector3(0.02, SILL + 0.03, 0.17);
+function buildBribe(group) {
+  const holder = new THREE.Group();
+  holder.userData.tool = 'bribe';
+  holder.position.copy(BRIBE_AT);
+  // Propped up towards the inspector, or at eye level it is only a thin edge.
+  holder.rotation.set(0.75, 0.1, 0, 'YXZ');
+  holder.visible = false;
+  group.add(holder);
+  const envelope = part(box(0.28, 0.014, 0.17, 0.004), mat('#d8c28a'), holder, [0, 0.007, 0], undefined, undefined, false);
+  envelope.castShadow = envelope.receiveShadow = false;
+  const label = textPlane(0.24, 0.06, (g, w, h) => drawLabel(g, w, h, 'FOR THE INSPECTOR', INK), 1024);
+  label.redraw();
+  label.mesh.position.set(0, 0.016, 0);
+  label.mesh.rotation.x = -Math.PI / 2;
+  holder.add(label.mesh);
+  return holder;
+}
+
 // Returns null if this browser can't draw 3D; the page then shows plain papers instead.
 export function createBooth(container, handlers = {}) {
   let engine;
@@ -550,6 +571,7 @@ export function createBooth(container, handlers = {}) {
   buildRightWall(group);
   const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };
   const tools = [papers.holder, notebook.holder, transcript.holder, printer, mic.holder, stamps.through.holder, stamps.away.holder];
+  const bribe = buildBribe(group);
 
   let lifted = null;
   let traveller = null;
@@ -575,7 +597,9 @@ export function createBooth(container, handlers = {}) {
     const box = canvas.getBoundingClientRect();
     pointer.set(((event.clientX - box.left) / box.width) * 2 - 1, -((event.clientY - box.top) / box.height) * 2 + 1);
     raycaster.setFromCamera(pointer, engine.camera);
-    const hit = raycaster.intersectObjects(tools, true)[0];
+    // Hidden faces (a lifted page waiting its turn) must not catch the click:
+    // the transcript's hidden page stood in front of the middle of the sill.
+    const hit = raycaster.intersectObjects(tools, true).find((h) => h.object.visible);
     for (let o = hit?.object; o; o = o.parent) if (o.userData.tool) return o.userData.tool;
     return null;
   }
@@ -603,6 +627,7 @@ export function createBooth(container, handlers = {}) {
     const tool = toolAt(event);
     if (tool === 'papers' || tool === 'notebook' || tool === 'transcript') booth.toggle(tool);
     else if (tool?.startsWith('stamp-')) handlers.onStampClick?.(tool.slice(6));
+    else if (tool === 'bribe') handlers.onBribeClick?.();
     else if (lifted) booth.putDown();
   });
 
@@ -750,6 +775,16 @@ export function createBooth(container, handlers = {}) {
     // lines: [{ who, text }], oldest first; 'You' marks the inspector's own words.
     setTranscript(name, lines) { transcript.redraw(name, lines); },
     setComputer(lines) { computer.redraw(lines); },
+    // The envelope slides in from the window when a bribe is offered, and is
+    // gone (and no longer clickable) once the offer is taken or passed over.
+    setBribe(on) {
+      if (bribe.visible === on) return;
+      bribe.visible = on;
+      if (on) {
+        tools.push(bribe);
+        tween(0.35, (p) => { bribe.position.z = BRIBE_AT.z - 0.3 * (1 - ease(p)); });
+      } else tools.splice(tools.indexOf(bribe), 1);
+    },
     toggle(name) { lifted = lifted === name ? null : name; },
     // Turns one view left (-1) or right (+1); papers in hand go back on the desk.
     look(step) {

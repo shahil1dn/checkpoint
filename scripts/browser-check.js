@@ -12,7 +12,7 @@ import { createApp } from '../server/app.js';
 import { browserOnThisMachine } from './find-browser.js';
 
 const PORT = 9336;
-const SPEED = 60;   // a 2-minute shift ends in 2 seconds
+const SPEED = 30;   // a 2-minute shift ends in 4 seconds (2 was a race on a busy machine)
 const OUT_OF_QUESTIONS = 'No questions left. Stamp the papers.';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -124,6 +124,16 @@ async function main() {
     for (let i = 2; i <= 5; i += 1) {
       await ask(`Question ${i}?`);
       await sleep(150);
+      // Offline, Max's 2nd answer offers a bribe (src/travellers/max.js): the
+      // one status line says so, and B (or a click on the envelope) takes it.
+      if (i === 2) {
+        const bribe = await page.evaluate(`(() => {
+          const offered = document.getElementById('hint').textContent;
+          document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyB', bubbles: true }));
+          return { offered, taken: document.getElementById('hint').textContent, row: !document.getElementById('tools').hidden };
+        })()`);
+        check('a bribe offer shows in the status line, and B takes it', bribe.offered.includes('envelope') && bribe.taken.includes('record') && !bribe.row, bribe);
+      }
     }
     // A 6th question can still be typed; it must be refused with a hint.
     await ask('One more?');
@@ -134,6 +144,8 @@ async function main() {
     for (let i = 0; i < 100 && !(await screen()).over; i += 1) await sleep(100);
     seen = await screen();
     check('the shift clock runs out to the report', seen.over, seen);
+    const bribes = await page.evaluate(`document.getElementById('bribes').textContent`);
+    check('the report names the bribe taken and marks the record', bribes.includes('Max Tokens') && bribes.includes('CORRUPT'), bribes);
 
     await page.evaluate(`document.getElementById('again').click(); true`);
     await sleep(300);

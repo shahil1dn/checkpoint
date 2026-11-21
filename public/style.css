@@ -72,3 +72,7 @@ button {
 button:disabled { background: #8a8f98; cursor: default; }
 button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 #question { min-height: 36px; box-sizing: border-box; padding: 4px 10px; font: 15px system-ui, sans-serif; width: min(320px, 50vw); border: 1px solid #c4c8cf; border-radius: 4px; }
+
+/* The report's line on bribes taken. */
+#bribes { font-weight: 600; }
+#bribes.corrupt { color: #b3261e; }
