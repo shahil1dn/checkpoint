@@ -46,7 +46,6 @@ function best(entries, query, textOf) {
     .slice(0, MAX_MATCHES);
 }
 
-const countWords = (n, one) => (n === 0 ? `no ${one}es` : n === 1 ? `1 ${one}` : `${n} ${one}es`);
 const matchWord = (matches) => {
   const exact = matches.filter((m) => m.score >= 0.99).length;
   const near = matches.length - exact;
@@ -71,7 +70,7 @@ export const TOOLS = {
     const looking = query ? ` for "${query}"` : '';
     return {
       result: { ships, searched: onShips.length, matches: shown(matches) },
-      step: `searched ${where}${looking} (${onShips.length} passengers): ${query ? matchWord(matches) : `${countWords(ships.length, 'ship')} found`}`,
+      step: query ? `searched ${where}${looking} (${onShips.length} passengers): ${matchWord(matches)}` : `opened ${where} (${onShips.length} passengers)`,
     };
   },
   find_person({ name } = {}) {
@@ -101,6 +100,31 @@ export const TOOLS = {
     };
   },
 };
+
+const describe = {
+  find_company: (c) => `Company register: ${c.name}, ${c.kind}, ${c.place}. ${c.note}`,
+  find_person: (p) => `Penguin registry: ${p.name}, hatched ${p.hatched}; home ${p.home}; occupation ${p.occupation}; employer ${p.employer}.`,
+  search_passenger_lists: (p) => `Passenger lists: ${p.name}, ${p.ship}, ticket ${p.ticket}, booked by ${p.bookedBy}.`,
+};
+
+// With no Mistral key (offline play and the browser check) the terminal still
+// works, by code alone: it runs the obvious searches on the line and quotes
+// the top record each one finds. Same shape as the model's lookup.
+export async function lookupWithoutModel({ line, onStep = () => {} }) {
+  const cut = line.indexOf(': ');
+  const [label, value] = cut > 0 ? [line.slice(0, cut), line.slice(cut + 2)] : ['', line];
+  const onShip = /ship|sailed/i.test(label);
+  const plan = onShip ? [['search_passenger_lists', { ship: value }]] : [['find_company', { name: value }], ['find_person', { name: value }], ['search_passenger_lists', { name: value }]];
+  const report = [];
+  for (const [name, args] of plan) {
+    const { result, step } = runTool(name, args);
+    onStep({ tool: name, step });
+    const top = result.matches?.[0];
+    if (top) report.push(describe[name](top));
+    else if (onShip && result.ships?.length) report.push(...result.ships.map((s) => `Passenger lists: the ${s.name} from ${s.from}, due ${s.due}, arrived ${s.arrived} (${s.note}).`));
+  }
+  return report.join('\n') || 'Records: nothing on file for this line.';
+}
 
 // Runs one tool call from the model. Its arguments are untrusted: anything
 // that isn't a short string is dropped, and an unknown tool is reported back.

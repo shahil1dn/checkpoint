@@ -95,6 +95,57 @@ export function buildNoteMessages({ papers, exchanges, earlierNotes = [] }) {
   ];
 }
 
+// ---- The records terminal (ADR-12) ----
+// It is handed one gathered line, the name on his papers and the records its
+// tools return: never a traveller, so his prompt, truth or secret can't be
+// passed in by mistake.
+
+const tool = (name, description, properties) => ({
+  type: 'function',
+  function: { name, description, parameters: { type: 'object', properties, required: [] } },
+});
+const text = (description) => ({ type: 'string', description });
+
+export const LOOKUP_TOOLS = [
+  tool('search_passenger_lists', "Search today's ship passenger lists. Give a name, a ticket number or a travel account, and optionally a ship or port to search only that ship's list. Returns the ship (when it was due and arrived) and near matches.", {
+    name: text("A passenger's name, as written anywhere"),
+    ship: text('A ship name or the port it sailed from'),
+    ticket_or_account: text('A ticket number such as SS-4471, or a travel account such as FHL-0042'),
+  }),
+  tool('find_person', 'Search the penguin registry by name. Returns near matches: where they hatched, home, occupation, employer and visits this year.', {
+    name: text("A person's name, as written anywhere"),
+  }),
+  tool('find_company', 'Search the company register by name or travel account. Returns what the company is, where, its notes and any sponsorships on file.', {
+    name: text('A company name or travel account'),
+  }),
+  tool('read_rulebook', "Read the border rulebook's sections on a topic, such as names, late ships, paid tickets, changing ships, food or company events.", {
+    topic: text('A few words on the topic'),
+  }),
+];
+
+export const LOOKUP_SOURCES = { papers: 'his travel papers', ticket: 'his ship ticket', said: 'what he told the inspector' };
+
+const RECORDS_CLERK = [
+  'You are the records terminal at an Antarctic border post. The inspector has sent you one line he gathered from a traveller. Check it against the border records with your tools, then report what the records say.',
+  'Search the record books the line points to. Names in the records are often misspelled, so look at near matches. When a result names a ticket number, a ship or a travel account, search for that too before you report: following a lead across record books is your job.',
+  'Then report in 1 to 3 short lines, each under 160 characters. Start each line with the record it comes from, such as "Company register:", "Passenger lists:", "Penguin registry:" or "Rulebook §4:", and quote the records\' own words: copy whole sentences, and never shorten a sentence or leave part of it out. For a company, always quote its note in full. For a ship, quote when it was due, when it arrived and its note. When a search finds no one, say so plainly, for example: no Max Tokens on the Seine Star list.',
+  'Report only what the tools returned. Never give an opinion or a verdict about the traveller, and never say what the records mean for him: the inspector decides. Never use the words lie, liar, lying, truth, honest, suspicious, suspect, guilty or innocent. No markdown.',
+].join(' ');
+
+// The line is a traveller's words or the papers'; fenced like the inspector's
+// words, so nothing in it can pose as an instruction.
+const fenceLine = (line) => `<gathered_line>${line.replace(/</g, '‹').replace(/>/g, '›')}</gathered_line>`;
+
+// name is the Name line on his papers, which the inspector can see, so a
+// ship or ticket line can be checked against the right passenger.
+export function buildLookupMessages({ line, source, name }) {
+  const whose = name ? `The traveller's papers give his name as ${fenceLine(name)}. ` : '';
+  return [
+    { role: 'system', content: RECORDS_CLERK },
+    { role: 'user', content: `${whose}From ${LOOKUP_SOURCES[source] ?? 'the traveller'}: ${fenceLine(line)}` },
+  ];
+}
+
 export function buildMessages(traveller, history, question, { nudge } = {}) {
   const state = { questionNumber: history.length + 1, confessed: history.some((past) => past.cracked), nudge };
   const messages = [{ role: 'system', content: buildSystemPrompt(traveller, state) }];

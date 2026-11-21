@@ -1,6 +1,7 @@
 // The only file that reads the Mistral key. Plain fetch, no SDK (ADR-5).
 // fetchImpl is injectable so tests can check what is sent without the network.
-import { NOTES_FORMAT, REPLY_FORMAT, buildMessages, buildNoteMessages } from './prompt.js';
+import { LOOKUP_TOOLS, NOTES_FORMAT, REPLY_FORMAT, buildLookupMessages, buildMessages, buildNoteMessages } from './prompt.js';
+import { runTool } from '../src/records/search.js';
 
 const API = 'https://api.mistral.ai/v1';
 const TIMEOUT_MS = 20_000;
@@ -62,6 +63,54 @@ export function makeMistralNoteTaker({ fetchImpl = fetch } = {}) {
   const chatJson = makeMistralJsonChat({ fetchImpl });
   return ({ papers, exchanges, earlierNotes }) =>
     chatJson({ messages: buildNoteMessages({ papers, exchanges, earlierNotes }), format: NOTES_FORMAT, maxTokens: 200 });
+}
+
+// ---- The records terminal (ADR-12): function calling over the records ----
+
+// Measured 21 Nov 15:45: Large 4 took 4.7 to 32 s a lookup and once timed out
+// (even at reasoning_effort low); Medium 3.5 took 1.5 to 2.9 s. The brief's
+// limit is about 8 s, so Medium. For Large 4 pass reasoningEffort, and keep
+// max_tokens high enough for its thinking.
+export const LOOKUP_MODEL = 'mistral-medium-3.5';
+export const LOOKUP_MAX_TOKENS = 1500;
+const MAX_TOOL_ROUNDS = 3;
+export const LOOKUP_REASONING = null;
+
+function parseArguments(raw) {
+  if (typeof raw !== 'string') return raw;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+// Takes one gathered line, where it came from and the name on his papers;
+// never a traveller. The model
+// asks for tools, the code runs them over the records (src/records/search.js)
+// and reports each step through onStep. Returns the model's report, still
+// untrusted. The last round offers no tools, so it always ends in a report.
+export function makeMistralLookup({ fetchImpl = fetch, model = LOOKUP_MODEL, reasoningEffort = LOOKUP_REASONING } = {}) {
+  return async function lookup({ line, source, name, onStep = () => {} }) {
+    const messages = buildLookupMessages({ line, source, name });
+    for (let round = 0; ; round += 1) {
+      const lastRound = round === MAX_TOOL_ROUNDS;
+      const data = await postToMistral('/chat/completions', {
+        contentType: 'application/json',
+        body: JSON.stringify({ model, max_tokens: LOOKUP_MAX_TOKENS, messages, tools: LOOKUP_TOOLS, tool_choice: lastRound ? 'none' : 'auto', ...(reasoningEffort && { reasoning_effort: reasoningEffort }) }),
+      }, fetchImpl);
+      const message = data?.choices?.[0]?.message ?? {};
+      const calls = Array.isArray(message.tool_calls) ? message.tool_calls.slice(0, 4) : [];
+      if (!calls.length || lastRound) return textOf(message.content);
+      messages.push({ role: 'assistant', content: textOf(message.content), tool_calls: calls });
+      for (const call of calls) {
+        const name = String(call?.function?.name ?? '');
+        const { result, step } = runTool(name, parseArguments(call?.function?.arguments));
+        onStep({ tool: name, step });
+        messages.push({ role: 'tool', name, tool_call_id: call?.id, content: JSON.stringify(result) });
+      }
+    }
+  };
 }
 
 export const HEAR_MODEL = 'voxtral-mini-latest';

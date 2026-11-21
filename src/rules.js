@@ -186,7 +186,7 @@ export function finishQuestion(shift, requestId, reply) {
 
 export const MAX_LOOKUPS = 3;
 export const MAX_REPORT_LINES = 4;
-export const MAX_REPORT_LINE_CHARS = 200;
+export const MAX_REPORT_LINE_CHARS = 220;
 const sameLine = (s) => (typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : '');
 
 export const lookupsLeft = (shift, id) => MAX_LOOKUPS - shift.cases[id].lookups.length;
@@ -250,7 +250,8 @@ export function checkLookupAnswer(raw) {
     .map((line) => line.replace(/[*_`#~]/g, '').replace(/^\s*(?:[-•]|\d+[.)])\s*/, '').replace(/\s+/g, ' ').trim())
     .filter(Boolean);
   const allowed = candidates.filter((line) => !hasVerdictWord(line));
-  const lines = allowed.slice(0, MAX_REPORT_LINES).map((line) => [...line].slice(0, MAX_REPORT_LINE_CHARS).join(''));
+  const cut = (line) => ([...line].length > MAX_REPORT_LINE_CHARS ? `${[...line].slice(0, MAX_REPORT_LINE_CHARS - 1).join('').trimEnd()}…` : line);
+  const lines = allowed.slice(0, MAX_REPORT_LINES).map(cut);
   return { lines, refused: candidates.length - allowed.length };
 }
 

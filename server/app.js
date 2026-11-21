@@ -3,8 +3,10 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FALLBACK_LINE, checkNotes, cleanTranscript, judgeReply, parseReply, validateAskRequest } from '../src/rules.js';
+import { FALLBACK_LINE, checkLookupAnswer, checkNotes, cleanTranscript, gatheredFrom, judgeReply, parseReply, validateAskRequest, validateLookupRequest } from '../src/rules.js';
 import { getTraveller, voiceFor } from '../src/travellers/index.js';
+import { ticketFor } from '../src/records/tickets.js';
+import { lookupWithoutModel } from '../src/records/search.js';
 import { AUDIO_TYPES } from './mistral.js';
 import { EARLY_CONFESSION_NUDGE } from './prompt.js';
 
@@ -69,9 +71,26 @@ async function timed(call) {
   return { value, ms: Math.round(performance.now() - started) };
 }
 
+// What each traveller has really said, in this server's memory only, so the
+// records terminal can refuse a line he never said (ADR-12). Capped, and never
+// written anywhere.
+const SAID_PER_TRAVELLER = 60;
+function sayings() {
+  const said = new Map();
+  return {
+    remember(travellerId, reply) {
+      const lines = said.get(travellerId) ?? [];
+      said.set(travellerId, [...lines, reply].slice(-SAID_PER_TRAVELLER));
+    },
+    of: (travellerId) => said.get(travellerId) ?? [],
+  };
+}
+
 // models: which Mistral model does each job, shown by name on the computer screen.
-export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, models, log = () => {} }) {
+// lookup: the records terminal; offline, the code's own search stands in.
+export async function createApp({ ask, hear, speak, takeNotes, lookup, liveAvailable, models, log = () => {} }) {
   const routes = await staticRoutes();
+  const said = sayings();
 
   async function handleHear(req, res) {
     const type = (req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
@@ -112,7 +131,44 @@ export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, mo
       timed(async () => (reply.fallback ? [] : notesOrNone(traveller.papers, exchanges, earlierNotes))),
     ]);
     const timings = { answerMs, speechMs: speech.ms, notesMs: noted.ms };
+    if (!reply.fallback) said.remember(travellerId, reply.reply);
     return send(res, 200, { ...reply, audio: speech.value, notes: noted.value, timings });
+  }
+
+  // Offline, the page plays each traveller's canned lines, so those are what he said.
+  function saidBy(traveller) {
+    return liveAvailable ? said.of(traveller.id) : (traveller.offlineLines ?? []).map((l) => l.reply);
+  }
+
+  // Streams one JSON object a line: each tool step as it happens, then the
+  // report. The line is checked before anything runs: it must be on his
+  // papers or ticket, or something he really said.
+  async function handleLookup(req, res) {
+    const { body, error } = await readJsonBody(req);
+    if (error) return send(res, 400, { error });
+    const checked = validateLookupRequest(body);
+    if (!checked.ok) return send(res, 400, { error: checked.reason });
+    const { travellerId, line } = checked.value;
+    const traveller = getTraveller(travellerId);
+    const source = gatheredFrom(line, { papers: traveller.papers, ticket: ticketFor(travellerId), said: saidBy(traveller) });
+    if (!source) return send(res, 403, { error: 'notGathered' });
+    res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' });
+    const write = (event) => res.write(`${JSON.stringify(event)}\n`);
+    try {
+      const steps = [];
+      const searched = await timed(() => (liveAvailable ? lookup : lookupWithoutModel)({
+        line,
+        source,
+        name: traveller.papers.Name,
+        onStep: ({ step }) => { steps.push(step); write({ step }); },
+      }));
+      const { lines } = checkLookupAnswer(searched.value);
+      write(lines.length ? { answer: lines, ms: searched.ms, tools: steps.length } : { error: 'noReport' });
+    } catch (err) {
+      log(err);
+      write({ error: 'callFailed' });
+    }
+    res.end();
   }
 
   // Only the papers, the conversation and the notes the player already has go
@@ -165,6 +221,10 @@ export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, mo
     if (url.pathname === '/api/ask') {
       if (req.method !== 'POST') return send(res, 405, { error: 'method' });
       return handleAsk(req, res);
+    }
+    if (url.pathname === '/api/lookup') {
+      if (req.method !== 'POST') return send(res, 405, { error: 'method' });
+      return handleLookup(req, res);
     }
     if (url.pathname === '/api/hear') {
       if (req.method !== 'POST') return send(res, 405, { error: 'method' });

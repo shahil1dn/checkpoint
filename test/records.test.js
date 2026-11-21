@@ -40,7 +40,7 @@ test("Max's ship has no Tokens on its list, but an M. Tokkens sailed on the acco
   const paid = runTool('search_passenger_lists', { ticket_or_account: 'FHL-0042' }).result.matches;
   assert.deepEqual(paid.map((p) => [p.name, p.ship]), [['M. Tokkens', 'Golden Gate Glider']]);
   const company = runTool('find_company', { name: 'Frontier Horizon Labs' }).result.matches[0];
-  assert.match(company.note, /competitor of Mistral AI/);
+  assert.match(company.note, /direct competition with Mistral AI/);
 });
 
 test("Colin's misspelled name is a near match on the delayed Paris ship", () => {

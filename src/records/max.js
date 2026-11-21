@@ -25,7 +25,7 @@ export const records = {
       name: 'Frontier Horizon Labs',
       kind: 'AI research lab',
       place: 'San Francisco',
-      note: 'Builds large language models; a direct competitor of Mistral AI. Staff travel is booked by its own travel desk on account FHL-0042.',
+      note: 'Builds large language models in direct competition with Mistral AI. Staff travel is booked by its own travel desk on account FHL-0042.',
       sponsorships: 'none on file',
     },
   ],
