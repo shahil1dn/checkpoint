@@ -86,7 +86,7 @@ export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, lo
     const checked = validateAskRequest(body);
     if (!checked.ok) return send(res, 400, { error: checked.reason });
     if (!liveAvailable) return send(res, 503, { error: 'noKey' });
-    const { travellerId, history, question } = checked.value;
+    const { travellerId, history, question, notes: earlierNotes } = checked.value;
     const traveller = getTraveller(travellerId);
     let reply;
     try {
@@ -99,17 +99,20 @@ export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, lo
     const exchanges = [...history, { question, reply: reply.reply, mood: reply.mood }];
     const [audio, notes] = await Promise.all([
       speakOrNull(traveller, reply),
-      reply.fallback ? [] : notesOrNone(traveller.papers, exchanges),
+      reply.fallback ? [] : notesOrNone(traveller.papers, exchanges, earlierNotes),
     ]);
     return send(res, 200, { ...reply, audio, notes });
   }
 
-  // Only the papers and the conversation go to the note-taker (ADR-8).
-  // A failed or refused note is dropped; the answer still arrives.
-  async function notesOrNone(papers, exchanges) {
+  // Only the papers, the conversation and the notes the player already has go
+  // to the note-taker (ADR-8). A failed or refused note is dropped; the answer
+  // still arrives.
+  async function notesOrNone(papers, exchanges, earlierNotes) {
     if (!takeNotes) return [];
     try {
-      return checkNotes(await takeNotes({ papers, exchanges })).kept;
+      const seen = new Set(earlierNotes.map((n) => n.toLowerCase()));
+      const { kept } = checkNotes(await takeNotes({ papers, exchanges, earlierNotes }));
+      return kept.filter((n) => !seen.has(n.toLowerCase()));
     } catch (err) {
       log(err);
       return [];

@@ -54,18 +54,22 @@ async function startServer({ withSpeech, withNotes = false }) {
 // call is not added to the history.
 async function interrogate(base, travellerId, questions) {
   const history = [];
+  const notes = [];
   const turns = [];
   for (const question of questions) {
     const start = performance.now();
     const res = await fetch(`${base}/api/ask`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ travellerId, question, history }),
+      body: JSON.stringify({ travellerId, question, history, notes }),
     });
     const body = await res.json();
     const turn = { n: history.length + 1, question, status: res.status, ms: Math.round(performance.now() - start), ...body };
     turns.push(turn);
-    if (res.status === 200 && !body.fallback) history.push({ question, reply: body.reply, mood: body.mood, cracked: body.cracked });
+    if (res.status === 200 && !body.fallback) {
+      history.push({ question, reply: body.reply, mood: body.mood, cracked: body.cracked });
+      notes.push(...(body.notes ?? []));
+    }
   }
   return turns;
 }

@@ -56,7 +56,17 @@ export function validateAskRequest(body) {
   if (body.history.length >= MAX_QUESTIONS) return { ok: false, reason: 'outOfQuestions' };
   const history = body.history.map(checkPastExchange);
   if (history.includes(null)) return { ok: false, reason: 'badHistory' };
-  return { ok: true, value: { travellerId: body.travellerId, question: checked.question, history } };
+  const notes = body.notes ?? [];
+  if (!checkEarlierNotes(notes)) return { ok: false, reason: 'badNotes' };
+  return { ok: true, value: { travellerId: body.travellerId, question: checked.question, history, notes } };
+}
+
+// The notes already on the scratchpad, sent back so the note-taker doesn't
+// repeat itself. Same limits as when they were first written.
+function checkEarlierNotes(notes) {
+  return Array.isArray(notes)
+    && notes.length <= MAX_QUESTIONS * MAX_NOTES_PER_ANSWER
+    && notes.every((n) => typeof n === 'string' && n.length > 0 && charCount(n) <= MAX_NOTE_CHARS);
 }
 
 // A transcript becomes the next question, so it obeys the question limit.
@@ -142,7 +152,8 @@ export function startQuestion(shift, text) {
   const travellerId = currentTravellerId(shift);
   if (questionsLeft(shift, travellerId) <= 0) return { shift, error: 'outOfQuestions' };
   const pending = { id: shift.nextRequestId, travellerId, question: checked.question };
-  const request = { ...pending, history: shift.cases[travellerId].history.map(({ question, reply, mood, cracked }) => ({ question, reply, mood, cracked })) };
+  const record = shift.cases[travellerId];
+  const request = { ...pending, history: record.history.map(({ question, reply, mood, cracked }) => ({ question, reply, mood, cracked })), notes: record.notes };
   return { shift: { ...shift, pending, nextRequestId: shift.nextRequestId + 1 }, request };
 }
 

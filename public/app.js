@@ -43,7 +43,7 @@ async function fetchReply(request) {
     const res = await fetch('/api/ask', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ travellerId: request.travellerId, question: request.question, history: request.history }),
+      body: JSON.stringify({ travellerId: request.travellerId, question: request.question, history: request.history, notes: request.notes }),
     });
     return res.ok ? { reply: await res.json() } : { error: 'unclear' };
   } catch {

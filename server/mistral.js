@@ -60,8 +60,8 @@ export function makeMistralAsker({ fetchImpl = fetch } = {}) {
 // The scratchpad's notes on the latest answer. Takes only what the player sees.
 export function makeMistralNoteTaker({ fetchImpl = fetch } = {}) {
   const chatJson = makeMistralJsonChat({ fetchImpl });
-  return ({ papers, exchanges }) =>
-    chatJson({ messages: buildNoteMessages({ papers, exchanges }), format: NOTES_FORMAT, maxTokens: 200 });
+  return ({ papers, exchanges, earlierNotes }) =>
+    chatJson({ messages: buildNoteMessages({ papers, exchanges, earlierNotes }), format: NOTES_FORMAT, maxTokens: 200 });
 }
 
 export const HEAR_MODEL = 'voxtral-mini-latest';

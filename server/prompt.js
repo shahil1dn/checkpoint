@@ -81,7 +81,7 @@ const NOTE_TAKER = [
   'Every note is about the latest answer only. Never write again about something an earlier answer said. If nothing new is worth noting, return an empty list.',
 ].join(' ');
 
-export function buildNoteMessages({ papers, exchanges }) {
+export function buildNoteMessages({ papers, exchanges, earlierNotes = [] }) {
   const paperLines = Object.entries(papers).map(([k, v]) => `${k}: ${v}`).join('\n');
   const talk = exchanges.map((e, i) => {
     const latest = i === exchanges.length - 1 ? ' (latest)' : '';
@@ -89,7 +89,7 @@ export function buildNoteMessages({ papers, exchanges }) {
   }).join('\n');
   return [
     { role: 'system', content: NOTE_TAKER },
-    { role: 'user', content: `Papers:\n${paperLines}\n\nConversation:\n${talk}` },
+    { role: 'user', content: `Papers:\n${paperLines}\n\nConversation:\n${talk}\n\nAlready on the scratchpad (never repeat these or make the same point again):\n${earlierNotes.map((n) => `- ${n}`).join('\n') || '(nothing yet)'}` },
   ];
 }
 

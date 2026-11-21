@@ -97,6 +97,13 @@ test('the note-taker sends the papers and the conversation, never the prompt or 
   assert.equal(JSON.parse(body).response_format.json_schema.name, 'notes');
 });
 
+test('the note-taker is told what is already on the scratchpad', async () => {
+  const { impl, sent } = fakeFetch(200, { choices: [{ message: { content: '{"notes":[]}' } }] });
+  const exchanges = [{ question: 'Hi', reply: 'Hello!', mood: 'happy' }];
+  await makeMistralNoteTaker({ fetchImpl: impl })({ papers: max.papers, exchanges, earlierNotes: ['Offered a sticker.'] });
+  assert.match(JSON.parse(sent[0].init.body).messages[1].content, /Already on the scratchpad[^]*- Offered a sticker\./);
+});
+
 const past = (cracked = false) => ({ question: 'a', reply: 'b', mood: 'sad', cracked });
 
 test('past exchanges alternate inspector and traveller turns', () => {

@@ -135,7 +135,7 @@ test('the note-taker gets only the papers and the conversation', async () => {
   nextRaw = GOOD_RAW;
   await post({ ...valid, history: [pastExchange] });
   assert.equal(noted.length, 1);
-  assert.deepEqual(Object.keys(noted[0]).sort(), ['exchanges', 'papers']);
+  assert.deepEqual(Object.keys(noted[0]).sort(), ['earlierNotes', 'exchanges', 'papers']);
   assert.deepEqual(noted[0].papers, getTraveller('max').papers);
   assert.deepEqual(noted[0].exchanges.map((e) => e.question), ['Hello?', 'Why are you here?']);
   assert.ok(!JSON.stringify(noted[0]).includes(getTraveller('max').truth.secret));
@@ -151,6 +151,24 @@ test('notes with a verdict are dropped, and the answer still arrives', async () 
   assert.equal(res.status, 200);
   assert.deepEqual((await res.json()).notes, []);
   nextNotes = JSON.stringify({ notes: [NOTE] });
+});
+
+test('notes already on the scratchpad go to the note-taker, and an exact repeat is dropped', async () => {
+  noted.length = 0;
+  nextRaw = GOOD_RAW;
+  nextNotes = JSON.stringify({ notes: ['offered a sticker.', 'Says Paris.'] });
+  const body = await (await post({ ...valid, notes: ['Offered a sticker.'] })).json();
+  assert.deepEqual(noted[0].earlierNotes, ['Offered a sticker.']);
+  assert.deepEqual(body.notes, ['Says Paris.']);
+  nextNotes = JSON.stringify({ notes: [NOTE] });
+});
+
+test('earlier notes that break the note limits are refused before Mistral is called', async () => {
+  calls.length = 0;
+  for (const notes of [['a'.repeat(121)], Array(11).fill('ok'), [42], 'one']) {
+    assert.equal((await post({ ...valid, notes })).status, 400);
+  }
+  assert.equal(calls.length, 0);
 });
 
 // ---- C3 and C5: the code owns confessions; one retry, then "say that again" ----
