@@ -107,6 +107,16 @@ async function main() {
     await sleep(300);
     seen = await screen();
     check('Play again starts with no hint left over from the last shift', seen.hint === '' && seen.left.includes(' 5 of '), seen);
+
+    // SPEC item 8: stamping is allowed at any time, even before the first question.
+    const first = await page.evaluate(`document.getElementById('traveller-name').textContent`);
+    await page.evaluate(`document.getElementById('stamp-through').click(); true`);
+    let next = first;
+    for (let i = 0; i < 50 && next === first; i += 1) {
+      await sleep(100);
+      next = await page.evaluate(`document.getElementById('traveller-name').textContent`);
+    }
+    check('stamping before any question moves the queue on', next !== first, { first, next, ...(await screen()) });
     page.close();
   } finally {
     const exited = once(chrome, 'exit');
