@@ -157,8 +157,9 @@ Each line names a check that can fail.
 
 ## Open questions for Shahil
 
-1. ~~Where the checkpoint is.~~ **Decided 11:52: the passport booth at the Channel train border**,
-   where trains from Paris arrive in London (ADR-10). Penguin travellers step off the train.
+1. ~~Where the checkpoint is.~~ **Decided 12:06: the border post into Antarctica** (ADR-11,
+   replacing ADR-10's train border). Penguin travellers step off a ship; a police penguin
+   snatches away anyone turned away.
 2. **The superfan's secret.** Proposed: a spy from a rival lab who gets Mistral facts wrong.
    Keep it, or make him an honest superfan, so the twist is that being over the top isn't lying?
 3. **The other travellers.** Hand-written ones decided later, or stretch item 12, where Large 4

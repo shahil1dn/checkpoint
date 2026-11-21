@@ -103,3 +103,15 @@ papers and questions an obvious reason to exist.
 cheesemonger) needs a reason to be bringing cheese in from France. An odd but honest reason makes
 a good red herring.
 **Turned down:** the hackathon's own door, an Antarctic border post, space station customs.
+
+## ADR-11: The border post is in Antarctica, and a police penguin takes the turned-away (21 Nov 12:06)
+
+**Decided:** Shahil's call, given straight to the build session: the booth is the border post into
+Antarctica, not the Channel train border. Through the window: ice, the sea, a ship the penguin
+travellers step off, a welcome sign and an arrivals board. When a traveller is stamped turned
+away, a police penguin runs in and snatches him away. Signs stay made up: no real agency names
+or logos.
+**Supersedes:** ADR-10. The train station it led to was built and rehearsed (50.4 s, PASS) but
+never committed.
+**Knock-on:** the travellers' stories now end at the Antarctic border post. They arrive by ship,
+and the Mistral hackathon is down there.
