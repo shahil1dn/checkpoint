@@ -2,8 +2,10 @@
 // one is a new file plus one line here.
 import max from './max.js';
 import colin from './colin.js';
+import rupert from './rupert.js';
+import pebble from './pebble.js';
 
-const FILES = { max, colin };
+const FILES = { max, colin, rupert, pebble };
 
 export const ALL_RECORDS = Object.values(FILES).map((file) => file.records ?? {});
 

@@ -5,6 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LOOKUP_MODEL, makeMistralLookup } from '../server/mistral.js';
 import { TRAVELLERS } from '../src/travellers/index.js';
+import { ARCHIVE } from '../src/records/archive.js';
 
 process.env.MISTRAL_API_KEY = 'test-key-must-not-leak';
 
@@ -37,8 +38,8 @@ test('the model asks for tools, the code runs them over the records and reports 
   assert.equal(sent[0].model, LOOKUP_MODEL);
   assert.deepEqual(sent[0].tools.map((t) => t.function.name), ['search_passenger_lists', 'find_person', 'find_company', 'read_rulebook']);
   assert.deepEqual(steps, [
-    'company register (51): "Frontier Horizon Labs"… 1 exact match',
-    'passenger lists (247): "FHL-0042"… 1 exact match',
+    `company register (${ARCHIVE.companies.length}): "Frontier Horizon Labs"… 1 exact match`,
+    `passenger lists (${ARCHIVE.passengers.length}): "FHL-0042"… 1 exact match`,
   ]);
   // The second call carries the tool results, each tied to its call.
   const toolMessages = sent[1].messages.filter((m) => m.role === 'tool');

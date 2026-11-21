@@ -354,6 +354,8 @@ async function bribe() {
 //     lab competes with Mistral AI.
 // R2: Max's ticket line "Ship: Seine Star" brings back the Seine Star's delay (13:05 or "delayed").
 // R3: Colin's papers line "Arriving from: The Paris Cheese Fair" finds the same delayed Paris ship.
+// R6: Rupert's ticket line "Return ticket: None" finds the fund's return charter for the whole group.
+// R7: Granny's passport line "Name: Edna Pebble" finds the krill buyer that has her on file.
 // R4: no verdict word in any report, even before the code's filter.
 // R5: every lookup under 8 s (the brief's limit for the terminal).
 // Each lookup runs 3 times, through the real server route.
@@ -362,6 +364,8 @@ async function records() {
     { rule: 'R1', travellerId: 'max', line: 'Sponsor: Frontier Horizon Labs', expect: /competi\w* with Mistral AI|competitor of Mistral AI/i },
     { rule: 'R2', travellerId: 'max', line: 'Ship: Seine Star', expect: /13:05|delayed/i },
     { rule: 'R3', travellerId: 'colin', line: 'Arriving from: The Paris Cheese Fair', expect: /Seine Star[^]*(13:05|delayed)|(13:05|delayed)[^]*Seine Star/i },
+    { rule: 'R6', travellerId: 'rupert', line: 'Return ticket: None', expect: /charter/i },
+    { rule: 'R7', travellerId: 'pebble', line: 'Name: Edna Pebble', expect: /Southern Krill Exchange|krill wholesaler/i },
   ];
   const lookup = makeMistralLookup();
   const raw = [];
@@ -386,12 +390,14 @@ async function records() {
   const byRule = (rule) => rows.filter((r) => r.rule === rule);
   const ruleLine = (rule, what) => `${rule}: ${what}: ${byRule(rule).filter((r) => r.found).length} of ${byRule(rule).length}. ${byRule(rule).every((r) => r.found) ? 'PASS' : 'FAIL'}.`;
   return {
-    title: `R1 to R5: the records terminal (${LOOKUP_MODEL})`,
+    title: `R1 to R7: the records terminal (${LOOKUP_MODEL})`,
     pass: rows.every((r) => r.found) && verdictReports === 0 && slow === 0,
     lines: [
       ruleLine('R1', "Max's sponsor finds the rival lab"),
       ruleLine('R2', "Max's ship finds the delayed Paris ship"),
       ruleLine('R3', "Colin's Paris line finds the delayed Paris ship"),
+      ruleLine('R6', "Rupert's missing return ticket finds the fund's group charter"),
+      ruleLine('R7', "Granny's name finds the krill buyer"),
       `R4: reports with a verdict word before the filter: ${verdictReports} of ${raw.length}. ${verdictReports === 0 ? 'PASS' : 'FAIL'}.`,
       `R5: lookups at 8 s or more: ${slow} of ${rows.length} (slowest ${Math.max(...rows.map((r) => r.ms))} ms). ${slow === 0 ? 'PASS' : 'FAIL'}.`,
       '',
