@@ -165,7 +165,10 @@ async function main() {
 
     // Find each desk object by hovering a grid over the lower screen and reading
     // the hover tip; use the hit nearest the middle of each object's hits.
-    const desk = await evaluate(`(() => {
+    // Mapped only once the shift has started: the page now opens facing the
+    // terminal menu, where the only tool in sight is START SHIFT.
+    let desk = {};
+    const mapDesk = () => evaluate(`(() => {
       const canvas = document.querySelector('#booth canvas');
       const tip = document.getElementById('tool-tip');
       const hits = {};
@@ -227,7 +230,8 @@ async function main() {
     if (!started) throw new Error('could not find START SHIFT on the terminal');
     if (!(await waitFor(`!document.getElementById('controls').hidden`, 5000))) throw new Error('the shift did not start from the terminal menu');
     note('Start shift');
-    await sleep(500);
+    await sleep(1500);   // let the camera finish turning from the terminal to the window
+    desk = await mapDesk();
 
     let clipIndex = 0;
     for (const step of DEMO) {
