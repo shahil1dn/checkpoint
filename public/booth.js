@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { createEngine, part, box, ball, mat, textPlane } from '/penguins/engine.js';
 import { makePenguin } from '/penguins/penguin.js';
 import { buildScenery } from '/scenery.js';
+import { FORM_TITLE, NOTICES, RULE_SPOT, TIN_LABEL } from '/notices.js';
 import { getTraveller } from '/src/travellers/index.js';
 
 const COLORS = {
@@ -259,6 +260,141 @@ function buildComputer(group) {
   return screen;
 }
 
+// The right wall: a notice board and the inspector's clutter. Flavour only; the
+// words come from public/notices.js, which is tested to give nothing away.
+const CORK = '#b98d5e';
+const PIN = '#c0453a';
+const NOTE_PAPER = { typed: '#fbf8ef', clipping: '#e6e1d3', sticky: '#f2d96b' };
+const NOTE_SPOTS = [   // [x, y, width, height, tilt] as fractions of the board
+  [0.03, 0.07, 0.36, 0.5, -0.02],
+  [0.42, 0.06, 0.3, 0.42, 0.03],
+  [0.07, 0.63, 0.25, 0.32, 0.04],
+  [0.38, 0.55, 0.34, 0.4, -0.03],
+];
+
+function drawPin(g, x, y, r) {
+  g.fillStyle = PIN; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
+}
+
+// A snapshot of this month's winner: a grey seal, pleased with himself.
+function drawSeal(g, x, y, size) {
+  g.fillStyle = '#dfe6ea'; g.fillRect(x - size, y - size * 0.8, size * 2, size * 1.6);
+  g.fillStyle = '#7d8a8f';
+  g.beginPath(); g.ellipse(x, y + size * 0.3, size * 0.75, size * 0.42, 0, 0, Math.PI * 2); g.fill();
+  g.beginPath(); g.arc(x + size * 0.38, y - size * 0.18, size * 0.32, 0, Math.PI * 2); g.fill();
+  g.fillStyle = INK;
+  for (const dx of [0.28, 0.5]) { g.beginPath(); g.arc(x + size * dx, y - size * 0.24, size * 0.05, 0, Math.PI * 2); g.fill(); }
+}
+
+function drawNotice(g, w, h, { style, title, lines, picture }, [x, y, nw, nh, tilt]) {
+  const [width, height] = [nw * w, nh * h];
+  g.save();
+  g.translate(x * w + width / 2, y * h + height / 2); g.rotate(tilt); g.translate(-width / 2, -height / 2);
+  g.fillStyle = NOTE_PAPER[style]; g.fillRect(0, 0, width, height);
+  const pad = width * 0.07;
+  const font = style === 'sticky' ? HANDWRITING : TYPEWRITER;
+  g.fillStyle = INK; g.textAlign = 'left'; g.textBaseline = 'top';
+  g.font = `bold ${h * 0.058}px ${style === 'clipping' ? 'Georgia, serif' : font}`;
+  g.fillText(title, pad, pad * 1.2, width - pad * 2);
+  if (style === 'clipping') g.fillRect(pad, pad * 1.2 + h * 0.072, width - pad * 2, h * 0.005);
+  g.font = `${h * 0.046}px ${font}`;
+  let lineY = pad * 1.2 + h * 0.1;
+  for (const text of lines) {
+    for (const line of wrap(g, text, width - pad * 2)) {
+      g.fillText(line, pad, lineY);
+      lineY += h * 0.058;
+    }
+  }
+  if (picture === 'seal') drawSeal(g, width * 0.72, height * 0.68, height * 0.2);
+  drawPin(g, width / 2, h * 0.025, h * 0.016);
+  g.restore();
+}
+
+// The rule card's place (SPEC stretch 11): a pinned label over an empty patch.
+function drawRuleSpot(g, w, h) {
+  const [x, y, width, height] = [w * 0.75, h * 0.08, w * 0.22, h * 0.6];
+  g.strokeStyle = '#6b4f33'; g.lineWidth = h * 0.006; g.setLineDash([h * 0.03, h * 0.02]);
+  g.strokeRect(x, y, width, height);
+  g.setLineDash([]);
+  g.fillStyle = INK; g.font = `bold ${h * 0.05}px ${TYPEWRITER}`; g.textAlign = 'center'; g.textBaseline = 'top';
+  g.fillText(RULE_SPOT, x + width / 2, y + h * 0.04, width * 0.9);
+}
+
+function drawNoticeBoard(g, w, h) {
+  g.fillStyle = CORK; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#a57b4f';
+  for (let i = 0; i < 400; i++) g.fillRect((i * 7919) % w, (i * 104729) % h, h * 0.006, h * 0.006);   // fixed speckle
+  NOTICES.forEach((notice, i) => drawNotice(g, w, h, notice, NOTE_SPOTS[i]));
+  drawRuleSpot(g, w, h);
+}
+
+function buildNoticeBoard(group, wallX, z) {
+  part(box(0.04, 0.93, 1.58, 0.01), mat(COLORS.wood), group, [wallX - 0.02, 1.57, z]);
+  const board = textPlane(1.5, 0.85, drawNoticeBoard, 1400);
+  board.redraw();
+  board.mesh.position.set(wallX - 0.045, 1.57, z);
+  board.mesh.rotation.y = -Math.PI / 2;
+  group.add(board.mesh);
+}
+
+// A sardine tin far too shallow to be a pen pot, used as one anyway.
+function buildPenPot(group, at) {
+  part(box(0.12, 0.04, 0.2, 0.02), mat('#b8bfc4'), group, [at.x, at.y + 0.02, at.z]);
+  part(box(0.1, 0.004, 0.18), mat('#6b747a'), group, [at.x, at.y + 0.041, at.z], undefined, undefined, false);
+  part(new THREE.CylinderGeometry(0.014, 0.014, 0.12, 10), mat('#b8bfc4'), group, [at.x, at.y + 0.05, at.z + 0.1], [0, 0, Math.PI / 2]);
+  for (const [dz, colour, lean] of [[-0.04, '#3f6e8c', 0.35], [0, INK, -0.2], [0.04, PIN, 0.15]]) {
+    part(new THREE.CylinderGeometry(0.007, 0.007, 0.17, 8), mat(colour), group, [at.x, at.y + 0.1, at.z + dz], [lean, 0, 0.12]);
+  }
+  const label = textPlane(0.17, 0.034, (g, w, h) => {
+    g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#f4efe2'; g.font = `bold ${h * 0.7}px ${TYPEWRITER}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(TIN_LABEL, w / 2, h * 0.55, w * 0.9);
+  }, 1024);
+  label.redraw();
+  label.mesh.position.set(at.x - 0.061, at.y + 0.02, at.z);
+  label.mesh.rotation.y = -Math.PI / 2;
+  group.add(label.mesh);
+}
+
+function buildMug(group, at) {
+  part(new THREE.CylinderGeometry(0.05, 0.045, 0.11, 18), mat(COLORS.frame), group, [at.x, at.y + 0.055, at.z]);
+  part(new THREE.CylinderGeometry(0.044, 0.044, 0.005, 18), mat(COLORS.wood), group, [at.x, at.y + 0.106, at.z], undefined, undefined, false);
+  part(new THREE.TorusGeometry(0.032, 0.01, 8, 16), mat(COLORS.frame), group, [at.x, at.y + 0.055, at.z + 0.05], [0, Math.PI / 2, 0], undefined, false);   // thin: no ink hull
+}
+
+function drawForm(g, w, h) {
+  g.fillStyle = COLORS.paper; g.fillRect(0, 0, w, h);
+  g.fillStyle = INK; g.font = `bold ${w * 0.075}px ${TYPEWRITER}`; g.textAlign = 'center';
+  g.fillText(FORM_TITLE, w / 2, h * 0.1, w * 0.9);
+  g.strokeStyle = '#b5ab96'; g.lineWidth = w * 0.006;
+  for (let y = h * 0.2; y < h * 0.95; y += h * 0.08) { g.beginPath(); g.moveTo(w * 0.08, y); g.lineTo(w * 0.92, y); g.stroke(); }
+}
+
+// Flat sheets read with their top away from the inspector, who faces +x here.
+function buildForms(group, at) {
+  for (let i = 0; i < 7; i++) {
+    const sheet = part(box(0.3, 0.006, 0.4, 0.002), mat(COLORS.paper), group, [at.x, at.y + 0.003 + i * 0.007, at.z], [0, Math.PI / 2 + (i % 3 - 1) * 0.06, 0], undefined, false);
+    sheet.castShadow = sheet.receiveShadow = false;
+  }
+  const top = textPlane(0.3, 0.4, drawForm, 1024);
+  top.redraw();
+  top.mesh.position.set(at.x, at.y + 0.05, at.z);
+  top.mesh.rotation.set(-Math.PI / 2, 0, -Math.PI / 2, 'XYZ');
+  group.add(top.mesh);
+}
+
+function buildRightWall(group) {
+  const z = 2.25;   // straight ahead when the inspector turns right
+  const wallX = SIDE_WALL_X - 0.08;
+  part(box(0.6, 0.95, 2.35, 0.03), mat(COLORS.desk), group, [wallX - 0.3, 0.475, 2.72]);
+  part(box(0.62, 0.05, 2.37, 0.02), mat(COLORS.deskTop), group, [wallX - 0.3, 0.97, 2.72]);
+  const top = 0.995;
+  buildNoticeBoard(group, wallX, z);
+  buildPenPot(group, new THREE.Vector3(wallX - 0.32, top, z - 0.15));
+  buildMug(group, new THREE.Vector3(wallX - 0.38, top, z - 0.6));
+  buildForms(group, new THREE.Vector3(wallX - 0.3, top, z + 0.45));
+}
+
 function buildStamp(group, verdict, x) {
   const holder = new THREE.Group();
   holder.userData.tool = `stamp-${verdict}`;
@@ -336,6 +472,7 @@ export function createBooth(container, handlers = {}) {
   const liftables = [papers, notebook];
   const mic = buildMic(group);
   const computer = buildComputer(group);
+  buildRightWall(group);
   const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };
   const tools = [papers.holder, notebook.holder, mic.holder, stamps.through.holder, stamps.away.holder];
 
