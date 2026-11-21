@@ -68,3 +68,15 @@ Vite now would add a build step, a second server path, and re-proving the static
 and the key test (A6) on top of it.
 **Turned down:** Vite (ADR-6's plan); loading three from a CDN, which the demo can't rely on if
 the venue wifi drops.
+
+## ADR-8: The scratchpad's note-taker sees only what the player sees (21 Nov 10:55)
+
+**Decided:** the notes are written by a separate Mistral call that gets the papers and the
+conversation, and nothing else: no traveller prompt, no truth, no secret. The code refuses any
+note with a verdict word.
+**Why:** Shahil wants observations, not answers: the player deduces. A note-taker that knew the
+secret would leak it sooner or later, however it was told to behave. One that doesn't know it
+can't. It's the Fang Street lesson again: the code guarantees what matters, and the prompt only
+shapes the style.
+**Turned down:** notes written by the traveller's own call (it knows the secret); notes built
+purely by code from fixed fields (they'd miss dodges and changes of manner).

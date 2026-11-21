@@ -54,6 +54,22 @@ traveller is a Mistral superfan, so a room of Mistral judges can catch him out w
     rival AI lab. He flatters, overclaims and gets Mistral facts wrong under pressure (tested at
     10:20: asked Large 4's nickname, he guessed "Mixtral" instead of "Le Chonk").
 
+**The scratchpad (Shahil, 10:55).** Beside the papers, each traveller gets a page of notes the game
+writes for the player as the questioning goes on. It records what was said and seen, and where two
+things don't line up: an answer against the papers, an answer against an earlier answer, a dodge,
+a change in manner ("went quiet when asked who paid"). It **never gives a verdict**: no ticks or
+crosses, no "lie", "truth", "suspicious" or "honest". The player still has to ask the right
+questions and work it out. Honest travellers get notes too, including odd-but-innocent details,
+so a note is never proof by itself.
+- The notes come from a second Mistral call after each answer, run alongside the speech so it
+  adds no wait. Start with `mistral-medium-3.5`.
+- **The note-taker sees only what the player sees**: the papers and the conversation. Never the
+  traveller's prompt, truth or secret, so the notes can't give the answer away (ADR-8).
+- The code checks every note before showing it: verdict words are refused, and each note is at
+  most 2 a turn and 120 characters.
+- The mood label (`[confident]`) comes off the screen. Mood shows only through the voice, and
+  later the penguin's face; changes of manner can appear in the notes as observations.
+
 **Stretch, only once 1 to 10 work end to end:**
 
 11. **Today's rule card.** Before the shift, a judge handwrites a rule on paper ("nobody
@@ -64,7 +80,11 @@ traveller is a Mistral superfan, so a room of Mistral judges can catch him out w
 
 ## Out of scope
 
-- A setting, art style or final name. These wait on Shahil (see open questions). Until then the page is plain.
+- The place the checkpoint stands in and the final name. These wait on Shahil (see open questions).
+  **Decided 10:42: the travellers are penguins.** They use the code-drawn Three.js penguin cast
+  from `~/Documents/projects/fang-street-mvp/src/penguins/` and `src/cast.js`, built to the art
+  direction in `~/Documents/projects/system-design-lab/docs/ART-DIRECTION.md` (section 3). Their
+  faces change with `mood`, so the tell can be seen as well as heard.
 - Saving anything: no accounts, no high scores, no saved games. Audio clips and transcripts live
   only in memory for the current shift and are never written to disk or logged.
 - Copying a player's voice. The API supports it, but it isn't part of this game.
@@ -108,11 +128,15 @@ Each line names a check that can fail.
 | A7 | The real traveller replies in time and in shape | `npm run live-check`: 3 scripted questions to the superfan; every reply parses, `mood` is on the list, and each round trip (reply plus speech) is under 3 s. The output is saved to `docs/live-check/` |
 | A8 | A clip recorded in the browser transcribes | Live check: a webm clip saved from the page's recorder comes back as text containing the words spoken |
 | A9 | The whole demo fits | A timed run of the demo shift (superfan plus one more), start to end-of-shift report, under 2 minutes. Proof: the screen recording with its timestamp |
+| A11 | The note-taker never sees the secret | `npm test`: with an injected fake fetch, the note-taker's request contains the papers and the conversation, and contains neither the traveller's prompt nor his truth or secret |
+| A12 | Notes never give a verdict | `npm test`: notes containing "lie", "liar", "lying", "truth", "honest", "suspicious", "guilty", "innocent", "✓" or "✗" are refused, and so are a 3rd note in one turn or a note over 120 characters. Live check: no refused notes across 3 runs of each traveller |
+| A13 | The notes catch a real mismatch | Live check: when Max is asked who paid for his ticket, the notes point out the clash with "Ticket sponsored by: Frontier Horizon Labs" in at least 2 of 3 runs |
 | A10 | Stretch 11: the rule card reads | Live check: a photo of a handwritten card returns the written rule, word for word |
 
 ## Open questions for Shahil
 
-1. **Setting and look.** You said decide later. It's needed before the page gets styled, ideally by about 13:00.
+1. **Where the checkpoint is.** The travellers are penguins (decided 10:42); the place and the
+   rest of the look are still open. Ideally decided by about 13:00.
 2. **The superfan's secret.** Proposed: a spy from a rival lab who gets Mistral facts wrong.
    Keep it, or make him an honest superfan, so the twist is that being over the top isn't lying?
 3. **The other travellers.** Hand-written ones decided later, or stretch item 12, where Large 4
