@@ -5,7 +5,7 @@
 export const GANGWAY_X = -2.2;
 export const DECK_Y = 0.6;
 export const WALK_Z = -3.95;     // the lane along the ice, well behind the traveller
-const START_Z = -4.75;           // just inside the hull, so each one appears out of the ship
+const START_Z = -6.5;            // just inside the hull, so each one appears out of the ship
 const EXIT_X = 4.2;
 const GANGWAY_RUN = WALK_Z - START_Z;
 export const PATH_LENGTH = GANGWAY_RUN + (EXIT_X - GANGWAY_X);
@@ -27,7 +27,7 @@ const SET_OFF_GAP = BODY_WIDTH * Math.SQRT2 + 0.1;
 
 // A small pool of walkers, reused so it never grows. step() moves them on;
 // justArrived marks one that has just set off, so the drawing can re-dress him.
-export function makeCrowd({ count = 3, speed = 0.8, random = Math.random } = {}) {
+export function makeCrowd({ count = 2, speed = 0.8, random = Math.random } = {}) {
   const walkers = Array.from({ length: count }, (_, i) => ({ visible: false, distance: 0, wait: 1 + i * 3.2, justArrived: false }));
   const gangwayClear = () => walkers.every((w) => !w.visible || w.distance >= SET_OFF_GAP);
   return {
