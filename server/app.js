@@ -153,6 +153,7 @@ export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, mo
   async function handlePlea(url, res) {
     const traveller = getTraveller(url.searchParams.get('travellerId') ?? '');
     if (!traveller) return send(res, 400, { error: 'unknownTraveller' });
+    if (!traveller.bribe) return send(res, 404, { error: 'noBribe' });
     if (!liveAvailable) return send(res, 503, { error: 'noKey' });
     if (!pleas.has(traveller.id)) {
       const { line, mood } = traveller.bribe;

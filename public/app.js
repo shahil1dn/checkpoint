@@ -277,7 +277,7 @@ async function startShift() {
   $('start-screen').hidden = true;
   micSetup = live;
   if (live) hint('Allow the microphone, or type a question.');
-  if (live) for (const id of shift.queue) fetchPlea(id);
+  if (live) for (const id of shift.queue) if (getTraveller(id).bribe) fetchPlea(id);
   lastFrame = performance.now();
   render();
   if (live) {
