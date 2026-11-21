@@ -25,6 +25,23 @@ const FAST_CLOCK = `(() => {
   window.requestAnimationFrame = (draw) => realFrame(() => draw(performance.now()));
 })();`;
 
+// Finds a desk object on screen: hover a grid over the lower screen and keep
+// the middle of the spots whose hover label starts with the given words.
+const DESK_SPOT = (label) => `(() => {
+  const canvas = document.querySelector('#booth canvas');
+  const tip = document.getElementById('tool-tip');
+  const hits = [];
+  for (let y = innerHeight * 0.35; y < innerHeight * 0.95; y += 8) {
+    for (let x = 0; x < innerWidth; x += 8) {
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+      if (tip.textContent.startsWith(${JSON.stringify(label)})) hits.push([x, y]);
+    }
+  }
+  canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 0, bubbles: true }));
+  if (!hits.length) return null;
+  return hits[Math.floor(hits.length / 2)];
+})()`;
+
 async function openPage(url) {
   for (let i = 0; i < 50; i += 1) {
     try {
@@ -52,7 +69,7 @@ async function openPage(url) {
           if (msg.result?.exceptionDetails) throw new Error(msg.result.exceptionDetails.exception?.description);
           return msg.result.result.value;
         };
-        return { evaluate, close: () => ws.close() };
+        return { evaluate, send, close: () => ws.close() };
       }
     } catch { /* Chrome still starting */ }
     await sleep(200);
@@ -87,19 +104,28 @@ async function main() {
       console.log(`   ${ok ? 'ok  ' : 'FAIL'} ${name}${ok ? '' : `: saw ${JSON.stringify(seen)}`}`);
       if (!ok) failures.push(name);
     };
+    let seen;
     const ask = (text) => page.evaluate(`document.getElementById('question').value = ${JSON.stringify(text)}; document.getElementById('ask-form').requestSubmit(); true`);
 
     await page.evaluate(`document.getElementById('start').click(); true`);
     await sleep(300);
-    for (let i = 1; i <= 5; i += 1) {
+    // Shahil 13:40: no button row in the booth; you click the desk, and a typed question goes with Enter.
+    const buttons = await page.evaluate(`({ booth: Boolean(document.querySelector('#booth canvas')), ask: Boolean(document.getElementById('ask')), row: !document.getElementById('tools').hidden })`);
+    check('the booth has no on-screen button row', buttons.booth && !buttons.ask && !buttons.row, buttons);
+    await page.evaluate(`document.getElementById('question').focus(); true`);
+    await page.send('Input.insertText', { text: 'Question 1?' });
+    for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: type === 'keyDown' ? '\r' : undefined });
+    await sleep(300);
+    seen = await screen();
+    check('a typed question is asked with Enter', seen.left.includes(' 4 of '), seen);
+    for (let i = 2; i <= 5; i += 1) {
       await ask(`Question ${i}?`);
       await sleep(150);
     }
-    // A 6th question can only come by voice (the Ask button is greyed out);
-    // submitting the form directly takes the same path.
+    // A 6th question can still be typed; it must be refused with a hint.
     await ask('One more?');
     await sleep(150);
-    let seen = await screen();
+    seen = await screen();
     check('a 6th question shows the out-of-questions hint', seen.hint === OUT_OF_QUESTIONS && seen.left.includes(' 0 of '), seen);
 
     for (let i = 0; i < 100 && !(await screen()).over; i += 1) await sleep(100);
@@ -113,7 +139,11 @@ async function main() {
 
     // SPEC item 8: stamping is allowed at any time, even before the first question.
     const first = await page.evaluate(`document.getElementById('traveller-name').textContent`);
-    await page.evaluate(`document.getElementById('stamp-through').click(); true`);
+    const stampAt = await page.evaluate(DESK_SPOT('Stamp: let them through'));
+    if (!stampAt) throw new Error('could not find the THROUGH stamp on the desk');
+    for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+      await page.send('Input.dispatchMouseEvent', { type, x: stampAt[0], y: stampAt[1], button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
+    }
     let next = first;
     for (let i = 0; i < 50 && next === first; i += 1) {
       await sleep(100);

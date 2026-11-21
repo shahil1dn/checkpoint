@@ -57,8 +57,8 @@ function renderLook(view) {
   $('look-right').hidden = !right;
 }
 
-// The 3D booth is scenery and controls together; without it the plain papers
-// panel and the toolbar still run the whole game.
+// The 3D booth is scenery and controls together: you click the desk itself.
+// Without it, the plain papers panel and a button row run the whole game.
 const booth = createBooth($('booth'), {
   onMicDown: () => beginTalking(),
   onMicUp: () => finishTalking(),
@@ -293,6 +293,7 @@ function render() {
   $('controls').hidden = !playing;
   $('look').hidden = !playing || !booth;
   $('fallback').hidden = Boolean(booth) || !playing;
+  $('tools').hidden = Boolean(booth);
   renderClock();
   if (!stampingNow) booth?.show(over ? null : R.currentTravellerId(shift));
   if (over) {
@@ -309,9 +310,7 @@ function render() {
   booth?.setNotes(traveller.name, shift.cases[traveller.id].notes);
   if (!booth) renderFallbackPanel(traveller);
   renderCaptions(traveller);
-  const busy = Boolean(shift.pending || shift.hearing);
-  $('ask').disabled = busy || left === 0;
-  $('talk').disabled = busy || left === 0 || !micReady();
+  $('talk').disabled = Boolean(shift.pending || shift.hearing) || left === 0 || !micReady();
 }
 
 function frame(now) {
