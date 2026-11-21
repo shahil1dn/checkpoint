@@ -39,7 +39,7 @@ const TOOL_TIPS = {
   papers: 'Papers: click to read',
   notebook: 'Scratchpad: click to open',
   transcript: 'Transcript: click to read it all',
-  bribe: 'A bribe: click to pocket it',
+  bribe: 'A bribe: click (or B) to pocket it',
   mic: 'Microphone: hold to ask (or hold Space)',
   'stamp-through': 'Stamp: let them through',
   'stamp-away': 'Stamp: turn them away',
@@ -222,7 +222,7 @@ async function hearPlea() {
   const { shift: offered, offer } = R.stamp(shift, 'away');
   shift = offered;
   const name = getTraveller(offer.travellerId).name;
-  hint(`${name} offers a ${ITEM_WORDS[offer.item]}. Take it, or stamp TURNED AWAY.`);
+  hint(`${name} offers a ${ITEM_WORDS[offer.item]}. Take it (B), or stamp TURNED AWAY.`);
   booth?.setMood(offer.mood);
   render();
   const endPlea = () => { shift = R.setPleading(shift, false); };
@@ -456,6 +456,7 @@ document.addEventListener('keydown', (event) => {
     beginTalking();
   } else if (event.code === 'KeyP') booth?.toggle('papers');
   else if (event.code === 'KeyN') booth?.toggle('notebook');
+  else if (event.code === 'KeyB' && !event.repeat) pocketBribe();
   else if (event.code === 'Escape') booth?.putDown();
   else if (event.code === 'ArrowLeft') booth?.look(-1);
   else if (event.code === 'ArrowRight') booth?.look(1);

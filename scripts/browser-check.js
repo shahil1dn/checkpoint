@@ -250,6 +250,22 @@ async function main() {
     const refused = await page.evaluate(`({ over: !document.getElementById('report').hidden, row: document.querySelectorAll('#report-rows tr')[1]?.textContent ?? '', record: document.getElementById('bribes').textContent })`);
     check('TURNED AWAY again refuses it: the stamp lands and the record stays clean', refused.over && refused.row.includes('Turned away') && !refused.row.includes('bribe') && refused.record.includes('clean'), refused);
 
+    // The B key takes the offer too (Hamzah's PR #3 idea), and only when one is out.
+    await page.evaluate(`document.getElementById('again').click(); true`);
+    await waitFor(`!document.getElementById('controls').hidden`, 5000);
+    const key = async (code, key) => {
+      for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, code, key });
+    };
+    await key('KeyB', 'b');
+    await sleep(300);
+    const noOffer = await desk();
+    await press(awayAt);
+    await waitFor(OFFER_OUT, 5000);
+    await key('KeyB', 'b');
+    await waitFor(`document.getElementById('traveller-name').textContent !== 'Max Tokens'`, 10000);
+    seen = await desk();
+    check('B takes the offer, and does nothing with none out', noOffer.name === 'Max Tokens' && seen.name === 'Colin Stilton' && seen.hint.includes('pocket the croissant'), { noOffer, ...seen });
+
     // Sounds: headless Chrome may have no audio device; the page must not mind.
     const sound = await page.evaluate(`(() => {
       const button = document.getElementById('mute');
