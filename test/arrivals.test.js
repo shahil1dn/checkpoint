@@ -41,7 +41,7 @@ for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
   });
 }
 
-test('the crowd keeps coming: someone sets off at least every 15 seconds', () => {
+test('the crowd keeps coming: someone sets off at least every 10 seconds', () => {
   const crowd = makeCrowd({ random: seeded(42) });
   let since = 0;
   let longest = 0;
@@ -50,5 +50,5 @@ test('the crowd keeps coming: someone sets off at least every 15 seconds', () =>
     since = crowd.walkers.some((w) => w.justArrived) ? 0 : since + STEP;
     longest = Math.max(longest, since);
   }
-  assert.ok(longest <= 15, `nobody set off for ${longest.toFixed(1)} s`);
+  assert.ok(longest <= 10, `nobody set off for ${longest.toFixed(1)} s`);
 });
