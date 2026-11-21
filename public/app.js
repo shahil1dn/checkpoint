@@ -6,6 +6,7 @@ import { mockReply } from '/src/mockBrain.js';
 import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
 import { createBooth } from '/booth.js';
 import { MAX_LINES, lineForHeard, lineForSpeech, lineForTyped, linesForAnswer, modelName } from '/computer.js';
+import { createSounds } from '/sounds.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -400,6 +401,8 @@ async function checkLive() {
   $('status').textContent = live ? 'Live: Mistral connected.' : 'Offline: canned replies, no voices.';
 }
 
+// Sounds follow what the page tells the booth (public/sounds.js).
+createSounds().follow(booth);
 if (booth) renderLook(booth.view());
 render();
 checkLive();
