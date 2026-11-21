@@ -4,6 +4,10 @@ import * as R from '/src/rules.js';
 import { getTraveller } from '/src/travellers.js';
 import { mockReply } from '/src/mockBrain.js';
 import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
+import { createBooth } from '/booth.js';
+
+// The 3D booth is scenery: if this browser can't draw it, the game goes on without it.
+const booth = createBooth(document.getElementById('booth'));
 
 const $ = (id) => document.getElementById(id);
 
@@ -61,13 +65,20 @@ async function fetchTranscript(clip) {
 
 function playVoice(base64Mp3) {
   stopVoice();
-  voice = new Audio(`data:audio/mpeg;base64,${base64Mp3}`);
-  voice.play().catch(() => hint(HINTS.blocked));
+  const clip = new Audio(`data:audio/mpeg;base64,${base64Mp3}`);
+  voice = clip;
+  clip.addEventListener('ended', () => { if (voice === clip) booth?.setTalking(false); });
+  booth?.setTalking(true);
+  clip.play().catch(() => {
+    booth?.setTalking(false);
+    hint(HINTS.blocked);
+  });
 }
 
 function stopVoice() {
   voice?.pause();
   voice = null;
+  booth?.setTalking(false);
 }
 
 // ---- Actions ----
@@ -89,6 +100,7 @@ async function askQuestion(text) {
   if (shift === before) return;
   if (error) hint(HINTS[error]);
   else hint(reply.fallback ? `${traveller.name}: "${reply.reply}" (that question wasn't counted)` : '');
+  if (reply) booth?.setMood(reply.mood);
   if (reply?.audio) playVoice(reply.audio);
   render();
 }
@@ -228,6 +240,7 @@ function render() {
   $('report').hidden = !started || !over;
   $('last-stamp').textContent = lastStamp ? `${lastStamp.name}: stamped ${STAMP_WORDS[lastStamp.verdict].toUpperCase()}` : '';
   renderClock();
+  booth?.show(over ? null : R.currentTravellerId(shift));
   if (over) {
     $('queue-position').textContent = '';
     return renderReport();

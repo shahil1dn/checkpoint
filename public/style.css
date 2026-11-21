@@ -1,0 +1,16 @@
+/* Plain on purpose until S7 sets the look: the 3D booth fills the window and
+   the controls sit in a panel on the left until they move onto the desk. */
+#booth canvas { position: fixed; inset: 0; z-index: 0; display: block; }
+#panel {
+  position: relative; z-index: 1;
+  width: min(380px, 100% - 32px); max-height: calc(100vh - 32px); overflow-y: auto;
+  margin: 16px; padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.92); color: #1f2126;
+  font: 15px/1.4 system-ui, sans-serif; border-radius: 6px;
+}
+#panel h1 { font-size: 22px; margin: 0 0 4px; }
+#panel h2 { font-size: 18px; margin: 12px 0 4px; }
+#panel h3 { font-size: 15px; margin: 10px 0 4px; }
+#panel dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0; }
+#panel dt { color: #555b66; }
+#panel dd { margin: 0; }

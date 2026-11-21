@@ -15,13 +15,21 @@ const MAX_JSON_BYTES = 16 * 1024;
 const MAX_AUDIO_BYTES = 1024 * 1024;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
-// Only files that exist at startup in public/ and src/ are servable, so no
-// request path can reach anything else on disk.
+// Only files that exist at startup are servable, listed once here, so no
+// request path can reach anything else on disk. three.js is served from its
+// browser builds and addons only, for the page's import map (ADR-7).
+const STATIC_DIRS = [
+  ['public', '/', Object.keys(TYPES)],
+  ['src', '/src/', Object.keys(TYPES)],
+  ['node_modules/three/build', '/vendor/three/build/', ['.js']],
+  ['node_modules/three/examples/jsm', '/vendor/three/addons/', ['.js']],
+];
+
 async function staticRoutes() {
   const routes = new Map();
-  for (const [dir, prefix] of [['public', '/'], ['src', '/src/']]) {
-    for (const name of await readdir(path.join(ROOT, dir))) {
-      if (TYPES[path.extname(name)]) routes.set(prefix + name, path.join(ROOT, dir, name));
+  for (const [dir, prefix, extensions] of STATIC_DIRS) {
+    for (const name of await readdir(path.join(ROOT, dir), { recursive: true })) {
+      if (extensions.includes(path.extname(name))) routes.set(prefix + name.split(path.sep).join('/'), path.join(ROOT, dir, name));
     }
   }
   routes.set('/', path.join(ROOT, 'public', 'index.html'));

@@ -4,8 +4,14 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Checkpoint</title>
+  <link rel="stylesheet" href="/style.css">
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/addons/" } }
+  </script>
 </head>
 <body>
+  <div id="booth"></div>
+  <main id="panel">
   <header>
     <h1>Checkpoint</h1>
     <p id="status">Connecting…</p>
@@ -47,6 +53,7 @@
     <p id="score"></p>
     <button id="again" type="button">Play again</button>
   </section>
+  </main>
 
   <script type="module" src="/app.js"></script>
 </body>

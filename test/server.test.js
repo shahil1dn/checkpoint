@@ -248,9 +248,11 @@ for (const [name, [body, type]] of Object.entries(badClips)) {
 }
 
 test('only known files are served', async () => {
-  assert.equal((await fetch(`${base}/`)).status, 200);
-  assert.equal((await fetch(`${base}/src/rules.js`)).status, 200);
-  for (const p of ['/.env', '/src/../.env', '/server/mistral.js', '/package.json', '/%2e%2e/.env']) {
+  for (const p of ['/', '/src/rules.js', '/penguins/penguin.js', '/vendor/three/build/three.module.js', '/vendor/three/addons/controls/OrbitControls.js']) {
+    assert.equal((await fetch(`${base}${p}`)).status, 200, p);
+  }
+  for (const p of ['/.env', '/src/../.env', '/server/mistral.js', '/package.json', '/%2e%2e/.env',
+    '/node_modules/three/package.json', '/vendor/three/package.json', '/vendor/three/build/three.cjs', '/vendor/three/../../.env']) {
     assert.equal((await fetch(`${base}${p}`)).status, 404, p);
   }
 });
