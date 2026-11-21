@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createApp } from '../server/app.js';
 import { BRIBE_ITEMS, DEMO_QUEUE } from '../src/rules.js';
-import { getTraveller } from '../src/travellers/index.js';
+import { LATE_ARRIVALS, getTraveller } from '../src/travellers/index.js';
 import { browserOnThisMachine } from './find-browser.js';
 
 const OUT_OF_QUESTIONS = 'No questions left. Stamp the papers.';
@@ -21,6 +21,8 @@ const OUT_OF_TIME = 'Time is up for this traveller. Stamp the papers.';
 // The bribe steps follow whoever stands first and second in the queue, with
 // the lines and items from their own files, so a new traveller needs no edit here.
 const [FIRST, SECOND] = DEMO_QUEUE.map(getTraveller);
+// The late arrivals join once the shift starts (Colin; nobody is invented offline).
+const EVERYONE = DEMO_QUEUE.length + LATE_ARRIVALS.length;
 const itemOf = (traveller) => BRIBE_ITEMS[traveller.bribe.item];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -289,11 +291,11 @@ async function main() {
     await page.evaluate(`window.__skipClock(${TRAVELLER_AND_A_BIT_MS}); true`);
     await waitFor(`document.getElementById('hint').textContent === ${JSON.stringify(OUT_OF_TIME)}`, 10000);
     seen = { ...(await screen()), clock: await page.evaluate(`document.getElementById('clock').textContent`) };
-    const outOfTimeClock = `Shift 2:00 · ${SECOND.name.split(' ')[0]} 0:00`;
+    const outOfTimeClock = `Shift ${(EVERYONE - 2) * 2}:00 · ${SECOND.name.split(' ')[0]} 0:00`;
     check("his two minutes run out: the questions stop and the shift waits for a stamp", seen.hint === OUT_OF_TIME && !seen.over && seen.clock === outOfTimeClock, seen);
     // Stamps everyone still waiting THROUGH, which never brings out a bribe.
     const stampRestThrough = async () => {
-      for (let i = 0; i < DEMO_QUEUE.length && !(await screen()).over; i += 1) {
+      for (let i = 0; i < EVERYONE && !(await screen()).over; i += 1) {
         const name = await page.evaluate(`document.getElementById('traveller-name').textContent`);
         await press(stampAt);
         await waitFor(`!document.getElementById('report').hidden || document.getElementById('traveller-name').textContent !== ${JSON.stringify(name)}`, 10000);
@@ -370,7 +372,7 @@ async function main() {
     const PLAIN = DEMO_QUEUE.map(getTraveller).find((t) => !t.bribe);
     if (!PLAIN) check('someone in the queue has no bribe, for the no-bribe step', false, DEMO_QUEUE);
     else {
-      for (let i = 0; i < DEMO_QUEUE.length; i += 1) {
+      for (let i = 0; i < EVERYONE; i += 1) {
         const now = await desk();
         if (now.name === PLAIN.name || now.over) break;
         await press(stampAt);

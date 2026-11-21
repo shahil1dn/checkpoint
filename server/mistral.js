@@ -1,6 +1,7 @@
 // The only file that reads the Mistral key. Plain fetch, no SDK (ADR-5).
 // fetchImpl is injectable so tests can check what is sent without the network.
 import { LOOKUP_TOOLS, NOTES_FORMAT, REPLY_FORMAT, buildLookupMessages, buildMessages, buildNoteMessages } from './prompt.js';
+import { INVENT_FORMAT, buildInventMessages } from './invent.js';
 import { runTool } from '../src/records/search.js';
 
 const API = 'https://api.mistral.ai/v1';
@@ -22,10 +23,10 @@ export class MistralError extends Error {
   }
 }
 
-async function postToMistral(path, { body, contentType }, fetchImpl) {
+async function postToMistral(path, { body, contentType, timeoutMs = TIMEOUT_MS }, fetchImpl) {
   const headers = { authorization: `Bearer ${process.env.MISTRAL_API_KEY}` };
   if (contentType) headers['content-type'] = contentType;
-  const res = await fetchImpl(API + path, { method: 'POST', headers, body, signal: AbortSignal.timeout(TIMEOUT_MS) });
+  const res = await fetchImpl(API + path, { method: 'POST', headers, body, signal: AbortSignal.timeout(timeoutMs) });
   if (!res.ok) {
     await res.body?.cancel();
     throw new MistralError(path, res.status);
@@ -63,6 +64,36 @@ export function makeMistralNoteTaker({ fetchImpl = fetch } = {}) {
   const chatJson = makeMistralJsonChat({ fetchImpl });
   return ({ papers, exchanges, earlierNotes }) =>
     chatJson({ messages: buildNoteMessages({ papers, exchanges, earlierNotes }), format: NOTES_FORMAT, maxTokens: 200 });
+}
+
+// ---- An invented traveller (plan row S9) ----
+
+// Large 4 writes him while the player is busy with the travellers before him,
+// so its slow, reasoned answer costs no wait. It always thinks first, so
+// max_tokens leaves room for that (AGENTS.md). If it fails, Medium has one go.
+export const INVENT_MODEL = 'mistral-large-4';
+// Measured 21 Nov 17:45: Large 4 took 48 to 73 s on this brief and spent 4000
+// tokens on thinking alone, so it gets time and room. Nobody waits on it.
+const INVENT_TIMEOUT_MS = 150_000;
+const INVENT_MAX_TOKENS = 9000;
+
+// Takes the brief the code picked (server/invent.js). Returns raw text, still untrusted.
+export function makeMistralInventor({ fetchImpl = fetch } = {}) {
+  const write = async (model, extra) => {
+    const data = await postToMistral('/chat/completions', {
+      contentType: 'application/json',
+      timeoutMs: INVENT_TIMEOUT_MS,
+      body: JSON.stringify({ model, response_format: INVENT_FORMAT, messages: buildInventMessages(extra.brief), max_tokens: extra.maxTokens, ...(extra.reasoningEffort && { reasoning_effort: extra.reasoningEffort }) }),
+    }, fetchImpl);
+    return textOf(data?.choices?.[0]?.message?.content);
+  };
+  return async function invent({ brief }) {
+    try {
+      return { raw: await write(INVENT_MODEL, { brief, maxTokens: INVENT_MAX_TOKENS, reasoningEffort: 'low' }), model: INVENT_MODEL };
+    } catch {
+      return { raw: await write(CHAT_MODEL, { brief, maxTokens: 1200 }), model: CHAT_MODEL };
+    }
+  };
 }
 
 // ---- The records terminal (ADR-12): function calling over the records ----

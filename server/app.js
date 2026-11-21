@@ -4,9 +4,11 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FALLBACK_LINE, checkLookupAnswer, checkNotes, cleanTranscript, gatheredFrom, judgeReply, parseReply, validateAskRequest, validateLookupRequest } from '../src/rules.js';
-import { getTraveller, voiceFor } from '../src/travellers/index.js';
+import { getTraveller, registerTraveller, voiceFor } from '../src/travellers/index.js';
 import { documentsFor, nameOnDocuments, papersFor } from '../src/records/index.js';
 import { lookupWithoutModel } from '../src/records/search.js';
+import { ARCHIVE } from '../src/records/archive.js';
+import { assembleTraveller, pickBrief } from './invent.js';
 import { AUDIO_TYPES } from './mistral.js';
 import { EARLY_CONFESSION_NUDGE } from './prompt.js';
 
@@ -88,9 +90,35 @@ function sayings() {
 
 // models: which Mistral model does each job, shown by name on the computer screen.
 // lookup: the records terminal; offline, the code's own search stands in.
-export async function createApp({ ask, hear, speak, takeNotes, lookup, liveAvailable, models, log = () => {} }) {
+// invent: writes a new traveller to the code's brief (plan row S9); live only.
+export async function createApp({ ask, hear, speak, takeNotes, lookup, invent, liveAvailable, models, log = () => {}, random = Math.random }) {
   const routes = await staticRoutes();
   const said = sayings();
+  let guests = 0;
+
+  // The code picks his truth, the model writes him, the code checks him. A
+  // reply that fails the check gets one more try. His records join the
+  // archive the terminal searches, so his lines can be looked up like anyone's.
+  async function handleInvent(res) {
+    if (!liveAvailable || !invent) return send(res, 503, { error: 'noKey' });
+    const brief = pickBrief(random);
+    try {
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const written = await timed(() => invent({ brief }));
+        const made = assembleTraveller(written.value.raw, brief, `guest${guests + 1}`, random);
+        if (!made) continue;
+        guests += 1;
+        registerTraveller(made.traveller);
+        ARCHIVE.passengers.push(...made.records.passengers);
+        ARCHIVE.people.push(...made.records.people);
+        return send(res, 200, { traveller: made.traveller, model: written.value.model, ms: written.ms });
+      }
+      return send(res, 502, { error: 'badTraveller' });
+    } catch (err) {
+      log(err);
+      return send(res, 502, { error: 'callFailed' });
+    }
+  }
 
   async function handleHear(req, res) {
     const type = (req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
@@ -236,6 +264,10 @@ export async function createApp({ ask, hear, speak, takeNotes, lookup, liveAvail
 
     if (url.pathname === '/api/health' && req.method === 'GET') {
       return send(res, 200, liveAvailable && models ? { live: true, models } : { live: liveAvailable });
+    }
+    if (url.pathname === '/api/invent') {
+      if (req.method !== 'POST') return send(res, 405, { error: 'method' });
+      return handleInvent(res);
     }
     if (url.pathname === '/api/ask') {
       if (req.method !== 'POST') return send(res, 405, { error: 'method' });

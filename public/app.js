@@ -1,7 +1,7 @@
 // Screen code only. Every rule (limits, clock, stamps, score) is decided by
 // /src/rules.js; this file shows the shift and talks to our server.
 import * as R from '/src/rules.js';
-import { getTraveller } from '/src/travellers/index.js';
+import { LATE_ARRIVALS, getTraveller, registerTraveller } from '/src/travellers/index.js';
 import { documentsFor } from '/src/records/index.js';
 import { mockReply } from '/src/mockBrain.js';
 import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
@@ -26,6 +26,7 @@ let stampingNow = false;
 let talkingTo = null;
 let micSetup = false;
 let lastFrame = performance.now();
+let shiftNumber = 0;    // so a traveller invented for an old shift never joins a new one
 // What the records terminal shows: the latest lookup, while it searches and after.
 let screenLookup = null;
 let cursorOn = true;
@@ -422,12 +423,38 @@ async function finishTalking() {
   await askQuestion(text);
 }
 
+// The late arrivals join the queue (Colin), then one more traveller invented
+// for this shift alone (plan row S9). Large 4
+// writes him while the inspector is busy with the others; if it fails or the
+// shift ends first, the shift simply has nobody extra. Live only.
+async function inviteLateArrival() {
+  shiftNumber += 1;
+  const mine = shiftNumber;
+  for (const id of LATE_ARRIVALS) shift = R.addTraveller(shift, id);
+  if (!live) return;
+  for (const id of LATE_ARRIVALS) if (getTraveller(id).bribe) fetchPlea(id);
+  try {
+    const res = await fetch('/api/invent', { method: 'POST' });
+    if (!res.ok) return;
+    const { traveller, model, ms } = await res.json();
+    if (mine !== shiftNumber || !started || shift.phase !== 'playing') return;
+    registerTraveller(traveller);
+    shift = R.addTraveller(shift, traveller.id);
+    if (traveller.bribe) fetchPlea(traveller.id);
+    logCall({ who: modelName(model), what: `wrote a late arrival in ${(ms / 1000).toFixed(1)} s: one more in the queue` });
+    render();
+  } catch {
+    // No late arrival this shift.
+  }
+}
+
 async function startShift() {
   started = true;
   $('start-screen').hidden = true;
   micSetup = live;
   if (live) hint('Allow the microphone, or type a question.');
   if (live) for (const id of shift.queue) if (getTraveller(id).bribe) fetchPlea(id);
+  inviteLateArrival();
   lastFrame = performance.now();
   render();
   if (live) {
@@ -446,6 +473,7 @@ async function startShift() {
 
 function playAgain() {
   shift = R.restartShift(shift);
+  inviteLateArrival();
   screenLookup = null;
   booth?.clearDesk();
   stopVoice();

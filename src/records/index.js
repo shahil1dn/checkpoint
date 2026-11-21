@@ -12,7 +12,8 @@ export const ALL_RECORDS = Object.values(FILES).map((file) => file.records ?? {}
 // The case folder he hands over: his documents, or his old papers as one
 // document when he has no records file or no documents in it.
 export function documentsFor(traveller) {
-  const documents = FILES[traveller?.id]?.documents;
+  // An invented traveller (plan row S9) has no file and carries his own.
+  const documents = FILES[traveller?.id]?.documents ?? traveller?.documents;
   if (documents?.length) return documents;
   return [{ kind: 'papers', title: 'Travel papers', fields: traveller?.papers ?? {} }];
 }

@@ -1,7 +1,7 @@
 // Checkpoint game rules. Pure: no DOM, no network, no clock reads.
 // The page and the server both import this file, so a limit is enforced the
 // same way in both places.
-import { getTraveller, QUEUE } from './travellers/index.js';
+import { getTraveller, isGuest, LATE_ARRIVALS, QUEUE } from './travellers/index.js';
 
 export const MAX_QUESTION_CHARS = 300;
 export const MAX_QUESTIONS = 5;
@@ -151,7 +151,19 @@ export function newShift(queue = DEMO_QUEUE, { firstRequestId = 1 } = {}) {
 
 // Play again. Request ids keep counting so a reply still in flight from the
 // old shift can never land in the new one.
-export const restartShift = (shift) => newShift(shift.queue, { firstRequestId: shift.nextRequestId });
+// An invented traveller belongs to the shift he joined: the next one gets its own.
+export const restartShift = (shift) => newShift(shift.queue.filter((id) => !isGuest(id) && !LATE_ARRIVALS.includes(id)), { firstRequestId: shift.nextRequestId });
+
+// A late arrival joins the back of the queue while the shift is still on
+// (plan row S9). He brings his own two minutes, like everyone else.
+export function addTraveller(shift, id) {
+  if (shift.phase !== 'playing' || shift.queue.includes(id) || !getTraveller(id)) return shift;
+  return {
+    ...shift,
+    queue: [...shift.queue, id],
+    cases: { ...shift.cases, [id]: { history: [], notes: [], lookups: [], stamp: null, bribe: null } },
+  };
+}
 
 export const currentTravellerId = (shift) => (shift.phase === 'playing' ? shift.queue[shift.current] : null);
 export const questionsLeft = (shift, id) => MAX_QUESTIONS - shift.cases[id].history.length;
