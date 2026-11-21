@@ -317,8 +317,6 @@ function buildBribe(group) {
   holder.scale.setScalar(1.9);   // big enough to read from the chair
   holder.visible = false;
   group.add(holder);
-  const croissant = new THREE.Group();
-  part(new THREE.TorusGeometry(0.06, 0.028, 10, 18, Math.PI * 1.25), mat('#d9a04a'), croissant, [0, 0.03, 0], [-Math.PI / 2, 0, 0.6]);
   const cheese = new THREE.Group();
   // Stood on its long edge with its cut face to the inspector: lying flat, it was
   // a thin yellow sliver from the chair.
@@ -350,7 +348,7 @@ function buildBribe(group) {
   sticker.redraw();
   sticker.mesh.position.set(0, 0.06, -0.05);
   sticker.mesh.rotation.x = -0.35;   // propped against the glass, facing the inspector
-  const items = { croissant, cheese, sticker: sticker.mesh };
+  const items = { cheese, sticker: sticker.mesh };
   for (const item of Object.values(items)) holder.add(item);
   return {
     holder,
@@ -911,7 +909,7 @@ export function createBooth(container, handlers = {}) {
     // lines: [{ who, text }], oldest first; 'You' marks the inspector's own words.
     setTranscript(name, lines) { transcript.redraw(name, lines); },
     setComputer(lines) { computer.redraw(lines); },
-    // 'croissant', 'cheese' or 'sticker' on the window ledge, or null for none.
+    // 'cheese' or 'sticker' on the window ledge, or null for none.
     setBribe(item) { bribe.show(item); },
     toggle(name) { lifted = lifted === name ? null : name; },
     // Turns one view left (-1) or right (+1); papers in hand go back on the desk.

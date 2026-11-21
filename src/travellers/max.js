@@ -31,8 +31,8 @@ export default {
   // His last-ditch offer when you reach for TURNED AWAY (Shahil 14:34): said in
   // his mood voice, and the item appears on the window ledge (BRIBE_ITEMS in src/rules.js).
   bribe: {
-    line: 'Wait, wait! I have a croissant, just for you!',
-    item: 'croissant',
+    line: 'Wait, wait! A genuine Mistral sticker, just for you!',
+    item: 'sticker',
     mood: 'excited',
   },
   // Canned replies for playing offline and for tests, in order.
