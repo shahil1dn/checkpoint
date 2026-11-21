@@ -25,6 +25,17 @@ test('a past exchange with an unknown mood is refused', () => {
   assert.equal(checked.reason, 'badHistory');
 });
 
+// A5: a broken model reply can't break the game.
+test('an off-list mood, a 900-character reply and markdown come out safe', () => {
+  const raw = JSON.stringify({ reply: `**bold** ${'a'.repeat(900)}`, mood: 'furious', cracked: 'yes' });
+  const reply = R.parseReply(raw);
+  assert.equal(reply.mood, 'neutral');
+  assert.equal([...reply.reply].length, 300);
+  assert.ok(reply.reply.startsWith('bold aaa'));
+  assert.doesNotMatch(reply.reply, /[*_`#]/);
+  assert.equal(reply.cracked, false);
+});
+
 test('a reply that is not JSON, or has no reply text, is unusable', () => {
   assert.equal(R.parseReply('not json'), null);
   assert.equal(R.parseReply('[]'), null);

@@ -80,8 +80,22 @@ async function askQuestion(text) {
   if (reply) {
     history.push({ question: checked.question, reply: reply.reply, mood: reply.mood });
     addLine(traveller.name, `${reply.reply} [${reply.mood}]`);
+    if (reply.audio) playVoice(reply.audio);
   }
   setWaiting(false, error ? HINTS[error] : '');
+}
+
+let voice = null;
+
+function playVoice(base64Mp3) {
+  stopVoice();
+  voice = new Audio(`data:audio/mpeg;base64,${base64Mp3}`);
+  voice.play().catch(() => hint('Click the page once so the browser lets him speak.'));
+}
+
+function stopVoice() {
+  voice?.pause();
+  voice = null;
 }
 
 function onTypedAsk(event) {
@@ -93,7 +107,9 @@ function onTypedAsk(event) {
 }
 
 function beginTalking() {
-  if (waiting || !startClip()) return;
+  if (waiting) return;
+  stopVoice();
+  if (!startClip()) return;
   $('talk').textContent = 'Listening… let go to ask';
   hint('');
 }

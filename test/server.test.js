@@ -2,6 +2,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createApp } from '../server/app.js';
+import { getTraveller } from '../src/travellers.js';
 
 const FAKE_KEY = 'test-key-must-not-leak';
 let server;
@@ -10,6 +11,8 @@ const calls = [];
 let nextRaw;
 const heard = [];
 let nextTranscript = 'Who paid for your ticket?';
+const spoken = [];
+let speechFails = false;
 
 before(async () => {
   process.env.MISTRAL_API_KEY = FAKE_KEY;
@@ -23,6 +26,11 @@ before(async () => {
     hear: async (req) => {
       heard.push(req);
       return nextTranscript;
+    },
+    speak: async (req) => {
+      spoken.push(req);
+      if (speechFails) throw new Error('speech down');
+      return 'QUJD';
     },
   });
   server = http.createServer(handle);
@@ -40,15 +48,36 @@ const valid = { travellerId: 'max', question: 'Why are you here?', history: [] }
 const pastExchange = { question: 'Hello?', reply: 'Bonjour, inspector!', mood: 'happy' };
 const GOOD_RAW = '{"reply":"For the hackathon, of course!","mood":"confident","cracked":false}';
 
-test('a good question reaches Mistral and the checked reply comes back', async () => {
+test('a good question reaches Mistral and the checked, spoken reply comes back', async () => {
   calls.length = 0;
+  spoken.length = 0;
   nextRaw = GOOD_RAW;
   const res = await post(valid);
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false });
+  assert.deepEqual(await res.json(), { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false, audio: 'QUJD' });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].traveller.id, 'max');
   assert.equal(calls[0].question, 'Why are you here?');
+  assert.deepEqual(spoken, [{ text: 'For the hackathon, of course!', voiceId: getTraveller('max').voices.confident }]);
+});
+
+test('the voice follows the cleaned mood, and markdown never reaches speech', async () => {
+  spoken.length = 0;
+  nextRaw = JSON.stringify({ reply: '**Non!** I am _innocent_', mood: 'furious', cracked: false });
+  const body = await (await post(valid)).json();
+  assert.equal(body.mood, 'neutral');
+  assert.deepEqual(spoken, [{ text: 'Non! I am innocent', voiceId: getTraveller('max').voices.neutral }]);
+});
+
+test('when speech fails the reply still comes back, silent', async () => {
+  speechFails = true;
+  nextRaw = GOOD_RAW;
+  const res = await post(valid);
+  speechFails = false;
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(body.reply, 'For the hackathon, of course!');
+  assert.equal(body.audio, null);
 });
 
 // A4: every one of these must be refused with Mistral called 0 times.

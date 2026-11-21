@@ -4,7 +4,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { cleanTranscript, parseReply, validateAskRequest } from '../src/rules.js';
-import { getTraveller } from '../src/travellers.js';
+import { getTraveller, voiceFor } from '../src/travellers.js';
 import { AUDIO_TYPES } from './mistral.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -53,7 +53,7 @@ async function readJsonBody(req) {
   }
 }
 
-export async function createApp({ ask, hear, liveAvailable, log = () => {} }) {
+export async function createApp({ ask, hear, speak, liveAvailable, log = () => {} }) {
   const routes = await staticRoutes();
 
   async function handleHear(req, res) {
@@ -78,16 +78,28 @@ export async function createApp({ ask, hear, liveAvailable, log = () => {} }) {
     if (!checked.ok) return send(res, 400, { error: checked.reason });
     if (!liveAvailable) return send(res, 503, { error: 'noKey' });
     const { travellerId, history, question } = checked.value;
+    const traveller = getTraveller(travellerId);
     let raw;
     try {
-      raw = await ask({ traveller: getTraveller(travellerId), history, question });
+      raw = await ask({ traveller, history, question });
     } catch (err) {
       log(err);
       return send(res, 502, { error: 'callFailed' });
     }
     const reply = parseReply(raw);
     if (!reply) return send(res, 502, { error: 'badReply' });
-    return send(res, 200, reply);
+    return send(res, 200, { ...reply, audio: await speakOrNull(traveller, reply) });
+  }
+
+  // A reply that can't be voiced is still shown, so speech failing never
+  // costs the player the answer.
+  async function speakOrNull(traveller, reply) {
+    try {
+      return await speak({ text: reply.reply, voiceId: voiceFor(traveller, reply.mood) });
+    } catch (err) {
+      log(err);
+      return null;
+    }
   }
 
   return async function handle(req, res) {

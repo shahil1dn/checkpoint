@@ -72,6 +72,20 @@ export function makeMistralHearer({ hints = [], fetchImpl = fetch } = {}) {
   };
 }
 
+export const SPEAK_MODEL = 'voxtral-mini-tts-3';
+
+// Returns base64 mp3. Only this model takes the preset voices (checked 21 Nov).
+export function makeMistralSpeaker({ fetchImpl = fetch } = {}) {
+  return async function speak({ text, voiceId }) {
+    const data = await postToMistral('/audio/speech', {
+      contentType: 'application/json',
+      body: JSON.stringify({ model: SPEAK_MODEL, input: text, voice_id: voiceId, response_format: 'mp3' }),
+    }, fetchImpl);
+    if (typeof data?.audio_data !== 'string' || data.audio_data.length === 0) throw new MistralError('/audio/speech', 'no audio');
+    return data.audio_data;
+  };
+}
+
 // Safe to log: the error's kind and status only.
 export function describeError(error) {
   if (error instanceof MistralError) return error.message;

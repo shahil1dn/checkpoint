@@ -43,3 +43,10 @@ export const HEARING_HINTS = [
 export function getTraveller(id) {
   return TRAVELLERS.find((t) => t.id === id) ?? null;
 }
+
+// A traveller with mood voices sounds different as his mood changes;
+// anyone else always speaks in his one voice.
+export function voiceFor(traveller, mood) {
+  if (traveller.voices) return traveller.voices[mood] ?? traveller.voices.neutral;
+  return traveller.voice;
+}

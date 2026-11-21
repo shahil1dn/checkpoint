@@ -1,7 +1,7 @@
 // Checks what server/mistral.js sends, using a fake fetch: no network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describeError, makeMistralAsker, makeMistralHearer } from '../server/mistral.js';
+import { describeError, makeMistralAsker, makeMistralHearer, makeMistralSpeaker } from '../server/mistral.js';
 import { buildMessages } from '../server/prompt.js';
 import { getTraveller } from '../src/travellers.js';
 
@@ -60,6 +60,19 @@ test('the hearer sends the clip as a webm file with the model and language', asy
   assert.equal(form.get('file').name, 'question.webm');
   assert.equal(form.get('file').size, 2);
   assert.deepEqual(form.getAll('context_bias'), ['Mistral', 'Chonk']);
+});
+
+test('the speaker asks for mp3 in the given preset voice', async () => {
+  const { impl, sent } = fakeFetch(200, { audio_data: 'QUJD' });
+  const audio = await makeMistralSpeaker({ fetchImpl: impl })({ text: 'Bonjour', voiceId: 'v-1' });
+  assert.equal(audio, 'QUJD');
+  assert.equal(sent[0].url, 'https://api.mistral.ai/v1/audio/speech');
+  assert.deepEqual(JSON.parse(sent[0].init.body), { model: 'voxtral-mini-tts-3', input: 'Bonjour', voice_id: 'v-1', response_format: 'mp3' });
+});
+
+test('a speech reply with no audio is an error, not a silent success', async () => {
+  const { impl } = fakeFetch(200, {});
+  await assert.rejects(makeMistralSpeaker({ fetchImpl: impl })({ text: 'Hi', voiceId: 'v' }));
 });
 
 test('the prompt carries the cover story, the secret and the papers', () => {
