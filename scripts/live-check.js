@@ -6,8 +6,8 @@
 import http from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createApp } from '../server/app.js';
-import { describeError, hasApiKey, makeMistralAsker, makeMistralJsonChat, makeMistralNoteTaker, makeMistralSpeaker } from '../server/mistral.js';
-import { MOODS, FALLBACK_LINE, checkNotes } from '../src/rules.js';
+import { LOOKUP_MODEL, describeError, hasApiKey, makeMistralAsker, makeMistralJsonChat, makeMistralLookup, makeMistralNoteTaker, makeMistralSpeaker } from '../server/mistral.js';
+import { MOODS, FALLBACK_LINE, checkNotes, hasVerdictWord } from '../src/rules.js';
 
 if (!hasApiKey()) {
   console.error('No MISTRAL_API_KEY in .env');
@@ -305,9 +305,62 @@ async function bribe() {
   };
 }
 
+// ---- Section: the records terminal (ADR-12), pass rules first ----
+// R1: Max's visa line "Sponsor: Frontier Horizon Labs" brings back the register's entry that the
+//     lab competes with Mistral AI.
+// R2: Max's ticket line "Ship: Seine Star" brings back the Seine Star's delay (13:05 or "delayed").
+// R3: Colin's papers line "Arriving from: The Paris Cheese Fair" finds the same delayed Paris ship.
+// R4: no verdict word in any report, even before the code's filter.
+// R5: every lookup under 8 s (the brief's limit for the terminal).
+// Each lookup runs 3 times, through the real server route.
+async function records() {
+  const CASES = [
+    { rule: 'R1', travellerId: 'max', line: 'Sponsor: Frontier Horizon Labs', expect: /competi\w* with Mistral AI|competitor of Mistral AI/i },
+    { rule: 'R2', travellerId: 'max', line: 'Ship: Seine Star', expect: /13:05|delayed/i },
+    { rule: 'R3', travellerId: 'colin', line: 'Arriving from: The Paris Cheese Fair', expect: /Seine Star[^]*(13:05|delayed)|(13:05|delayed)[^]*Seine Star/i },
+  ];
+  const lookup = makeMistralLookup();
+  const raw = [];
+  const handle = await createApp({ liveAvailable: true, lookup: async (args) => { const report = await lookup(args); raw.push(report); return report; }, log: (err) => console.error(describeError(err)) });
+  const server = http.createServer(handle);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const rows = [];
+  for (const c of CASES) {
+    for (let run = 1; run <= RUNS; run += 1) {
+      const started = performance.now();
+      const res = await fetch(`${base}/api/lookup`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ travellerId: c.travellerId, line: c.line }) });
+      const events = (await res.text()).trim().split('\n').map((l) => JSON.parse(l));
+      const ms = Math.round(performance.now() - started);
+      const report = events.at(-1).answer?.join(' / ') ?? `(no report: ${events.at(-1).error ?? res.status})`;
+      rows.push({ ...c, run, ms, steps: events.filter((e) => e.step).map((e) => e.step), report, found: c.expect.test(report) });
+    }
+  }
+  server.close();
+  const verdictReports = raw.filter((r) => hasVerdictWord(r)).length;
+  const slow = rows.filter((r) => r.ms >= 8000).length;
+  const byRule = (rule) => rows.filter((r) => r.rule === rule);
+  const ruleLine = (rule, what) => `${rule}: ${what}: ${byRule(rule).filter((r) => r.found).length} of ${byRule(rule).length}. ${byRule(rule).every((r) => r.found) ? 'PASS' : 'FAIL'}.`;
+  return {
+    title: `R1 to R5: the records terminal (${LOOKUP_MODEL})`,
+    pass: rows.every((r) => r.found) && verdictReports === 0 && slow === 0,
+    lines: [
+      ruleLine('R1', "Max's sponsor finds the rival lab"),
+      ruleLine('R2', "Max's ship finds the delayed Paris ship"),
+      ruleLine('R3', "Colin's Paris line finds the delayed Paris ship"),
+      `R4: reports with a verdict word before the filter: ${verdictReports} of ${raw.length}. ${verdictReports === 0 ? 'PASS' : 'FAIL'}.`,
+      `R5: lookups at 8 s or more: ${slow} of ${rows.length} (slowest ${Math.max(...rows.map((r) => r.ms))} ms). ${slow === 0 ? 'PASS' : 'FAIL'}.`,
+      '',
+      '| Rule | Traveller | Run | Line | ms | Steps | Report | Found |',
+      '|---|---|---|---|---|---|---|---|',
+      ...rows.map((r) => `| ${r.rule} | ${r.travellerId} | ${r.run} | ${quote(r.line)} | ${r.ms} | ${r.steps.length} | ${quote(r.report)} | ${r.found} |`),
+    ],
+  };
+}
+
 // ---- Run and save ----
 
-const SECTIONS = { speed, consistency, notes, bribe };
+const SECTIONS = { speed, consistency, notes, bribe, records };
 const chosen = process.argv.slice(2).filter((name) => SECTIONS[name]);
 const names = chosen.length ? chosen : Object.keys(SECTIONS);
 const sections = [];
