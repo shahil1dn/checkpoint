@@ -210,6 +210,14 @@ async function main() {
     await waitFor(`document.getElementById('questions-left').textContent.includes(' 4 of ')`, 5000);
     seen = await screen();
     check('a typed question is asked with Enter', seen.left.includes(' 4 of '), seen);
+    // Shahil 16:00: his words type out on the transcript like a typewriter, not all at once before he speaks.
+    // Offline there is no voice, so it types at a fixed pace; the page says how much is on the paper.
+    await waitFor(`document.getElementById('subtitle').textContent.startsWith(${JSON.stringify(`${FIRST.name}: `)})`, 5000);
+    const justArrived = await page.evaluate(`({ said: document.getElementById('subtitle').textContent, typed: document.getElementById('subtitle').dataset.typed ?? '' })`);
+    const fullLine = justArrived.said.slice(`${FIRST.name}: `.length);
+    check('his reply is not all on the transcript the moment it arrives', fullLine.length > 0 && justArrived.typed.length < fullLine.length, justArrived);
+    const typedOut = await waitFor(`document.getElementById('subtitle').dataset.typed === ${JSON.stringify(fullLine)}`, 8000);
+    check('his reply then types out to the whole line', typedOut, { fullLine });
     for (let i = 2; i <= 5; i += 1) {
       await ask(`Question ${i}?`);
       await waitFor(`document.getElementById('questions-left').textContent.includes(' ${5 - i} of ')`, 5000);
