@@ -279,7 +279,40 @@ function buildMic(group) {
   // Its own material: shared materials are cached by colour, so tinting one would tint them all.
   const light = new THREE.MeshBasicMaterial({ color: COLORS.off });
   part(ball(0.018, 10, 8), light, holder, [0.07, 0.035, 0.05]);
-  return { holder, light };
+  const glow = new THREE.MeshBasicMaterial({ color: COLORS.live, transparent: true, opacity: 0.8, depthWrite: false });
+  const ring = new THREE.Mesh(new THREE.TorusGeometry(0.085, 0.008, 8, 32), glow);
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.035;
+  ring.visible = false;
+  ring.userData.noLines = true;
+  holder.add(ring);
+  return { holder, light, ring };
+}
+
+function buildThoughtBubble(group) {
+  const bubble = textPlane(0.42, 0.28, (g, w, h) => {
+    g.clearRect(0, 0, w, h);
+    g.lineWidth = w * 0.025;
+    g.strokeStyle = INK;
+    g.fillStyle = '#fbf8ef';
+    g.beginPath();
+    g.roundRect(w * 0.04, h * 0.04, w * 0.92, h * 0.72, h * 0.17);
+    g.fill(); g.stroke();
+    g.beginPath();
+    g.moveTo(w * 0.2, h * 0.76);
+    g.lineTo(w * 0.12, h * 0.96);
+    g.lineTo(w * 0.4, h * 0.76);
+    g.closePath(); g.fill(); g.stroke();
+    g.fillStyle = INK;
+    for (const x of [0.32, 0.5, 0.68]) {
+      g.beginPath(); g.arc(w * x, h * 0.4, w * 0.045, 0, Math.PI * 2); g.fill();
+    }
+  }, 1024);
+  bubble.redraw();
+  bubble.mesh.visible = false;
+  bubble.mesh.userData.noLines = true;
+  group.add(bubble.mesh);
+  return bubble.mesh;
 }
 
 // The inspector's computer on the left wall. Its screen lists the real
@@ -527,6 +560,7 @@ export function createBooth(container, handlers = {}) {
   } catch {
     return null;
   }
+  const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   engine.controls.enabled = false;   // the inspector sits still: no orbiting
   // The engine keeps an orbiting camera above the floor; even switched off, that
   // limit tips an eye-level camera up into a look-down when the world is set.
@@ -548,6 +582,7 @@ export function createBooth(container, handlers = {}) {
   const mic = buildMic(group);
   const computer = buildComputer(group);
   buildRightWall(group);
+  const thoughtBubble = buildThoughtBubble(group);
   const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };
   const tools = [papers.holder, notebook.holder, transcript.holder, printer, mic.holder, stamps.through.holder, stamps.away.holder];
 
@@ -558,6 +593,8 @@ export function createBooth(container, handlers = {}) {
   let officer = null;
   let face = FACES.neutral;
   let talking = false;
+  let thinking = false;
+  let recording = false;
   let hovered = null;
   let micHeld = false;
   let stamping = false;
@@ -647,15 +684,29 @@ export function createBooth(container, handlers = {}) {
       if (!stamping) s.holder.position.y = s.home.y + (hovered === `stamp-${verdict}` ? 0.03 : 0);
     }
     mic.holder.position.y = SILL + (hovered === 'mic' && !micHeld ? 0.02 : 0);
+    if (recording) {
+      const pulse = reducedMotion ? 0 : Math.sin(t * 5);
+      mic.ring.scale.setScalar(1.08 + pulse * 0.05);
+      mic.ring.material.opacity = 0.65 + pulse * 0.15;
+    }
     if (traveller) {
       traveller.update(t, dt);
       if (face.chinDown) traveller.head.rotation.x += 0.28;
       if (talking) traveller.jaw.rotation.x = 0.08 + Math.abs(Math.sin(t * 11)) * 0.3;
+      if (thinking) {
+        traveller.head.rotation.z += 0.16;
+        traveller.head.rotation.x -= 0.1;
+      }
       // He looks about while waiting, and turns to face you when he talks.
       if (!traveller.walking) {
-        const target = talking ? 0 : Math.sin(t * 0.45) * 0.35;
+        const target = talking || thinking ? 0 : Math.sin(t * 0.45) * 0.35;
         traveller.root.rotation.y += (target - traveller.root.rotation.y) * Math.min(dt * 4, 1);
       }
+    }
+    thoughtBubble.visible = Boolean(thinking && traveller && !traveller.walking);
+    if (thoughtBubble.visible) {
+      thoughtBubble.position.set(traveller.root.position.x + 0.65, 1.8 + (reducedMotion ? 0 : Math.sin(t * 3) * 0.025), TRAVELLER_AT.z + 0.22);
+      thoughtBubble.quaternion.copy(engine.camera.quaternion);
     }
     if (leaving) leaving.update(t, dt);
     if (officer) officer.update(t, dt);
@@ -726,6 +777,7 @@ export function createBooth(container, handlers = {}) {
       travellerId = id;
       traveller = id ? makeTraveller(id) : null;
       talking = false;
+      thinking = false;
       face = FACES.neutral;
       if (old && reaction === 'away') snatch(old);
       else if (old) walkOff(old, reaction === 'through' ? 'happy' : 'neutral');
@@ -744,7 +796,12 @@ export function createBooth(container, handlers = {}) {
       traveller.footTap = Boolean(face.footTap);
     },
     setTalking(on) { talking = on; },
-    setRecording(on) { mic.light.color.set(on ? COLORS.live : COLORS.off); },
+    setThinking(on) { thinking = on; },
+    setRecording(on) {
+      recording = on;
+      mic.light.color.set(on ? COLORS.live : COLORS.off);
+      mic.ring.visible = on;
+    },
     setPapers(paperFields, stamp = null) { papers.redraw(paperFields, stamp); },
     setNotes(name, notes) { notebook.redraw(name, notes); },
     // lines: [{ who, text }], oldest first; 'You' marks the inspector's own words.
