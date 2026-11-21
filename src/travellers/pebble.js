@@ -7,8 +7,8 @@ export default {
   papers: {
     Name: 'Edna Pebble',
     From: 'Fang Street, London',
+    Occupation: 'Retired',
     'Purpose of visit': 'Visiting her grandson',
-    'Length of stay': '2 days',
     Luggage: 'One handbag',
     'Weight of luggage': '41 kg',
   },
