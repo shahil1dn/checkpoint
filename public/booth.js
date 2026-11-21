@@ -320,7 +320,9 @@ function buildBribe(group) {
   const croissant = new THREE.Group();
   part(new THREE.TorusGeometry(0.06, 0.028, 10, 18, Math.PI * 1.25), mat('#d9a04a'), croissant, [0, 0.03, 0], [-Math.PI / 2, 0, 0.6]);
   const cheese = new THREE.Group();
-  part(new THREE.CylinderGeometry(0.1, 0.1, 0.07, 10, 1, false, 0, Math.PI / 3), mat('#e8c95a'), cheese, [0, 0.035, 0], [0, 2.2, 0]);
+  // Stood on its long edge with its cut face to the inspector: lying flat, it was
+  // a thin yellow sliver from the chair.
+  part(new THREE.CylinderGeometry(0.1, 0.1, 0.07, 10, 1, false, Math.PI / 2, Math.PI / 3), mat('#e8c95a'), cheese, [-0.05, 0.002, 0], [Math.PI / 2, 0, 0]);
   const sticker = textPlane(0.11, 0.11, (g, w, h) => {
     g.fillStyle = '#e8743b'; g.beginPath(); g.arc(w / 2, h / 2, w * 0.48, 0, Math.PI * 2); g.fill();
     g.fillStyle = '#fbf8ef'; g.beginPath();
@@ -334,7 +336,27 @@ function buildBribe(group) {
   sticker.redraw();
   sticker.mesh.position.set(0, 0.06, -0.05);
   sticker.mesh.rotation.x = -0.35;   // propped against the glass, facing the inspector
-  const items = { croissant, cheese, sticker: sticker.mesh };
+  // Rupert's business card, propped against the glass like the sticker.
+  const card = textPlane(0.13, 0.075, (g, w, h) => {
+    g.fillStyle = '#fbf8ef'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#34373f'; g.lineWidth = h * 0.04; g.strokeRect(0, 0, w, h);
+    g.fillStyle = '#34373f'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = `bold ${h * 0.2}px Georgia, serif`;
+    g.fillText('R. ASHWORTH-HALE', w / 2, h * 0.38, w * 0.9);
+    g.font = `${h * 0.13}px Georgia, serif`;
+    g.fillText('Thamesbridge Capital', w / 2, h * 0.66, w * 0.9);
+  }, 512);
+  card.redraw();
+  card.mesh.position.set(0, 0.05, -0.05);
+  card.mesh.rotation.x = -0.35;
+  // Granny's fish pie: a tin, a golden crust, and fish heads poking through it.
+  const pie = new THREE.Group();
+  part(new THREE.CylinderGeometry(0.075, 0.06, 0.035, 20), mat('#b4bec3'), pie, [0, 0.018, 0]);
+  part(new THREE.SphereGeometry(0.072, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat('#d9a04a'), pie, [0, 0.034, 0], [0, 0, 0], [1, 0.45, 1]);
+  for (const [x, z, lean] of [[-0.03, 0.01, 0.3], [0.025, -0.015, -0.25], [0.005, 0.03, 0.1]]) {
+    part(new THREE.ConeGeometry(0.012, 0.045, 6), mat('#8a9aa6'), pie, [x, 0.068, z], [0, 0, lean], [1, 1, 0.6], false);
+  }
+  const items = { croissant, cheese, sticker: sticker.mesh, card: card.mesh, pie };
   for (const item of Object.values(items)) holder.add(item);
   return {
     holder,
@@ -896,7 +918,7 @@ export function createBooth(container, handlers = {}) {
     // lines: [{ who, text }], oldest first; 'You' marks the inspector's own words.
     setTranscript(name, lines) { transcript.redraw(name, lines); },
     setComputer(lines) { computer.redraw(lines); },
-    // 'croissant', 'cheese' or 'sticker' on the window ledge, or null for none.
+    // An item from BRIBE_ITEMS (src/rules.js) on the window ledge, or null for none.
     setBribe(item) { bribe.show(item); },
     toggle(name) { lifted = lifted === name ? null : name; },
     // Turns one view left (-1) or right (+1); papers in hand go back on the desk.

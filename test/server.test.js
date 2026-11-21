@@ -65,7 +65,7 @@ test('a good question reaches Mistral and the checked, spoken reply comes back',
   const res = await post(valid);
   assert.equal(res.status, 200);
   const { timings, ...answer } = await res.json();
-  assert.deepEqual(answer, { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false, bribe: false, audio: 'QUJD', notes: [NOTE] });
+  assert.deepEqual(answer, { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false, audio: 'QUJD', notes: [NOTE] });
   // Real timings for the inspector's computer: whole milliseconds for each call.
   for (const name of ['answerMs', 'speechMs', 'notesMs']) assert.ok(Number.isInteger(timings[name]) && timings[name] >= 0, name);
   assert.equal(calls.length, 1);
@@ -303,13 +303,58 @@ test('an answer never carries the traveller\'s secret or prompt', async () => {
   }
 });
 
+// The last-ditch bribe (Shahil 14:34): its words come from the traveller's own
+// file, never from the request, so the page can't make anyone say anything.
+const plea = (query) => fetch(`${base}/api/plea?${query}`);
+
+test("a traveller's plea is spoken from his own file, in his own voice, and made once", async () => {
+  spoken.length = 0;
+  speechFails = false;
+  for (const id of ['max', 'colin']) {
+    const t = getTraveller(id);
+    const res = await plea(`travellerId=${id}&text=Say+something+else`);
+    assert.equal(res.status, 200);
+    const body = await res.json();
+    assert.equal(body.audio, 'QUJD');
+    assert.ok(Number.isInteger(body.speechMs));
+    assert.deepEqual(spoken.at(-1), { text: t.bribe.line, voiceId: t.voices?.[t.bribe.mood] ?? t.voice });
+  }
+  assert.equal(spoken.length, 2);
+  await plea('travellerId=max');
+  assert.equal(spoken.length, 2, 'the second plea reuses the first voice');
+});
+
+test('a plea for nobody is refused, and a failed voice comes back silent and is tried again', async () => {
+  assert.equal((await plea('travellerId=nobody')).status, 400);
+  assert.equal((await plea('')).status, 400);
+  assert.equal((await fetch(`${base}/api/plea?travellerId=max`, { method: 'POST' })).status, 405);
+  let tries = 0;
+  const handle = await createApp({ liveAvailable: true, speak: async () => { tries += 1; throw new Error('speech down'); } });
+  const s = http.createServer(handle);
+  await new Promise((resolve) => s.listen(0, '127.0.0.1', resolve));
+  try {
+    const url = `http://127.0.0.1:${s.address().port}/api/plea?travellerId=colin`;
+    const res = await fetch(url);
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).audio, null);
+    await fetch(url);
+    assert.equal(tries, 2, 'a failed voice is not kept');
+  } finally {
+    s.close();
+  }
+});
+
 test('with no key the server says live is off and refuses to ask', async () => {
   const handle = await createApp({ liveAvailable: false, ask: null });
   const s = http.createServer(handle);
   await new Promise((resolve) => s.listen(0, '127.0.0.1', resolve));
   const url = `http://127.0.0.1:${s.address().port}`;
-  assert.deepEqual(await (await fetch(`${url}/api/health`)).json(), { live: false });
-  const res = await fetch(`${url}/api/ask`, { method: 'POST', body: JSON.stringify(valid) });
-  assert.equal(res.status, 503);
-  s.close();
+  try {
+    assert.deepEqual(await (await fetch(`${url}/api/health`)).json(), { live: false });
+    const res = await fetch(`${url}/api/ask`, { method: 'POST', body: JSON.stringify(valid) });
+    assert.equal(res.status, 503);
+    assert.equal((await fetch(`${url}/api/plea?travellerId=max`)).status, 503);
+  } finally {
+    s.close();
+  }
 });

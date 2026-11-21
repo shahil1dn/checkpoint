@@ -45,7 +45,7 @@ test("one traveller's clock never eats into the next one's", () => {
 test("stamping early doesn't pass his spare time on: the next traveller gets two minutes", () => {
   const halfWay = R.tick(R.newShift(), 30_000);
   assert.equal(R.timeLeftMs(halfWay), 3 * TWO_MINUTES - 30_000);
-  const next = R.stamp(halfWay, 'away').shift;
+  const next = R.stamp(halfWay, 'through').shift;
   assert.equal(R.travellerTimeLeftMs(next), TWO_MINUTES);
   assert.equal(R.timeLeftMs(next), 2 * TWO_MINUTES);
   assert.equal(R.travellerTimeLeftMs(R.tick(next, 1000)), TWO_MINUTES - 1000);
@@ -72,7 +72,7 @@ test('the shift only ends when the last traveller is stamped, never on the clock
   for (let i = 0; i < 3; i += 1) {
     shift = R.tick(shift, TWO_MINUTES + 5000);
     assert.equal(shift.phase, 'playing');
-    shift = R.stamp(shift, 'away').shift;
+    shift = R.stamp(shift, 'through').shift;
   }
   assert.equal(shift.phase, 'over');
   assert.equal(shift.endReason, 'queueEmpty');
