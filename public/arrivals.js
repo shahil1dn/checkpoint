@@ -45,7 +45,7 @@ export function makeCrowd({ count = 2, speed = 0.8, random = Math.random } = {})
           w.distance += speed * dt;
           if (w.distance >= PATH_LENGTH) {
             w.visible = false;
-            w.wait = 5 + random() * 7;
+            w.wait = 2 + random() * 4;
           }
         }
       }
