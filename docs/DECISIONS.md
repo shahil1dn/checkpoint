@@ -91,3 +91,15 @@ admitted "Frontier Horizon Labs paid, they're Mistral fans too", so the scratchp
 to note (A13: 0 of 3). Players can't know a made-up lab is a rival, so an answer that clashes
 with the papers is the clearest clue a liar gives.
 **Turned down:** keeping papers binding for everyone and testing A13 against a different clash.
+
+## ADR-10: The booth is a passport booth at the Channel train border (21 Nov 11:52)
+
+**Decided:** Shahil's call: the checkpoint is the passport booth where trains from Paris arrive in
+London. Through the window: a station platform or arrivals hall, a train, a departures board.
+Signage is made up: no real railway or border agency names or logos.
+**Why:** Max's story already has him on the early train from Paris, and a real border gives the
+papers and questions an obvious reason to exist.
+**Knock-on:** each traveller's story has to make sense coming off a Paris train. Colin (an English
+cheesemonger) needs a reason to be bringing cheese in from France. An odd but honest reason makes
+a good red herring.
+**Turned down:** the hackathon's own door, an Antarctic border post, space station customs.
