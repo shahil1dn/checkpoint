@@ -31,13 +31,23 @@ const FACES = {
 const STAMP_WORDS = { through: 'THROUGH', away: 'TURNED AWAY' };
 
 const SILL = 1.0;
-const TRAVELLER_AT = new THREE.Vector3(0, 0, -1.1);
-const EYE = new THREE.Vector3(0, 1.95, 2.25);
-// Looking slightly down keeps the bottom of the screen clear desk, where the
-// subtitles and the toolbar sit; held papers are raised above that strip too.
-const LOOK_AT = new THREE.Vector3(0, 1.0, -0.6);
-const READ_DISTANCE = 0.97;
-const READ_RAISE = 0.07;
+// The window view (SPEC "Looking around the booth"): the camera at the
+// traveller's eye level, face to face. He stands on a step so his upper body
+// clears the sill; the desk sits above the subtitles and the toolbar.
+const FRAMING = {
+  eye: new THREE.Vector3(0, 1.5, 2.25),
+  lookAt: new THREE.Vector3(0, 1.0, -1.1),
+  fov: 60,
+  step: 0.22,
+};
+const TRAVELLER_AT = new THREE.Vector3(0, FRAMING.step, -1.1);
+const EYE = FRAMING.eye;
+const LOOK_AT = FRAMING.lookAt;
+// Held papers fill the same share of the screen whatever the field of view,
+// raised a little so they clear the subtitles.
+const READ_HEIGHT = 0.745;
+const READ_DISTANCE = READ_HEIGHT / (2 * Math.tan(THREE.MathUtils.degToRad(FRAMING.fov / 2)));
+const READ_RAISE = READ_DISTANCE * 0.072;
 const WALK_OFF_X = 3.2;
 
 // ---------- drawing the papers and the scratchpad ----------
@@ -242,7 +252,7 @@ export function createBooth(container, handlers = {}) {
     return null;
   }
   engine.controls.enabled = false;   // the inspector sits still: no orbiting
-  engine.camera.fov = 42;
+  engine.camera.fov = FRAMING.fov;
   const group = new THREE.Group();
   engine.scene.add(group);
   buildRoom(group);
