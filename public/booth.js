@@ -285,15 +285,17 @@ const ROLL_ROWS = 48;      // printed rows the canvas keeps; only the last few s
 const NOTCH_SECONDS = 0.16;
 const SAID_BY_YOU = '#6b6457';
 
-// Every line of the conversation as printed rows: [text, colour, bold].
+// Every line of the conversation as printed rows: [text, colour, bold,
+// lookup], where lookup is the traveller's exact words when the line can be
+// looked up on the records terminal (ADR-12), and null otherwise.
 function transcriptRows(g, name, lines, maxWidth, size) {
   const rows = [];
   g.font = `bold ${size}px ${TYPEWRITER}`;
-  rows.push([`TRANSCRIPT: ${name ?? ''}`, SAID_BY_YOU, true]);
+  rows.push([`TRANSCRIPT: ${name ?? ''}`, SAID_BY_YOU, true, null]);
   g.font = `${size}px ${TYPEWRITER}`;
-  for (const { who, text } of lines) {
+  for (const { who, text, lookup = null } of lines) {
     const colour = who === 'You' ? SAID_BY_YOU : INK;
-    wrap(g, `${who}: ${text}`, maxWidth).forEach((row, i) => rows.push([i ? `   ${row}` : row, colour, false]));
+    wrap(g, `${who}: ${text}`, maxWidth).forEach((row, i) => rows.push([i ? `   ${row}` : row, colour, false, lookup]));
   }
   return rows;
 }
@@ -313,7 +315,10 @@ function drawRoll(g, w, h, rows) {
 
 // Lifted: the whole conversation on a page, oldest at the top. If a long
 // shift overflows the page, the oldest lines give way.
-function drawTranscriptPage(g, w, h, name, lines = []) {
+// His answers on the page can be clicked to look them up; marks says which
+// is under the pointer and which are already looked up, and gets back where
+// each answer sits on the page.
+function drawTranscriptPage(g, w, h, name, lines = [], marks = {}) {
   g.fillStyle = COLORS.paper; g.fillRect(0, 0, w, h);
   g.strokeStyle = '#c9bfa8'; g.lineWidth = w * 0.006; g.strokeRect(w * 0.04, h * 0.03, w * 0.92, h * 0.94);
   const size = w * 0.042;
@@ -321,7 +326,21 @@ function drawTranscriptPage(g, w, h, name, lines = []) {
   g.textAlign = 'left'; g.textBaseline = 'alphabetic';
   const rows = transcriptRows(g, name, lines, w * 0.82, size);
   const fit = Math.floor((h * 0.9) / step);
-  const shown = rows.length > fit ? [rows[0], ['   …', SAID_BY_YOU, false], ...rows.slice(rows.length - fit + 2)] : rows;
+  const shown = rows.length > fit ? [rows[0], ['   …', SAID_BY_YOU, false, null], ...rows.slice(rows.length - fit + 2)] : rows;
+  const regions = [];
+  shown.forEach(([, , , lookup], i) => {
+    if (!lookup) return;
+    const [top, bottom] = [h * 0.09 + (i - 0.8) * step, h * 0.09 + (i + 0.3) * step];
+    const last = regions.at(-1);
+    if (last?.line === lookup && last.row === i - 1) Object.assign(last, { bottom, row: i });
+    else regions.push({ line: lookup, top, bottom, row: i });
+  });
+  for (const { line, top, bottom } of regions) {
+    if (marks.hover === line) { g.fillStyle = LOOK_BAND; g.fillRect(w * 0.06, top, w * 0.88, bottom - top); }
+    // Looked up: an amber bar in the margin, clear of the words.
+    if (marks.looked?.includes(line)) { g.fillStyle = AMBER; g.fillRect(w * 0.055, top, w * 0.014, bottom - top); }
+  }
+  marks.rows = regions.map(({ line, top, bottom }) => ({ line, top: top / h, bottom: bottom / h }));
   shown.forEach((row, i) => printRow(g, row, w * 0.09, h * 0.09 + i * step, size));
 }
 
@@ -341,6 +360,9 @@ function buildTranscript(group) {
   const page = textPlane(0.42, 0.56, drawTranscriptPage, 2048);
   page.mesh.visible = false;
   item.holder.add(page.mesh);
+  page.mesh.userData.paper = item;
+  item.marks = {};
+  item.repaint = () => page.redraw(traveller, item.fields, item.marks);
 
   let traveller = null;
   let firstRow = 0;   // the roll keeps the last ROLL_ROWS rows; this is the first one's number
@@ -356,7 +378,8 @@ function buildTranscript(group) {
     firstRow = Math.max(0, rows.length - ROLL_ROWS);
     drawRoll(g, canvas.width, canvas.height, rows.slice(firstRow));
     roll.needsUpdate = true;
-    page.redraw(name, lines);
+    item.fields = lines;
+    item.repaint();
   }
   // Every frame: feed towards the printed rows, then show the paper from the
   // roll's top (or, once it's full, from a line SLIP.rows back) down to just
@@ -796,7 +819,7 @@ export function createBooth(container, handlers = {}) {
   const bribe = buildBribe(group);
   const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };
   const tools = [papers.holder, ticket.holder, notebook.holder, transcript.holder, printer, mic.holder, stamps.through.holder, stamps.away.holder];
-  const clickablePapers = [papers, ticket];
+  const clickablePapers = [papers, ticket, transcript];
   let screenState = { calls: [], terminal: null };
   let hoveredLine = null;
 

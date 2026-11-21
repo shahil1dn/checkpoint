@@ -421,7 +421,8 @@ function renderTranscript(traveller) {
   const { history } = shift.cases[traveller.id];
   const lines = history.flatMap((turn) => [
     { who: 'You', text: turn.question },
-    { who: traveller.name, text: `${turn.reply}${turn.cracked ? ' [He cracked!]' : ''}` },
+    // His exact words, so a click can look them up (ADR-12).
+    { who: traveller.name, text: `${turn.reply}${turn.cracked ? ' [He cracked!]' : ''}`, lookup: turn.reply },
   ]);
   // While he thinks, only your question is printed: the printer never overprints a line.
   if (shift.pending) lines.push({ who: 'You', text: shift.pending.question });
