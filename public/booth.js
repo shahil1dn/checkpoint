@@ -17,6 +17,8 @@ const COLORS = {
 const INK = '#1f2126';
 const TYPEWRITER = '"American Typewriter", "Courier New", monospace';
 const HANDWRITING = '"Noteworthy", "Bradley Hand", "Marker Felt", cursive';
+const TERMINAL = 'Menlo, "Courier New", monospace';
+const AMBER = '#f2b544';
 
 
 // One face per mood, the same for every traveller, so the face is a fair tell.
@@ -36,8 +38,8 @@ const SILL = 1.0;
 // clears the sill; the desk sits above the subtitles and the toolbar.
 const FRAMING = {
   eye: new THREE.Vector3(0, 1.5, 2.25),
-  lookAt: new THREE.Vector3(0, 1.0, -1.1),
-  fov: 60,
+  lookAt: new THREE.Vector3(0, 1.08, -1.1),
+  fov: 50,
   step: 0.22,
 };
 const TRAVELLER_AT = new THREE.Vector3(0, FRAMING.step, -1.1);
@@ -205,6 +207,58 @@ function buildMic(group) {
   return { holder, light };
 }
 
+// The inspector's computer on the left wall. Its screen lists the real
+// Mistral calls, one line each (lines come from public/computer.js).
+function drawComputer(g, w, h, lines = []) {
+  g.fillStyle = '#14161a'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h * 0.11);
+  g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.fillStyle = '#f4efe2'; g.font = `600 ${h * 0.055}px system-ui, sans-serif`;
+  g.fillText('INSPECTOR TERMINAL  ·  live Mistral calls', w * 0.04, h * 0.058, w * 0.92);
+  const row = h * 0.088;
+  g.font = `${h * 0.046}px ${TERMINAL}`;
+  if (!lines.length) {
+    g.fillStyle = '#8a8f98';
+    g.fillText('Waiting for the first question…', w * 0.04, h * 0.11 + row);
+    return;
+  }
+  lines.forEach(({ who, what }, i) => {
+    const y = h * 0.11 + row * (i + 0.9);
+    const label = `${who} `;
+    g.fillStyle = AMBER;
+    g.fillText(label, w * 0.04, y);
+    const x = w * 0.04 + g.measureText(label).width;
+    g.fillStyle = '#e8e2d4';
+    g.fillText(what, x, y, w * 0.96 - x);
+  });
+}
+
+function buildComputer(group) {
+  const z = 2.25;   // straight ahead when the inspector turns left
+  const wallX = -SIDE_WALL_X + 0.08;
+  part(box(0.6, 0.95, 2.35, 0.03), mat(COLORS.desk), group, [wallX + 0.3, 0.475, 2.72]);
+  part(box(0.62, 0.05, 2.37, 0.02), mat(COLORS.deskTop), group, [wallX + 0.3, 0.97, 2.72]);
+  part(box(0.06, 0.22, 0.12), mat(COLORS.micBody), group, [wallX + 0.16, 1.1, z]);
+  part(box(0.05, 0.74, 1.14, 0.02), mat(COLORS.micBody), group, [wallX + 0.2, 1.4, z]);
+  const screen = textPlane(1.06, 0.66, drawComputer, 1600);
+  screen.redraw([]);
+  screen.mesh.position.set(wallX + 0.23, 1.4, z);
+  screen.mesh.rotation.y = Math.PI / 2;
+  group.add(screen.mesh);
+  part(box(0.18, 0.025, 0.5, 0.01), mat(COLORS.micGrille), group, [wallX + 0.42, 1.005, z]);
+  part(ball(0.035, 12, 8), mat(COLORS.micGrille), group, [wallX + 0.42, 1.0, z + 0.4], [0, 0, 0], [1, 0.5, 1.4]);
+  const note = textPlane(0.13, 0.13, (g, w, h) => {
+    g.fillStyle = '#f2d96b'; g.fillRect(0, 0, w, h);
+    g.fillStyle = INK; g.font = `${h * 0.17}px ${HANDWRITING}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText("Don't feed", w / 2, h * 0.38); g.fillText('the walrus', w / 2, h * 0.62);
+  }, 1024);
+  note.redraw();
+  note.mesh.position.set(wallX + 0.235, 1.62, z + 0.62);
+  note.mesh.rotation.set(0, Math.PI / 2, 0.08);
+  group.add(note.mesh);
+  return screen;
+}
+
 function buildStamp(group, verdict, x) {
   const holder = new THREE.Group();
   holder.userData.tool = `stamp-${verdict}`;
@@ -264,6 +318,10 @@ export function createBooth(container, handlers = {}) {
     return null;
   }
   engine.controls.enabled = false;   // the inspector sits still: no orbiting
+  // The engine keeps an orbiting camera above the floor; even switched off, that
+  // limit tips an eye-level camera up into a look-down when the world is set.
+  engine.controls.minPolarAngle = 0;
+  engine.controls.maxPolarAngle = Math.PI;
   engine.camera.fov = FRAMING.fov;
   const group = new THREE.Group();
   engine.scene.add(group);
@@ -277,6 +335,7 @@ export function createBooth(container, handlers = {}) {
   const notebook = buildNotebook(group);
   const liftables = [papers, notebook];
   const mic = buildMic(group);
+  const computer = buildComputer(group);
   const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };
   const tools = [papers.holder, notebook.holder, mic.holder, stamps.through.holder, stamps.away.holder];
 
@@ -474,6 +533,7 @@ export function createBooth(container, handlers = {}) {
     setRecording(on) { mic.light.color.set(on ? COLORS.live : COLORS.off); },
     setPapers(paperFields, stamp = null) { papers.redraw(paperFields, stamp); },
     setNotes(name, notes) { notebook.redraw(name, notes); },
+    setComputer(lines) { computer.redraw(lines); },
     toggle(name) { lifted = lifted === name ? null : name; },
     // Turns one view left (-1) or right (+1); papers in hand go back on the desk.
     look(step) {

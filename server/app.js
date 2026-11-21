@@ -62,7 +62,15 @@ async function readJsonBody(req) {
   }
 }
 
-export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, log = () => {} }) {
+// How long a call took, in whole milliseconds, for the inspector's computer screen.
+async function timed(call) {
+  const started = performance.now();
+  const value = await call();
+  return { value, ms: Math.round(performance.now() - started) };
+}
+
+// models: which Mistral model does each job, shown by name on the computer screen.
+export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, models, log = () => {} }) {
   const routes = await staticRoutes();
 
   async function handleHear(req, res) {
@@ -73,7 +81,8 @@ export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, lo
     if (bytes.length === 0) return send(res, 400, { error: 'empty' });
     if (!liveAvailable) return send(res, 503, { error: 'noKey' });
     try {
-      return send(res, 200, { text: cleanTranscript(await hear({ audio: bytes, type })) });
+      const heard = await timed(() => hear({ audio: bytes, type }));
+      return send(res, 200, { text: cleanTranscript(heard.value), ms: heard.ms });
     } catch (err) {
       log(err);
       return send(res, 502, { error: 'callFailed' });
@@ -89,19 +98,21 @@ export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, lo
     const { travellerId, history, question, notes: earlierNotes } = checked.value;
     const traveller = getTraveller(travellerId);
     let reply;
+    let answerMs;
     try {
-      reply = await askUntilAcceptable(traveller, history, question);
+      ({ value: reply, ms: answerMs } = await timed(() => askUntilAcceptable(traveller, history, question)));
     } catch (err) {
       log(err);
       return send(res, 502, { error: 'callFailed' });
     }
     // Notes are taken while the voice is made, so they add no wait.
     const exchanges = [...history, { question, reply: reply.reply, mood: reply.mood }];
-    const [audio, notes] = await Promise.all([
-      speakOrNull(traveller, reply),
-      reply.fallback ? [] : notesOrNone(traveller.papers, exchanges, earlierNotes),
+    const [speech, noted] = await Promise.all([
+      timed(() => speakOrNull(traveller, reply)),
+      timed(async () => (reply.fallback ? [] : notesOrNone(traveller.papers, exchanges, earlierNotes))),
     ]);
-    return send(res, 200, { ...reply, audio, notes });
+    const timings = { answerMs, speechMs: speech.ms, notesMs: noted.ms };
+    return send(res, 200, { ...reply, audio: speech.value, notes: noted.value, timings });
   }
 
   // Only the papers, the conversation and the notes the player already has go
@@ -149,7 +160,7 @@ export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, lo
     const url = new URL(req.url, 'http://localhost');
 
     if (url.pathname === '/api/health' && req.method === 'GET') {
-      return send(res, 200, { live: liveAvailable });
+      return send(res, 200, liveAvailable && models ? { live: true, models } : { live: liveAvailable });
     }
     if (url.pathname === '/api/ask') {
       if (req.method !== 'POST') return send(res, 405, { error: 'method' });
