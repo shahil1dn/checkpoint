@@ -397,6 +397,7 @@ function buildLooks(head, pBody, body, leftHand, rightHand) {
   part(...twoTone(shared.serverCap, '#f7f5f0', '#c46a5b', `float regionField(vec3 p){ return (p.y - (${foot})) - 0.045; }`), hats.server);
   // beanie: a knitted cap with a rolled rim and a pom-pom
   hats.beanie = new THREE.Group(); head.add(hats.beanie);
+  hats.beanie.rotation.x = -0.25;   // worn pushed back: the rim sat on the painted brows and cut them off in calm moods
   hatParts.push(part(new THREE.SphereGeometry(0.52, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.42), mat('#c46a5b'), hats.beanie, [0, 0.01, 0.01], [-0.12, 0, 0], [1, 0.95, 1]));
   hatParts.push(part(new THREE.TorusGeometry(0.47, 0.06, 8, 36), mat('#c46a5b'), hats.beanie, [0, 0.16, 0.06], [Math.PI / 2 - 0.12, 0, 0]));
   part(ball(0.1, 14, 10), mat('#f3f1ec'), hats.beanie, [0, 0.56, -0.05]);
