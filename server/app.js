@@ -3,7 +3,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FALLBACK_LINE, checkLookupAnswer, checkNotes, cleanTranscript, gatheredFrom, judgeReply, parseReply, validateAskRequest, validateLookupRequest } from '../src/rules.js';
+import { FALLBACK_LINE, cannedReview, checkLookupAnswer, checkNotes, cleanTranscript, gatheredFrom, judgeReply, parseReply, parseReview, rateShift, shiftReport, validateAskRequest, validateLookupRequest, validateReviewRequest } from '../src/rules.js';
 import { getTraveller, voiceFor } from '../src/travellers/index.js';
 import { documentsFor, nameOnDocuments, papersFor } from '../src/records/index.js';
 import { lookupWithoutModel } from '../src/records/search.js';
@@ -88,7 +88,7 @@ function sayings() {
 
 // models: which Mistral model does each job, shown by name on the computer screen.
 // lookup: the records terminal; offline, the code's own search stands in.
-export async function createApp({ ask, hear, speak, takeNotes, lookup, liveAvailable, models, log = () => {} }) {
+export async function createApp({ ask, hear, speak, takeNotes, lookup, review, liveAvailable, models, log = () => {} }) {
   const routes = await staticRoutes();
   const said = sayings();
 
@@ -206,6 +206,31 @@ export async function createApp({ ask, hear, speak, takeNotes, lookup, liveAvail
   // anything. The voice is made once per traveller and kept; a failed one is
   // not kept, so the next plea tries again.
   const pleas = new Map();
+  // The shift review (Shahil 17:10): the score and rating come from the code,
+  // with the truth read from the server's own traveller files; Mistral only
+  // writes the words, and the code writes them when it can't.
+  async function handleReview(req, res) {
+    const { body, error } = await readJsonBody(req);
+    if (error) return send(res, 400, { error });
+    const checked = validateReviewRequest(body);
+    if (!checked.ok) return send(res, 400, { error: checked.reason });
+    const report = shiftReport(checked.value);
+    const rating = rateShift(report);
+    const rows = report.rows.map(({ name, stamp, honest, correct, bribeTaken }) => ({ name, stamp, honest, correct, bribeTaken }));
+    const scored = { correct: report.correct, total: report.total, record: report.record, rating, rows };
+    if (liveAvailable && review) {
+      try {
+        const { value, ms } = await timed(() => review({ report, rating }));
+        const words = parseReview(value, report);
+        if (words) return send(res, 200, { ...scored, review: words, by: 'mistral', ms });
+        log('review: unusable reply, canned review instead');
+      } catch (err) {
+        log(`review failed: ${err.message}`);
+      }
+    }
+    return send(res, 200, { ...scored, review: cannedReview(report, rating), by: 'code' });
+  }
+
   async function handlePlea(url, res) {
     const traveller = getTraveller(url.searchParams.get('travellerId') ?? '');
     if (!traveller) return send(res, 400, { error: 'unknownTraveller' });
@@ -244,6 +269,10 @@ export async function createApp({ ask, hear, speak, takeNotes, lookup, liveAvail
     if (url.pathname === '/api/lookup') {
       if (req.method !== 'POST') return send(res, 405, { error: 'method' });
       return handleLookup(req, res);
+    }
+    if (url.pathname === '/api/review') {
+      if (req.method !== 'POST') return send(res, 405, { error: 'method' });
+      return handleReview(req, res);
     }
     if (url.pathname === '/api/plea') {
       if (req.method !== 'GET') return send(res, 405, { error: 'method' });

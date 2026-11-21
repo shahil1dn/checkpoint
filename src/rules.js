@@ -384,3 +384,69 @@ export function parseReply(raw) {
     cracked: data.cracked === true,
   };
 }
+
+// ---- The shift review on the computer (Shahil 17:10) ----
+// The code scores and rates the shift; Mistral only writes the words (ADR-2).
+
+export const MAX_REVIEW_HEADLINE_CHARS = 120;
+export const MAX_REVIEW_COMMENT_CHARS = 160;
+
+// Any bribe taken makes the record CORRUPT, whatever the score.
+export function rateShift({ correct, total, record }) {
+  if (record === 'corrupt') return { title: 'CORRUPT', stars: 0 };
+  if (total === 0) return { title: 'Trainee', stars: 0 };
+  if (correct === total) return { title: 'Chief Inspector', stars: 3 };
+  if (correct * 3 >= total * 2) return { title: 'Senior Inspector', stars: 2 };
+  if (correct * 3 >= total) return { title: 'Inspector', stars: 1 };
+  return { title: 'Trainee', stars: 0 };
+}
+
+// The page sends only what the inspector did: who was in the queue, each stamp
+// and each bribe taken. The truth comes from the server's own traveller files.
+export function validateReviewRequest(body) {
+  if (!isPlainObject(body)) return { ok: false, reason: 'badBody' };
+  const { queue, stamps, bribesTaken = [] } = body;
+  if (!Array.isArray(queue) || queue.length === 0 || queue.length > 10) return { ok: false, reason: 'badQueue' };
+  if (queue.some((id) => typeof id !== 'string' || !getTraveller(id)) || new Set(queue).size !== queue.length) return { ok: false, reason: 'badQueue' };
+  if (!isPlainObject(stamps)) return { ok: false, reason: 'badStamps' };
+  const stampOf = (id) => stamps[id] ?? null;
+  if (queue.some((id) => stampOf(id) !== null && !VERDICTS.includes(stampOf(id)))) return { ok: false, reason: 'badStamps' };
+  if (!Array.isArray(bribesTaken) || bribesTaken.some((id) => !queue.includes(id))) return { ok: false, reason: 'badBribes' };
+  const cases = Object.fromEntries(queue.map((id) => [id, { stamp: stampOf(id), bribe: bribesTaken.includes(id) ? 'taken' : null }]));
+  return { ok: true, value: { queue, cases } };
+}
+
+const cutTo = (text, max) => {
+  const plain = text.replace(/[*_`#~]/g, '').replace(/\s+/g, ' ').trim();
+  return charCount(plain) > max ? `${[...plain].slice(0, max - 1).join('').trim()}…` : plain;
+};
+
+// Mistral's review is untrusted: kept only for travellers in this shift, cut to
+// length, markdown stripped. Returns null when there is nothing usable.
+export function parseReview(raw, report) {
+  let data;
+  try { data = JSON.parse(raw); } catch { return null; }
+  if (!isPlainObject(data) || typeof data.headline !== 'string' || !Array.isArray(data.per_traveller)) return null;
+  const headline = cutTo(data.headline, MAX_REVIEW_HEADLINE_CHARS);
+  if (!headline) return null;
+  const comments = report.rows.map((row) => {
+    const said = data.per_traveller.find((c) => isPlainObject(c) && c.name === row.name && typeof c.comment === 'string');
+    return { name: row.name, comment: said ? cutTo(said.comment, MAX_REVIEW_COMMENT_CHARS) : '' };
+  });
+  const tip = typeof data.tip === 'string' ? cutTo(data.tip, MAX_REVIEW_COMMENT_CHARS) : '';
+  return { headline, comments, tip };
+}
+
+// With no key, or when the call fails, the code writes the review itself.
+export function cannedReview(report, rating) {
+  const headline = rating.title === 'CORRUPT'
+    ? 'You took a bribe. The border was for sale today.'
+    : `${rating.title}: ${report.correct} of ${report.total} called right.`;
+  const comments = report.rows.map((row) => {
+    if (row.bribeTaken) return { name: row.name, comment: 'Let through for a bribe.' };
+    if (row.correct) return { name: row.name, comment: row.honest ? 'Honest, and you let him through.' : 'Lying, and you caught him.' };
+    if (row.stamp === null) return { name: row.name, comment: 'Never stamped.' };
+    return { name: row.name, comment: row.honest ? 'Honest, but you turned him away.' : 'Lying, and he got past you.' };
+  });
+  return { headline, comments, tip: 'Check his papers against the records before you stamp.' };
+}

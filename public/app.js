@@ -28,6 +28,8 @@ let micSetup = false;
 let lastFrame = performance.now();
 // What the records terminal shows: the latest lookup, while it searches and after.
 let screenLookup = null;
+// The end-of-shift review on the computer, once per shift (Shahil 17:10).
+let shiftReview = null;
 let cursorOn = true;
 const STEP_PAUSE_MS = 450;   // steps can arrive together; each gets a moment on screen
 
@@ -55,6 +57,7 @@ const HINTS = {
   bribeOnTable: 'Take what he offered, or stamp the papers.',
 };
 const TOOL_TIPS = {
+  'play-again': 'Play again: a new shift',
   papers: 'Case folder: click to open it',
   notebook: 'Scratchpad: click to open',
   transcript: 'Transcript: click to read it all',
@@ -103,6 +106,7 @@ const booth = createBooth($('booth'), {
   onBribeClick: () => pocketBribe(),
   onHover: (tool, detail) => { $('tool-tip').textContent = tipFor(tool, detail); },
   onLookup: (line) => lookUp(line),
+  onPlayAgain: () => playAgain(),
   onView: (view) => {
     renderLook(view);
     $('tool-tip').textContent = '';
@@ -447,6 +451,10 @@ async function startShift() {
 function playAgain() {
   shift = R.restartShift(shift);
   screenLookup = null;
+  shiftReview = null;
+  booth?.setReview(null);
+  booth?.face('window');   // the new shift starts at the window
+  $('booth').removeAttribute('aria-label');
   booth?.clearDesk();
   stopVoice();
   hint('');
@@ -550,6 +558,37 @@ function renderReport() {
   $('bribes').className = report.record;
 }
 
+// The shift is over: turn to the computer and show the review. The score and
+// rating show at once, from the code; the server rebuilds them from its own
+// truth and adds Mistral's words. If that fails, the code writes the words.
+async function reviewShift() {
+  const ended = shift;
+  const report = R.shiftReport(ended);
+  const rating = R.rateShift(report);
+  const waiting = { status: 'waiting', correct: report.correct, total: report.total, rating, rows: report.rows, review: null };
+  shiftReview = waiting;
+  booth.setReview(waiting);
+  // The screen is a picture in the 3D desk, so it is said in words too, for screen readers.
+  $('booth').setAttribute('aria-label', `Shift review on the computer: ${report.correct} / ${report.total} correct, ${rating.title}`);
+  booth.face('left');
+  const body = {
+    queue: ended.queue,
+    stamps: Object.fromEntries(ended.queue.map((id) => [id, ended.cases[id].stamp])),
+    bribesTaken: report.rows.filter((row) => row.bribeTaken).map((row) => row.id),
+  };
+  let done;
+  try {
+    const res = await fetch('/api/review', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    if (!res.ok) throw new Error(`review ${res.status}`);
+    done = { ...(await res.json()), status: 'done' };
+  } catch {
+    done = { ...waiting, status: 'done', review: R.cannedReview(report, rating), by: 'code' };
+  }
+  if (shiftReview !== waiting) return;   // Play again came first
+  shiftReview = done;
+  booth.setReview(shiftReview);
+}
+
 function renderTerminal() {
   const id = R.currentTravellerId(shift);
   if (!booth || !id) return booth?.setTerminal(null);
@@ -576,6 +615,7 @@ function render() {
   const playing = started && !over;
   renderActivity();
   $('report').hidden = !started || !over;
+  $('report').classList.toggle('on-computer', Boolean(booth));
   $('status').hidden = !started;   // the connection badge waits for the shift
   $('shift-info').hidden = !playing;
   $('controls').hidden = !playing;
@@ -589,6 +629,7 @@ function render() {
   if (over) {
     booth?.putDown();
     $('captions').hidden = true;
+    if (booth && !shiftReview) reviewShift();
     return renderReport();
   }
   const traveller = getTraveller(R.currentTravellerId(shift));

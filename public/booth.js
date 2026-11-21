@@ -565,6 +565,17 @@ function buildTranscript(group) {
 // A bribe on the window ledge (PR #3): what the traveller slid across, shown
 // only while it's on offer. Click it to pocket it.
 const LEDGE = new THREE.Vector3(-0.62, SILL + 0.04, 0.04);
+// The Mistral mark (mistral.ai/brand, 21 Nov): a pixel "M" cat, 7 cells wide and
+// 5 tall, its bands running yellow, orange, red-orange, red, crimson from the
+// ears down. On the bribe sticker and the shift review.
+const MISTRAL_M = [
+  ['#ffaf01', '.#...#.'],
+  ['#ff8204', '.##.##.'],
+  ['#fa500f', '.#####.'],
+  ['#e51300', '.#.#.#.'],
+  ['#c4001d', '###.###'],
+];
+
 function buildBribe(group) {
   const holder = new THREE.Group();
   holder.userData.tool = 'bribe';
@@ -576,16 +587,7 @@ function buildBribe(group) {
   // Stood on its long edge with its cut face to the inspector: lying flat, it was
   // a thin yellow sliver from the chair.
   part(new THREE.CylinderGeometry(0.1, 0.1, 0.07, 10, 1, false, Math.PI / 2, Math.PI / 3), mat('#e8c95a'), cheese, [-0.05, 0.002, 0], [Math.PI / 2, 0, 0]);
-  // The Mistral mark (mistral.ai/brand, 21 Nov): a pixel "M" cat, 7 cells wide and
-  // 5 tall, its bands running yellow, orange, red-orange, red, crimson from the
-  // ears down. Die-cut: a white border and an ink edge both follow the mark.
-  const MISTRAL_M = [
-    ['#ffaf01', '.#...#.'],
-    ['#ff8204', '.##.##.'],
-    ['#fa500f', '.#####.'],
-    ['#e51300', '.#.#.#.'],
-    ['#c4001d', '###.###'],
-  ];
+  // Die-cut: a white border and an ink edge both follow the mark.
   const sticker = textPlane(0.11, 0.11, (g, w, h) => {
     const cell = w * 0.1;
     const left = (w - cell * 7) / 2;
@@ -747,7 +749,76 @@ function drawTerminal(g, w, h, terminal, cursorOn) {
   }
 }
 
-function drawComputer(g, w, h, { calls = [], terminal = null, cursorOn = true } = {}) {
+// The shift review (Shahil 17:10). review: { status: 'waiting' | 'done',
+// correct, total, rating: { title, stars }, rows: [{ name, stamp, honest,
+// correct, bribeTaken }], review: { headline, comments, tip } | null, by }.
+// PLAY AGAIN is a box on the screen; PLAY_AGAIN_BOX says where, for clicks.
+const PLAY_AGAIN_BOX = { left: 0.66, right: 0.96, top: 0.85, bottom: 0.96 };
+const GOOD = '#7fcf8f';
+const BAD = '#ef7b6b';
+function drawReview(g, w, h, review) {
+  g.fillStyle = '#14161a'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h * 0.11);
+  g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.fillStyle = '#f4efe2'; g.font = `600 ${h * 0.055}px system-ui, sans-serif`;
+  g.fillText('SHIFT REVIEW', w * 0.04, h * 0.058);
+  g.textAlign = 'right'; g.fillStyle = TERM_DIM; g.font = `${h * 0.036}px ${TERMINAL}`;
+  g.fillText(review.status === 'waiting' ? 'reviewed by Mistral…' : `reviewed by ${review.by === 'mistral' ? 'Mistral Medium 3.5' : 'the post (offline)'}`, w * 0.96, h * 0.058);
+  // The mark, then the score and the rating beside it.
+  const cell = h * 0.034;
+  const logoX = w * 0.04;
+  const logoY = h * 0.15;
+  MISTRAL_M.forEach(([colour, row], y) => [...row].forEach((mark, x) => {
+    if (mark !== '#') return;
+    g.fillStyle = colour; g.fillRect(logoX + x * cell, logoY + y * cell, cell, cell);
+  }));
+  const x = logoX + cell * 8.5;
+  g.textAlign = 'left';
+  g.fillStyle = '#f4efe2'; g.font = `700 ${h * 0.075}px ${TERMINAL}`;
+  g.fillText(`${review.correct} / ${review.total} correct`, x, logoY + cell * 1.2);
+  const corrupt = review.rating.title === 'CORRUPT';
+  g.fillStyle = corrupt ? BAD : AMBER; g.font = `700 ${h * 0.05}px ${TERMINAL}`;
+  g.fillText(corrupt ? 'CORRUPT' : `${review.rating.title}  ${'★'.repeat(review.rating.stars)}${'☆'.repeat(3 - review.rating.stars)}`, x, logoY + cell * 3.7);
+  let y = logoY + cell * 6.6;
+  const width = w * 0.92;
+  const write = (text, colour, size, maxLines = 2) => {
+    g.fillStyle = colour; g.font = `${size}px ${TERMINAL}`;
+    for (const piece of wrap(g, text, width).slice(0, maxLines)) {
+      g.fillText(piece, w * 0.04, y, width);
+      y += size * 1.25;
+    }
+  };
+  if (review.status === 'waiting') write('Mistral is reviewing your shift…', TERM_STEP, h * 0.04);
+  else write(review.review.headline, TERM_TEXT, h * 0.042);
+  y += h * 0.012;
+  for (const [i, row] of review.rows.entries()) {
+    const stamp = row.stamp ? STAMP_WORDS[row.stamp] : 'NOT STAMPED';
+    const truth = row.honest ? 'honest' : 'lying';
+    g.font = `700 ${h * 0.036}px ${TERMINAL}`; g.fillStyle = TERM_TEXT;
+    g.fillText(row.name, w * 0.04, y, w * 0.34);
+    g.font = `${h * 0.036}px ${TERMINAL}`; g.fillStyle = TERM_DIM;
+    g.fillText(`${stamp}${row.bribeTaken ? ' (bribe)' : ''} · ${truth}`, w * 0.4, y, w * 0.4);
+    g.textAlign = 'right'; g.font = `700 ${h * 0.036}px ${TERMINAL}`; g.fillStyle = row.correct ? GOOD : BAD;
+    g.fillText(row.correct ? 'RIGHT' : 'WRONG', w * 0.96, y);
+    g.textAlign = 'left';
+    y += h * 0.036 * 1.25;
+    const comment = review.review?.comments?.[i]?.comment;
+    if (comment) write(comment, TERM_STEP, h * 0.032, 1);
+    y += h * 0.008;
+  }
+  if (review.review?.tip) {
+    y += h * 0.006;
+    write(`Tip: ${review.review.tip}`, TERM_DIM, h * 0.032);
+  }
+  const b = PLAY_AGAIN_BOX;
+  g.fillStyle = AMBER; g.fillRect(w * b.left, h * b.top, w * (b.right - b.left), h * (b.bottom - b.top));
+  g.fillStyle = '#14161a'; g.font = `800 ${h * 0.05}px ${TERMINAL}`; g.textAlign = 'center';
+  g.fillText('PLAY AGAIN', w * (b.left + b.right) / 2, h * (b.top + b.bottom) / 2);
+  g.textAlign = 'left';
+}
+
+function drawComputer(g, w, h, { calls = [], terminal = null, cursorOn = true, review = null } = {}) {
+  if (review) return drawReview(g, w, h, review);
   g.fillStyle = '#14161a'; g.fillRect(0, 0, w, h);
   g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h * 0.11);
   g.textAlign = 'left'; g.textBaseline = 'middle';
@@ -1168,14 +1239,19 @@ export function createBooth(container, handlers = {}) {
     // three's raycaster ignores visibility, so hidden parts (the transcript's
     // full page while the slip is down, a bribe not on offer) must be skipped,
     // or they catch the pointer meant for what's behind them.
-    const hit = raycaster.intersectObjects([...tools, bribe.holder], true).find((h) => shown(h.object));
+    const hit = raycaster.intersectObjects([...tools, bribe.holder, computer.mesh], true).find((h) => shown(h.object));
     let tool = null;
     for (let o = hit?.object; o && !tool; o = o.parent) tool = o.userData.tool ?? null;
+    if (hit?.object === computer.mesh) tool = screenState.review && hit.uv && onPlayAgain(hit.uv) ? 'play-again' : null;
     // A line can be picked only on a paper held up to read.
     const paper = hit?.object.userData.paper;
     const line = paper && lifted === paper.name && (paper.owner ?? paper).t > 0.9 && hit.uv ? rowAt(paper, 1 - hit.uv.y) : null;
     return { tool, line };
   }
+  const onPlayAgain = (uv) => {
+    const b = PLAY_AGAIN_BOX;
+    return uv.x >= b.left && uv.x <= b.right && 1 - uv.y >= b.top && 1 - uv.y <= b.bottom;
+  };
   function hoverLine(line) {
     if (line === hoveredLine) return;
     hoveredLine = line;
@@ -1220,6 +1296,7 @@ export function createBooth(container, handlers = {}) {
     else if (['papers', 'notebook', 'transcript'].includes(tool)) booth.toggle(tool);
     else if (tool?.startsWith('stamp-')) handlers.onStampClick?.(tool.slice(6));
     else if (tool === 'bribe') handlers.onBribeClick?.();
+    else if (tool === 'play-again') handlers.onPlayAgain?.();
     else if (lifted) booth.putDown();
   });
 
@@ -1457,6 +1534,15 @@ export function createBooth(container, handlers = {}) {
     setComputer(lines) { screenState = { ...screenState, calls: lines }; computer.redraw(screenState); },
     // The records terminal's state, drawn above the calls; cursorOn blinks it.
     setTerminal(terminal, cursorOn = true) { screenState = { ...screenState, terminal, cursorOn }; computer.redraw(screenState); },
+    // The end-of-shift review fills the screen until Play again; null clears it.
+    setReview(review) { screenState = { ...screenState, review }; computer.redraw(screenState); },
+    // Turns straight to one view: 'left', 'window' or 'right'.
+    face(next) {
+      if (!VIEW_ORDER.includes(next) || next === view) return;
+      view = next;
+      lifted = null;
+      handlers.onView?.(view);
+    },
     // Lines already looked up get a mark on the paper they came from.
     setLookedUp(lines) {
       for (const paper of clickablePapers()) {
