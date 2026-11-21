@@ -6,7 +6,7 @@ export const NOTICES = [
   {
     style: 'typed',
     title: 'STAFF NOTICE',
-    lines: ['Whoever keeps taking the krill from the staff fridge: we know.', 'Please stop.', '- The Management'],
+    lines: ['Whoever keeps taking the fish fingers from the staff fridge: we know.', 'Please stop.', '- The Management'],
   },
   {
     style: 'clipping',

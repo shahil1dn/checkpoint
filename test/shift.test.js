@@ -29,10 +29,12 @@ test('stamping a liar through scores wrong, even though the model never cracked'
   assert.equal(shift.cases.max.history[0].cracked, false);
   shift = R.stamp(shift, 'through').shift;
   shift = R.stamp(shift, 'through').shift;
+  shift = R.stamp(shift, 'through').shift;
   const report = R.shiftReport(shift);
   assert.deepEqual(report.rows.map((r) => [r.id, r.stamp, r.honest, r.correct]), [
     ['max', 'through', false, false],
-    ['colin', 'through', true, true],
+    ['rupert', 'through', true, true],
+    ['pebble', 'through', false, false],
   ]);
   assert.equal(report.correct, 1);
 });
@@ -62,26 +64,16 @@ test('the clock also waits while speech is being turned into words', () => {
   assert.equal(R.tick(R.setHearing(shift, false), 5000).usedMs, 5000);
 });
 
-test('the shift ends when the clock runs out, and nothing more can happen', () => {
-  const shift = R.tick(R.newShift(), R.SHIFT_MS + 5000);
-  assert.equal(shift.phase, 'over');
-  assert.equal(shift.endReason, 'time');
-  assert.equal(R.timeLeftMs(shift), 0);
-  assert.equal(R.startQuestion(shift, 'Hi').error, 'shiftOver');
-  assert.equal(R.stamp(shift, 'away').error, 'shiftOver');
-  const report = R.shiftReport(shift);
-  assert.equal(report.correct, 0);
-  assert.equal(report.rows[0].stamp, null);
-});
-
 test('stamping is allowed before the first question, and the queue moves on', () => {
   const { shift, error } = R.stamp(R.newShift(), 'away');
   assert.equal(error, undefined);
-  assert.equal(R.currentTravellerId(shift), 'colin');
-  const done = R.stamp(shift, 'through').shift;
+  assert.equal(R.currentTravellerId(shift), 'rupert');
+  const done = R.stamp(R.stamp(shift, 'through').shift, 'away').shift;
   assert.equal(done.phase, 'over');
   assert.equal(done.endReason, 'queueEmpty');
-  assert.equal(R.shiftReport(done).correct, 2);
+  assert.equal(R.shiftReport(done).correct, 3);
+  assert.equal(R.startQuestion(done, 'Hi').error, 'shiftOver');
+  assert.equal(R.stamp(done, 'away').error, 'shiftOver');
 });
 
 test('a reply that arrives after the stamp is dropped', () => {
@@ -104,7 +96,7 @@ test("each answer's notes are kept on that traveller's scratchpad", () => {
   const asked = R.startQuestion(R.newShift(), 'Who paid?');
   const shift = R.finishQuestion(asked.shift, asked.request.id, { reply: 'Mistral!', mood: 'happy', cracked: false, notes: ['Says Mistral paid.'] });
   assert.deepEqual(shift.cases.max.notes, ['Says Mistral paid.']);
-  assert.deepEqual(shift.cases.colin.notes, []);
+  assert.deepEqual(shift.cases.rupert.notes, []);
 });
 
 test('a bad verdict is refused', () => {
@@ -149,7 +141,7 @@ test('taking a bribe is recorded by the rules and closes the offer', () => {
   const { shift, error } = R.answerBribe(toMaxsBribe(), true);
   assert.equal(error, undefined);
   assert.equal(shift.cases.max.bribeTaken, true);
-  assert.equal(shift.cases.colin.bribeTaken, false);
+  assert.equal(shift.cases.rupert.bribeTaken, false);
   assert.equal(R.bribeOffer(shift), null);
   assert.equal(R.answerBribe(shift, true).error, 'noBribe');
 });
@@ -179,14 +171,14 @@ test('only the game can record a bribe: a reply cannot mark one as taken', () =>
 });
 
 test('the report names bribes taken and marks the record, without changing right or wrong', () => {
-  const stampBoth = (shift) => R.stamp(R.stamp(shift, 'away').shift, 'through').shift;
-  const clean = R.shiftReport(stampBoth(toMaxsBribe()));
-  const bought = R.shiftReport(stampBoth(R.answerBribe(toMaxsBribe(), true).shift));
+  const stampAll = (shift) => R.stamp(R.stamp(R.stamp(shift, 'away').shift, 'through').shift, 'away').shift;
+  const clean = R.shiftReport(stampAll(toMaxsBribe()));
+  const bought = R.shiftReport(stampAll(R.answerBribe(toMaxsBribe(), true).shift));
   assert.deepEqual([clean.bribesTaken, clean.record], [0, 'clean']);
   assert.deepEqual([bought.bribesTaken, bought.record], [1, 'corrupt']);
-  assert.deepEqual(bought.rows.map((r) => [r.id, r.bribeTaken]), [['max', true], ['colin', false]]);
+  assert.deepEqual(bought.rows.map((r) => [r.id, r.bribeTaken]), [['max', true], ['rupert', false], ['pebble', false]]);
   assert.deepEqual(bought.rows.map((r) => r.correct), clean.rows.map((r) => r.correct));
-  assert.equal(bought.correct, 2);
+  assert.equal(bought.correct, 3);
 });
 
 test('Play again starts with a clean record', () => {

@@ -15,6 +15,7 @@ import { createApp } from '../server/app.js';
 import { browserOnThisMachine } from './find-browser.js';
 
 const OUT_OF_QUESTIONS = 'No questions left. Stamp the papers.';
+const OUT_OF_TIME = 'Time is up for this traveller. Stamp the papers.';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Runs before the page's own scripts: the page's clock runs at real speed,
@@ -27,7 +28,7 @@ const SKIPPABLE_CLOCK = `(() => {
   const realFrame = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = (draw) => realFrame(() => draw(performance.now()));
 })();`;
-const SHIFT_AND_A_BIT_MS = 125000;
+const TRAVELLER_AND_A_BIT_MS = 125000;
 
 // Finds a desk object on screen: hover a grid over the lower screen and keep
 // the middle of the spots whose hover label starts with the given words.
@@ -191,10 +192,19 @@ async function main() {
     seen = await screen();
     check('a 6th question shows the out-of-questions hint', seen.hint === OUT_OF_QUESTIONS && seen.left.includes(' 0 of '), seen);
 
-    await page.evaluate(`window.__skipClock(${SHIFT_AND_A_BIT_MS}); true`);
-    await waitFor(`!document.getElementById('report').hidden`, 10000);
+    await page.evaluate(`window.__skipClock(${TRAVELLER_AND_A_BIT_MS}); true`);
+    await waitFor(`document.getElementById('hint').textContent === ${JSON.stringify(OUT_OF_TIME)}`, 10000);
+    seen = { ...(await screen()), clock: await page.evaluate(`document.getElementById('clock').textContent`) };
+    check("his two minutes run out: the questions stop and the shift waits for a stamp", seen.hint === OUT_OF_TIME && !seen.over && seen.clock === 'Shift 4:00 · Max 0:00', seen);
+    for (let stamped = 0; stamped < 3; stamped += 1) {
+      const name = await page.evaluate(`document.getElementById('traveller-name').textContent`);
+      for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+        await page.send('Input.dispatchMouseEvent', { type, x: stampAt[0], y: stampAt[1], button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
+      }
+      await waitFor(`!document.getElementById('report').hidden || document.getElementById('traveller-name').textContent !== ${JSON.stringify(name)}`, 10000);
+    }
     seen = await screen();
-    check('the shift clock runs out to the report', seen.over, seen);
+    check('stamping all three travellers clears the queue to the report', seen.over, seen);
     const bribes = await page.evaluate(`document.getElementById('bribes').textContent`);
     check('the report names the bribe taken and marks the record', bribes.includes('Max Tokens') && bribes.includes('CORRUPT'), bribes);
 
