@@ -1,27 +1,31 @@
 /* The 3D booth fills the window; overlays sit above it and keep the desk clickable. */
-:root { --ink: #1f2126; --muted: #555b66; --paper: #ffffff; --accent: #e8743b; }
+:root { --ink: #1f2126; --muted: #555b66; --paper: #ffffff; --accent: #e8743b; --form-ink: #293c4b; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #3e4b5e; }
-body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
+body { font: 16px/1.5 "Segoe UI", system-ui, sans-serif; color: var(--ink); }
 #booth canvas { position: fixed; inset: 0; z-index: 0; display: block; }
 [hidden] { display: none !important; }
 
 #topbar {
   position: fixed; top: 12px; left: 12px; right: 12px; z-index: 2;
-  display: flex; justify-content: space-between; align-items: center; gap: 16px; pointer-events: none;
+  display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; pointer-events: none;
 }
-#topbar > * { background: var(--paper); border-radius: 4px; padding: 6px 12px; pointer-events: auto; }
-#shift-info { display: flex; flex-wrap: wrap; gap: 4px 16px; align-items: baseline; }
-#shift-info strong { font-size: 17px; }
-#status { color: var(--muted); font-size: 13px; }
+#topbar > * { pointer-events: auto; background: #fbf8ef; border: 1px solid #a99f8c; border-radius: 4px; box-shadow: 0 3px 0 #1f212633; }
+#shift-info { display: flex; flex-wrap: wrap; align-items: center; max-width: calc(100% - 200px); }
+#shift-info > * { padding: 7px 10px; border-right: 1px solid #cfc5b3; font-size: 14px; font-weight: 600; }
+#shift-info > :last-child { border-right: 0; }
+#shift-info strong { font: bold 19px/1.2 Georgia, serif; color: var(--form-ink); }
+#clock { color: #863d2a; font-variant-numeric: tabular-nums; }
+#last-stamp:empty { display: none; }
+#status { flex: none; padding: 8px 11px; color: #244c38; font-size: 13px; font-weight: 700; }
 
 .card {
   position: fixed; z-index: 3; left: 50%; top: 50%; transform: translate(-50%, -50%);
   width: min(560px, 100% - 32px); max-height: calc(100% - 32px); overflow-y: auto; box-sizing: border-box;
   padding: 20px 24px; background: var(--paper); border-radius: 6px;
 }
-.card h1 { font-size: 28px; margin: 0 0 8px; }
-.card h2 { font-size: 20px; margin: 0 0 8px; }
-.card .small { color: var(--muted); font-size: 14px; }
+.card h1 { font-size: 30px; margin: 0 0 8px; }
+.card h2 { font-size: 24px; margin: 0 0 8px; }
+.card .small { color: var(--muted); font-size: 15px; line-height: 1.5; }
 .card table { width: 100%; border-collapse: collapse; margin: 8px 0; }
 .card th, .card td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid #e3e5e8; }
 .border-form {
@@ -41,28 +45,28 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
 }
 .form-masthead {
   display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px;
-  padding-bottom: 9px; border-bottom: 2px solid var(--ink);
-  font: bold 11px/1.3 "Courier New", monospace;
-  letter-spacing: 0.09em; text-transform: uppercase;
+  padding-bottom: 10px; border-bottom: 2px solid var(--ink);
+  font: bold 12px/1.4 "Cascadia Mono", "Courier New", monospace;
+  letter-spacing: 0.04em; text-transform: uppercase;
 }
-.form-kicker { margin: 20px 0 5px; color: #8a4633; font: bold 13px/1.3 "Courier New", monospace; letter-spacing: 0.11em; text-transform: uppercase; }
-.border-form h1, .border-form h2 { margin: 0 0 12px; font-family: "Courier New", monospace; letter-spacing: -0.04em; }
-.border-form h1 { font-size: clamp(30px, 5vw, 42px); }
-.border-form h2 { font-size: clamp(26px, 4vw, 36px); }
-.form-lead { max-width: 47ch; margin: 0 0 18px; font: 18px/1.45 Georgia, serif; }
+.form-kicker { margin: 20px 0 5px; color: #8a4633; font: bold 14px/1.4 "Cascadia Mono", "Courier New", monospace; letter-spacing: 0.07em; text-transform: uppercase; }
+.border-form h1, .border-form h2 { margin: 0 0 14px; font-family: Georgia, "Palatino Linotype", serif; letter-spacing: -0.025em; line-height: 1.1; color: var(--form-ink); }
+.border-form h1 { font-size: clamp(36px, 5vw, 48px); }
+.border-form h2 { font-size: clamp(30px, 4vw, 40px); }
+.form-lead { max-width: 47ch; margin: 0 0 18px; font-size: 18px; line-height: 1.55; }
 .procedure { margin: 0 0 15px; padding: 10px 0; list-style: none; counter-reset: step; border-top: 1px solid #a99f8c; border-bottom: 1px solid #a99f8c; }
-.procedure li { display: flex; gap: 12px; align-items: baseline; padding: 5px 0; }
-.procedure li::before { counter-increment: step; content: counter(step, decimal-leading-zero); color: #8a4633; font: bold 13px "Courier New", monospace; }
-.border-form .small { margin: 0 0 22px; color: #4d4b47; }
+.procedure li { display: flex; gap: 12px; align-items: baseline; padding: 6px 0; font-size: 16px; }
+.procedure li::before { counter-increment: step; content: counter(step, decimal-leading-zero); color: #8a4633; font: bold 14px "Cascadia Mono", "Courier New", monospace; }
+.border-form .small { margin: 0 0 22px; color: #4d4b47; font-size: 15px; }
 .form-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding-top: 15px; border-top: 2px solid var(--ink); }
-.form-footer > span { color: #645d52; font: bold 11px "Courier New", monospace; letter-spacing: 0.08em; text-transform: uppercase; }
-.border-form button { background: #293c4b; border-bottom: 3px solid #15232b; }
+.form-footer > span { color: #645d52; font: bold 12px/1.4 "Cascadia Mono", "Courier New", monospace; letter-spacing: 0.04em; text-transform: uppercase; }
+.border-form button { background: var(--form-ink); border-bottom: 3px solid #15232b; }
 #report { width: min(820px, calc(100% - 32px)); }
-#end-reason { margin: 0 0 18px; color: #4d4b47; }
+#end-reason { margin: 0 0 18px; color: #4d4b47; font-size: 16px; }
 .report-table-wrap { background: #fbf8ef; border: 1px solid #b9ac96; }
 #report table { margin: 0; table-layout: fixed; }
-#report th { color: #5f594f; font: bold 12px/1.3 "Courier New", monospace; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid var(--ink); }
-#report td { padding: 11px 8px; border-bottom: 1px solid #cfc5b3; overflow-wrap: anywhere; }
+#report th { color: #5f594f; font: bold 13px/1.4 "Cascadia Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: 0.02em; border-bottom: 2px solid var(--ink); }
+#report td { padding: 11px 8px; border-bottom: 1px solid #cfc5b3; overflow-wrap: anywhere; font-size: 15px; line-height: 1.5; }
 #report th:nth-child(1), #report td:nth-child(1) { width: 16%; font-weight: 700; }
 #report th:nth-child(2), #report td:nth-child(2) { width: 16%; }
 #report th:nth-child(3), #report td:nth-child(3) { width: 56%; }
@@ -70,12 +74,13 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
 #report tr:last-child td { border-bottom: 0; }
 #report tr[data-result="right"] td:last-child { color: #276d42; font-weight: 800; }
 #report tr[data-result="wrong"] td:last-child { color: #9a332c; font-weight: 800; }
-#score { margin: 0; font: bold 16px/1.3 "Courier New", monospace; }
+#score { margin: 0; font: bold 18px/1.3 Georgia, serif; color: var(--form-ink); }
 @media (max-width: 640px) {
   .border-form { padding: 22px 20px 24px 38px; }
   .border-form::before { left: 8px; }
   #report thead { display: none; }
   #report table, #report tbody, #report tr, #report td { display: block; width: auto; }
+  #report td:nth-child(n) { width: auto; }
   #report tr { padding: 12px; border-bottom: 1px solid #b9ac96; }
   #report tr:last-child { border-bottom: 0; }
   #report td { display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 8px; padding: 5px 0; border: 0; }
@@ -93,21 +98,25 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
 /* Subtitles: big and high-contrast, because the pitch room will be loud. They
    stack just above the toolbar, on the strip of desk the camera keeps clear. */
 #captions { flex-basis: 100%; order: -1; text-align: center; pointer-events: none; }
-#captions p { margin: 4px auto; padding: 6px 14px; border-radius: 4px; width: fit-content; max-width: min(900px, 100%); box-sizing: border-box; }
-#you-said { background: var(--paper); color: var(--muted); font-size: 16px; }
-#subtitle { background: var(--ink); color: #ffffff; font-size: 22px; line-height: 1.35; }
+#captions p { margin: 4px auto; padding: 7px 14px; border-radius: 5px; width: fit-content; max-width: min(900px, 100%); box-sizing: border-box; }
+#you-said { background: #fbf8ef; color: #343b43; font-size: 16px; font-weight: 600; }
+#subtitle { background: var(--ink); color: #ffffff; font-size: clamp(18px, 2.2vw, 22px); line-height: 1.4; }
 #subtitle:empty { display: none; }
 
 #controls {
   position: fixed; z-index: 2; left: 12px; right: 12px; bottom: 12px;
-  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 8px; pointer-events: none;
+  display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 10px; pointer-events: none;
 }
-#ask-form, #tools { pointer-events: auto; }
+#ask-form, #tools {
+  pointer-events: auto; padding: 8px 10px 10px; border: 1px solid #a99f8c;
+  border-radius: 6px; background: #fbf8efee; box-shadow: 0 4px 0 #1f212633;
+}
+.control-label { display: block; color: #5e574c; font: bold 12px/1.4 "Cascadia Mono", "Courier New", monospace; letter-spacing: 0.06em; text-transform: uppercase; }
 /* Hints and hover tips sit on the desk, so they need their own dark backing. */
 #lines { flex-basis: 100%; order: -2; text-align: center; pointer-events: none; }
 #lines p {
   margin: 4px auto; padding: 4px 12px; border-radius: 4px; width: fit-content; max-width: min(900px, 100%); box-sizing: border-box;
-  background: var(--ink); color: #ffffff; font-size: 16px; font-weight: 600;
+  background: var(--ink); color: #ffffff; font-size: 15px; font-weight: 650;
 }
 #lines p:empty { display: none; }
 #hint[data-mode="listening"] { background: #6f211e; }
@@ -126,14 +135,40 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
 @media (prefers-reduced-motion: reduce) {
   #hint[data-mode="listening"]::before, #hint[data-mode="thinking"]::after, #hint[data-mode="transcribing"]::after { animation: none; }
 }
-#ask-form { display: flex; gap: 6px; }
-#tools { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
+#ask-form { display: flex; flex-direction: column; gap: 5px; width: min(360px, 100%); box-sizing: border-box; }
+#tools { display: flex; flex-direction: column; gap: 5px; margin-left: auto; }
+.question-row, .tool-row { display: flex; align-items: center; gap: 6px; }
+.tool-row { flex-wrap: wrap; }
 
 button {
-  min-height: 36px; padding: 6px 14px;
-  font: 600 15px/1 system-ui, sans-serif;
+  min-height: 44px; padding: 8px 12px;
+  font: 700 15px/1.2 "Segoe UI", system-ui, sans-serif;
   color: #ffffff; background: var(--ink); border: 0; border-radius: 4px; cursor: pointer;
 }
 button:disabled { background: #8a8f98; cursor: default; }
+button:not(:disabled):hover { filter: brightness(1.1); }
 button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-#question { min-height: 36px; box-sizing: border-box; padding: 4px 10px; font: 15px system-ui, sans-serif; width: min(320px, 50vw); border: 1px solid #c4c8cf; border-radius: 4px; }
+#question { min-width: 0; min-height: 44px; flex: 1; box-sizing: border-box; padding: 7px 11px; font: 16px "Segoe UI", system-ui, sans-serif; border: 1px solid #8f938f; border-radius: 4px; background: #ffffff; }
+#ask { background: #a24e2a; }
+#talk { background: var(--form-ink); }
+#show-papers, #show-notes { background: #e7dfcf; color: var(--ink); border: 1px solid #a99f8c; }
+#stamp-through { background: #2f704b; }
+#stamp-away { background: #9c4038; }
+#tools button:disabled, #ask:disabled { background: #8a8f98; color: #ffffff; border-color: #8a8f98; }
+@media (max-width: 1100px) {
+  #controls { flex-direction: column; align-items: stretch; }
+  #captions, #lines { flex-basis: auto; width: 100%; }
+  #ask-form, #tools { width: auto; margin-left: 0; }
+  .tool-row button { flex: 1 1 auto; }
+}
+@media (max-width: 640px) {
+  #topbar { top: 8px; left: 8px; right: 8px; flex-wrap: wrap; }
+  #shift-info { max-width: 100%; width: 100%; }
+  #shift-info > * { padding: 5px 7px; font-size: 12px; }
+  #shift-info strong { font-size: 16px; }
+  #status { margin-left: auto; padding: 4px 7px; font-size: 11px; }
+  #controls { left: 8px; right: 8px; bottom: 8px; gap: 6px; }
+  #ask-form, #tools { padding: 6px 8px 8px; }
+  .tool-row button { flex: 1 1 130px; }
+  #lines p { font-size: 14px; }
+}

@@ -20,7 +20,7 @@
       <span id="clock"></span>
       <span id="last-stamp"></span>
     </div>
-    <span id="status">Connecting…</span>
+    <span id="status" role="status">Connecting…</span>
   </header>
 
   <section id="start-screen" class="card border-form">
@@ -54,15 +54,21 @@
       <p id="subtitle"></p>
     </div>
     <form id="ask-form">
-      <input id="question" type="text" maxlength="300" autocomplete="off" placeholder="Or type a question" aria-label="Type a question">
-      <button id="ask" type="submit">Ask</button>
+      <label class="control-label" for="question">Ask the traveller</label>
+      <div class="question-row">
+        <input id="question" type="text" maxlength="300" autocomplete="off" placeholder="Type your question">
+        <button id="ask" type="submit">Ask</button>
+      </div>
     </form>
     <nav id="tools" aria-label="Desk tools">
-      <button id="talk" type="button">Hold to talk</button>
-      <button id="show-papers" type="button">Papers (P)</button>
-      <button id="show-notes" type="button">Scratchpad (N)</button>
-      <button id="stamp-through" type="button">Stamp: through</button>
-      <button id="stamp-away" type="button">Stamp: turned away</button>
+      <span class="control-label" aria-hidden="true">Desk tools</span>
+      <div class="tool-row">
+        <button id="talk" type="button">Hold to talk</button>
+        <button id="show-papers" type="button">Papers (P)</button>
+        <button id="show-notes" type="button">Scratchpad (N)</button>
+        <button id="stamp-through" type="button">Stamp: through</button>
+        <button id="stamp-away" type="button">Stamp: turned away</button>
+      </div>
     </nav>
   </div>
 
