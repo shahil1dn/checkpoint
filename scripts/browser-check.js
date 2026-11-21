@@ -128,7 +128,9 @@ async function main() {
   const server = http.createServer(handle);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const work = await mkdtemp(path.join(tmpdir(), 'checkpoint-browser-check-'));
-  const chrome = spawn(browser, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${work}`, '--window-size=1280,800', 'about:blank'], { stdio: 'ignore' });
+  // Muted: new-style headless Chrome plays sound through the Mac's speakers,
+  // so every check run beeped (stamps, the "next, please" bell) over real use.
+  const chrome = spawn(browser, ['--headless=new', '--mute-audio', '--remote-debugging-port=0', `--user-data-dir=${work}`, '--window-size=1280,800', 'about:blank'], { stdio: 'ignore' });
   const failures = [];
   try {
     const page = await openPage(await devtoolsPort(work), `http://127.0.0.1:${server.address().port}/`);
