@@ -188,8 +188,9 @@ export function finishQuestion(shift, requestId, reply) {
 // took it is the game's fact too, kept like the truth (ADR-2), and it never
 // changes whether a stamp was right.
 
-// What can sit on the window ledge; public/booth.js draws each one.
-export const BRIBE_ITEMS = ['croissant', 'cheese', 'sticker'];
+// What can sit on the window ledge, and the words the hints use for it.
+// public/booth.js draws each one: a new item needs a drawing there too.
+export const BRIBE_ITEMS = { croissant: 'croissant', cheese: 'wedge of cheese', sticker: 'sticker' };
 
 // The offer on the ledge, until the inspector takes it or stamps.
 export function bribeOffer(shift) {

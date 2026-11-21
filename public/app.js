@@ -45,7 +45,6 @@ const TOOL_TIPS = {
   'stamp-away': 'Stamp: turn them away',
 };
 const STAMP_WORDS = { through: 'Through', away: 'Turned away' };
-const ITEM_WORDS = { croissant: 'croissant', cheese: 'wedge of cheese', sticker: 'sticker' };
 const END_REASONS = { queueEmpty: 'Queue cleared.', time: "Time's up. Anyone not stamped counts as wrong." };
 
 const hint = (text) => { $('hint').textContent = text; };
@@ -222,7 +221,7 @@ async function hearPlea() {
   const { shift: offered, offer } = R.stamp(shift, 'away');
   shift = offered;
   const name = getTraveller(offer.travellerId).name;
-  hint(`${name} offers a ${ITEM_WORDS[offer.item]}. Take it (B), or stamp TURNED AWAY.`);
+  hint(`${name} offers a ${R.BRIBE_ITEMS[offer.item]}. Take it (B), or stamp TURNED AWAY.`);
   booth?.setMood(offer.mood);
   render();
   const endPlea = () => { shift = R.setPleading(shift, false); };
@@ -239,7 +238,7 @@ async function pocketBribe() {
   if (!started || stampingNow || !offer) return;
   booth?.setBribe(null);
   if (await bringStampDown('through', R.takeBribe)) {
-    hint(`You pocket the ${ITEM_WORDS[offer.item]} and stamp ${getTraveller(offer.travellerId).name} THROUGH. That goes on your record.`);
+    hint(`You pocket the ${R.BRIBE_ITEMS[offer.item]} and stamp ${getTraveller(offer.travellerId).name} THROUGH. That goes on your record.`);
   }
 }
 
