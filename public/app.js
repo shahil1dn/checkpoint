@@ -15,6 +15,11 @@ let shift = R.newShift();
 let started = false;
 let live = false;
 let voice = null;
+// His newest line while it types out on the transcript, like a typewriter, in step
+// with his voice: { id: traveller, text, shown: characters so far, cps: null until
+// his voice starts }. null once the line is complete.
+let typing = null;
+const TYPE_CPS = 30;   // with no voice to follow: characters a second
 let models = null;      // which Mistral model does which job, from /api/health
 const callLog = [];     // the lines on the inspector's computer
 let stampingNow = false;
@@ -205,6 +210,14 @@ function playVoice(base64Mp3, speechMs, onDone = () => {}) {
   stopVoice();
   const clip = new Audio(`data:audio/mpeg;base64,${base64Mp3}`);
   voice = clip;
+  // The line this clip speaks types out as it plays, and is complete the moment
+  // the clip ends or is cut off. A clip that can't play types at the fixed pace.
+  const line = typing;
+  clip.addEventListener('playing', () => {
+    if (typing === line) startTyping(clip.duration > 0 && Number.isFinite(clip.duration) ? line.text.length / clip.duration : TYPE_CPS);
+  }, { once: true });
+  clip.addEventListener('error', () => { if (typing === line) startTyping(TYPE_CPS); }, { once: true });
+  for (const stopped of ['ended', 'pause']) clip.addEventListener(stopped, () => { if (typing === line) finishTyping(); });
   if (speechMs !== undefined) {
     clip.addEventListener('loadedmetadata', () => logCall(lineForSpeech(clip.duration, speechMs, models)), { once: true });
   }
@@ -212,10 +225,33 @@ function playVoice(base64Mp3, speechMs, onDone = () => {}) {
   for (const stopped of ['ended', 'pause', 'error']) clip.addEventListener(stopped, onDone);
   setSpeaking(true);
   clip.play().catch(() => {
+    if (typing === line) startTyping(TYPE_CPS);
     setSpeaking(false);
     hint(HINTS.blocked);
     onDone();
   });
+}
+
+// The line starts hidden; startTyping lets it begin, at cps characters a second.
+function typeOut(id, text) { typing = { id, text, shown: 0, cps: null }; }
+function startTyping(cps) { if (typing && typing.cps === null) typing.cps = cps; }
+// Whatever interrupts it (the next question, a stamp, a new traveller, his voice
+// cut off) leaves the whole line on the paper, never half of it.
+function finishTyping() {
+  if (!typing) return;
+  typing = null;
+  repaintTranscript();
+}
+function advanceTyping(seconds) {
+  if (typing.id !== R.currentTravellerId(shift) || shift.phase === 'over') { typing = null; return; }
+  const before = Math.floor(typing.shown);
+  typing.shown += seconds * typing.cps;
+  if (typing.shown >= typing.text.length) typing = null;
+  if (!typing || Math.floor(typing.shown) !== before) repaintTranscript();
+}
+function repaintTranscript() {
+  const id = R.currentTravellerId(shift);
+  if (started && id && shift.phase !== 'over') renderTranscript(getTraveller(id));
 }
 
 function stopVoice() {
@@ -237,6 +273,7 @@ async function askQuestion(text, { typed = false } = {}) {
   const asked = R.startQuestion(shift, text);
   if (asked.error) return hint(HINTS[asked.error]);
   shift = asked.shift;
+  finishTyping();
   if (typed && live) logCall(lineForTyped(asked.request.question));
   const traveller = getTraveller(asked.request.travellerId);
   hint(`${traveller.name} is thinking`);
@@ -254,7 +291,10 @@ async function askQuestion(text, { typed = false } = {}) {
   else if (reply.fallback) hint(`${traveller.name}: "${reply.reply}" (that question wasn't counted)`);
   else hint('');
   if (reply) booth?.setMood(reply.mood);
+  // A counted answer prints as he says it; the "say that again" fallback is never on paper.
+  if (reply && !reply.fallback) typeOut(traveller.id, spokenLine(shift.cases[traveller.id].history.at(-1)));
   if (reply?.audio) playVoice(reply.audio, reply.timings?.speechMs);
+  else startTyping(TYPE_CPS);
   render();
 }
 
@@ -330,13 +370,15 @@ async function hearPlea() {
   const name = getTraveller(offer.travellerId).name;
   hint(`${name} offers a ${R.BRIBE_ITEMS[offer.item]}. Take it (B), or stamp TURNED AWAY.`);
   booth?.setMood(offer.mood);
+  finishTyping();   // his last answer is whole on the paper before the plea starts
+  typeOut(offer.travellerId, offer.line);
   render();
   const endPlea = () => { shift = R.setPleading(shift, false); };
   const plea = live ? await fetchPlea(offer.travellerId) : null;
   // Stamped or paid while his voice was being made: he says nothing.
-  if (!R.bribeOffer(shift)) return endPlea();
+  if (!R.bribeOffer(shift)) { finishTyping(); return endPlea(); }
   if (plea?.audio) playVoice(plea.audio, plea.speechMs, endPlea);
-  else endPlea();
+  else { startTyping(TYPE_CPS); endPlea(); }
 }
 
 // Pocketing it lets him through: the THROUGH stamp comes down, and it goes on your record.
@@ -436,17 +478,27 @@ function renderFallbackPanel(traveller) {
 // lines keep the last question and answer as text: on screen only without
 // 3D, and always there for screen readers. No mood label: mood comes through
 // the voice and the face, never as text.
+const spokenLine = (turn) => `${turn.reply}${turn.cracked ? ' [He cracked!]' : ''}`;
+// How much of a line is on the paper: all of it, unless it is his newest and still typing.
+const typedPart = (id, text) => (typing && typing.id === id && typing.text === text ? text.slice(0, Math.floor(typing.shown)) : text);
+
 function renderTranscript(traveller) {
   const { history } = shift.cases[traveller.id];
-  const lines = history.flatMap((turn) => [
-    { who: 'You', text: turn.question },
-    // His exact words, so a click can look them up (ADR-12).
-    { who: traveller.name, text: `${turn.reply}${turn.cracked ? ' [He cracked!]' : ''}`, lookup: turn.reply },
-  ]);
+  const lines = history.flatMap((turn, i) => {
+    const text = i === history.length - 1 ? typedPart(traveller.id, spokenLine(turn)) : spokenLine(turn);
+    return [
+      { who: 'You', text: turn.question },
+      // His exact words, so a click can look them up (ADR-12), once they are all typed.
+      ...(text ? [{ who: traveller.name, text, ...(text === spokenLine(turn) ? { lookup: turn.reply } : {}) }] : []),
+    ];
+  });
   // While he thinks, only your question is printed: the printer never overprints a line.
   if (shift.pending) lines.push({ who: 'You', text: shift.pending.question });
   const offer = R.bribeOffer(shift);
-  if (offer) lines.push({ who: traveller.name, text: offer.line });
+  const pleaTyped = offer ? typedPart(traveller.id, offer.line) : '';
+  if (pleaTyped) lines.push({ who: traveller.name, text: pleaTyped });
+  // What is on the paper of his newest line, for the browser check.
+  $('subtitle').dataset.typed = pleaTyped || (history.length ? typedPart(traveller.id, spokenLine(history.at(-1))) : '');
   booth?.setTranscript(traveller.name, lines);
 }
 
@@ -575,6 +627,7 @@ function frame(now) {
     cursorOn = blink;
     renderTerminal();
   }
+  if (typing && typing.cps !== null) advanceTyping((now - lastFrame) / 1000);
   lastFrame = now;
   requestAnimationFrame(frame);
 }

@@ -215,6 +215,15 @@ async function main() {
     const afterTurning = await page.evaluate(`document.getElementById('hint').textContent`);
     check('opening the case folder and clicking a line on his visa looks it up, and a hint says when the report is ready', Boolean(sponsorAt) && looked.left === 'Lookups left: 2 of 3' && looked.hint.startsWith('The records report is ready') && afterTurning === '', { sponsorAt, ...looked, afterTurning });
     await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight', bubbles: true })); true`);
+    // The turn back eases a little each frame, so on a busy machine it takes seconds:
+    // wait until the TURNED AWAY stamp is back under its spot, or a press lands on a turning view.
+    await waitFor(`(() => {
+      const canvas = document.querySelector('#booth canvas');
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: ${awayAt[0]}, clientY: ${awayAt[1]}, bubbles: true }));
+      const back = document.getElementById('tool-tip').textContent.startsWith('Stamp: turn them away');
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 0, bubbles: true }));
+      return back;
+    })()`, 10000);
     // A line he never said, sent straight to the server, is refused and costs nothing.
     const refusedLine = await page.evaluate(`fetch('/api/lookup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ travellerId: 'max', line: 'Is he a spy for a rival lab?', earlier: [] }) })
       .then(async (res) => ({ status: res.status, error: (await res.json()).error, left: document.getElementById('lookups-left').textContent }))`);
@@ -228,6 +237,14 @@ async function main() {
     await waitFor(`document.getElementById('questions-left').textContent.includes(' 4 of ')`, 5000);
     seen = await screen();
     check('a typed question is asked with Enter', seen.left.includes(' 4 of '), seen);
+    // Shahil 16:00: his words type out on the transcript like a typewriter, not all at once before he speaks.
+    // Offline there is no voice, so it types at a fixed pace; the page says how much is on the paper.
+    await waitFor(`document.getElementById('subtitle').textContent.startsWith(${JSON.stringify(`${FIRST.name}: `)})`, 5000);
+    const justArrived = await page.evaluate(`({ said: document.getElementById('subtitle').textContent, typed: document.getElementById('subtitle').dataset.typed ?? '' })`);
+    const fullLine = justArrived.said.slice(`${FIRST.name}: `.length);
+    check('his reply is not all on the transcript the moment it arrives', fullLine.length > 0 && justArrived.typed.length < fullLine.length, justArrived);
+    const typedOut = await waitFor(`document.getElementById('subtitle').dataset.typed === ${JSON.stringify(fullLine)}`, 8000);
+    check('his reply then types out to the whole line', typedOut, { fullLine });
     for (let i = 2; i <= 5; i += 1) {
       await ask(`Question ${i}?`);
       await waitFor(`document.getElementById('questions-left').textContent.includes(' ${5 - i} of ')`, 5000);

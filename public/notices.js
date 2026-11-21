@@ -5,18 +5,18 @@
 export const NOTICES = [
   {
     style: 'typed',
-    title: 'STAFF NOTICE',
-    lines: ['Whoever keeps taking the fish fingers from the staff fridge: we know.', 'Please stop.', '- The Management'],
+    title: 'SHIFT REMINDER',
+    lines: ['A good question opens doors.', 'A steady hand stamps them.'],
   },
   {
     style: 'clipping',
-    title: 'RIVAL LAB BULLETIN',
-    lines: ['"Our new model is 4% better at something."', 'Details to follow. Probably.'],
+    title: 'KEEP GOING',
+    lines: ['One penguin at a time.', "You've got this, inspector."],
   },
   {
     style: 'sticky',
-    title: 'LOST',
-    lines: ['One left mitten.', 'Answers to "Mitten".'],
+    title: 'BREAK ROOM',
+    lines: ['The office plant is on leave.', 'Please water the rock.'],
   },
   {
     style: 'typed',
@@ -24,12 +24,18 @@ export const NOTICES = [
     lines: ['The seal. Again.'],
     picture: 'seal',
   },
+  {
+    style: 'sticky',
+    compact: true,
+    title: 'JOKE',
+    lines: ['Q: Why did the stapler apply for a job?', 'A: It wanted to hold things together.'],
+  },
 ];
 
 // The empty spot kept on the board for the judge's rule card (SPEC stretch 11).
 export const RULE_SPOT = "TODAY'S RULE";
 
-export const FORM_TITLE = 'FORM 12: FISH DECLARATION';
+export const FORM_TITLE = 'FORM 12: KRILL DECLARATION';
 export const TIN_LABEL = 'SARDINES';
 
 export const ALL_WORDS = [

@@ -120,7 +120,8 @@ and there's no walking.
   It's for flavour, and it shows the judges what Mistral is doing.
 - **Right: funny stuff and paperwork:** in-world joke props and a pile of forms (a staff notice
   board, a "rival lab" bulletin, a sardine-tin pen pot, a mug). Flavour only: nothing on it
-  gives away who's lying. Stretch item 11's rule card would be pinned here.
+  gives away who's lying, except the KRILL DECLARATION form, a deliberate small hint at Granny
+  (Shahil, 21 Nov 16:24). Stretch item 11's rule card would be pinned here.
 
 **The records terminal (Shahil, 15:05).** The left computer becomes a working records terminal.
 The demo is now 5 minutes, and this is what makes it intriguing: the AI reads at machine speed,
