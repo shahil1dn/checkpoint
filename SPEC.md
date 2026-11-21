@@ -29,8 +29,10 @@ traveller is a Mistral superfan, so a room of Mistral judges can catch him out w
 
 ## In scope
 
-1. **The queue.** A shift is a fixed list of travellers. Demo shift: the Mistral superfan, then
-   one more.
+1. **The queue.** A shift is a fixed list of travellers. Demo shift (Shahil, 15:25): Max Tokens
+   the Mistral superfan (lying), Rupert Ashworth-Hale the London finance bro (honest, but sounds
+   shady: the red herring), then Granny Pebble from the Fang Street cast (lying: 40 kg of krill
+   in her handbag). Colin Stilton stays in `src/travellers/`, out of the queue.
 2. **Papers.** Each traveller's documents appear on the desk as on-screen cards (name, origin,
    occupation, purpose of visit, and so on). Some details on a liar's papers contradict his story.
 3. **Asking by voice.** Hold Space (or a button) to talk, let go to send. The page records the
@@ -46,9 +48,11 @@ traveller is a Mistral superfan, so a room of Mistral judges can catch him out w
    `src/travellers.js` before the shift starts. The model is told it and plays the part, but it
    never decides it. The score compares the player's stamp with that stored truth, in
    `src/rules.js`.
-7. **Pressure.** At most 5 questions per traveller. A shift clock (starting value 2 minutes)
-   that pauses while waiting for Mistral, so a slow connection never costs the player time.
-   The shift ends when the queue is empty or the clock runs out.
+7. **Pressure.** At most 5 questions per traveller, and 2 minutes each (Shahil, 15:25): a
+   three-traveller shift is 6 minutes, and the shift clock shows the total. Each traveller's
+   clock pauses while Mistral is thinking or speaking, so a slow connection never costs the
+   player time. When his 2 minutes run out, no more questions: the inspector must stamp.
+   Stamping early doesn't pass his spare time on. The shift ends when the queue is empty.
 8. **Stamping.** Two buttons: through, or turned away. Allowed at any time, even before the first question.
 9. **End of shift.** A report: each traveller, your stamp, the truth, and right or wrong.
 10. **The Mistral superfan.** Voiced by Paul. Proposed truth: he's really a spy from an unnamed
@@ -100,7 +104,7 @@ and there's no walking.
   own look, with nothing drawn from any existing game. Where the checkpoint stands is still open
   (S7), so the booth stays plain until then.
 - Everything that already works must keep working: the shift clock, question limit, scoring,
-  scratchpad, `npm test` and A6, and the demo still under 2 minutes.
+  scratchpad, `npm test` and A6, and the demo still under 5 minutes.
 
 **Looking around the booth (Shahil, 13:28).**
 - **Better framing at the window.** The camera sits at the traveller's eye level, so it feels
@@ -195,7 +199,7 @@ but only the player hears the lie.
   parts, and give `max_tokens` room for the thinking. This matters for stretch item 12 only.
 - Code is written by Claude Code, one slice at a time. Mistral is the product's AI and voice
   layer only.
-- Times: feature freeze 17:15, submitted by 17:50. The demo must run in under 2 minutes.
+- Times: feature freeze 17:15, submitted by 17:50. The demo slot is 5 minutes (Shahil, 15:00).
 
 ## Acceptance criteria
 
@@ -211,7 +215,7 @@ Each line names a check that can fail.
 | A6 | The key never reaches the browser | `npm test`: fetch every static file and API response from a test server with a fake key set; none contains it. Plus `./check.sh` step 1 |
 | A7 | The real traveller replies in time and in shape | `npm run live-check`: 3 scripted questions to the superfan; every reply parses, `mood` is on the list, and each round trip (reply plus speech) is under 3 s. The output is saved to `docs/live-check/` |
 | A8 | A clip recorded in the browser transcribes | Live check: a webm clip saved from the page's recorder comes back as text containing the words spoken |
-| A9 | The whole demo fits | A timed run of the demo shift (superfan plus one more), start to end-of-shift report, under 2 minutes. Proof: the screen recording with its timestamp |
+| A9 | The whole demo fits | A timed run of the demo shift (Max, Rupert, Granny Pebble), start to end-of-shift report, under 5 minutes (`npm run rehearse`). Proof: the screen recording with its timestamp |
 | A11 | The note-taker never sees the secret | `npm test`: with an injected fake fetch, the note-taker's request contains the papers and the conversation, and contains neither the traveller's prompt nor his truth or secret |
 | A12 | Notes never give a verdict | `npm test`: notes containing "lie", "liar", "lying", "truth", "honest", "suspicious", "guilty", "innocent", "✓" or "✗" are refused, and so are a 3rd note in one turn or a note over 120 characters. Live check: no refused notes across 3 runs of each traveller |
 | A13 | The notes catch a real mismatch | Live check: when Max is asked who paid for his ticket, the notes point out the clash with "Ticket sponsored by: Frontier Horizon Labs" in at least 2 of 3 runs |
