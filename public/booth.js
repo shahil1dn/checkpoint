@@ -11,7 +11,7 @@ import { FORM_TITLE, NOTICES, RULE_SPOT, TIN_LABEL } from '/notices.js';
 import { getTraveller } from '/src/travellers/index.js';
 
 const COLORS = {
-  booth: '#8fb3a8', inside: '#c9d6d0', floor: '#7d8a8f', frame: '#e8e2d4', desk: '#a8794f', deskTop: '#c8955f',
+  booth: '#8fb3a8', inside: '#c9d6d0', floor: '#7d8a8f', frame: '#e8e2d4', desk: '#754a32', deskTop: '#a86e45',
   paper: '#f4efe2', cover: '#3f6e8c', micBody: '#343845', micGrille: '#5a5f6b', wood: '#8c6448',
   through: '#3f8f5a', away: '#c0453a', live: '#d8433a', off: '#6b6f78',
 };
@@ -145,9 +145,9 @@ function deskWood() {
   for (let plank = 0; plank < 4; plank += 1) {
     const y = plank * board;
     const wash = g.createLinearGradient(0, y, 0, y + board);
-    wash.addColorStop(0, plank % 2 ? '#ae784b' : '#bb8757');
-    wash.addColorStop(0.5, plank % 2 ? '#b78253' : '#c18c5c');
-    wash.addColorStop(1, plank % 2 ? '#a97348' : '#b17b4f');
+    wash.addColorStop(0, plank % 2 ? '#865236' : '#9c6240');
+    wash.addColorStop(0.5, plank % 2 ? '#a3663f' : '#b87748');
+    wash.addColorStop(1, plank % 2 ? '#7e4d34' : '#995e3c');
     g.fillStyle = wash; g.fillRect(0, y, canvas.width, board);
     for (let line = 0; line < 25; line += 1) {
       const start = y + ((line * 47 + plank * 29) % board);
@@ -158,13 +158,13 @@ function deskWood() {
         if (x === 0) g.moveTo(x, start + bend + drift);
         else g.lineTo(x, start + bend + drift);
       }
-      g.strokeStyle = line % 4 ? '#6e482b27' : '#f7d4a33b';
+      g.strokeStyle = line % 4 ? '#4328174d' : '#e9b68452';
       g.lineWidth = line % 5 ? 1 : 2;
       g.stroke();
     }
     if (plank) {
-      g.fillStyle = '#5f3d2670'; g.fillRect(0, y - 2, canvas.width, 3);
-      g.fillStyle = '#f0bf8659'; g.fillRect(0, y + 1, canvas.width, 2);
+      g.fillStyle = '#442b1e91'; g.fillRect(0, y - 2, canvas.width, 3);
+      g.fillStyle = '#dca57870'; g.fillRect(0, y + 1, canvas.width, 2);
     }
   }
   const texture = new THREE.CanvasTexture(canvas);
@@ -184,10 +184,10 @@ function buildRoom(group) {
   part(box(half * 2 + 0.16, 0.08, 0.24), frame, group, [0, top, 0]);
   for (const s of [-1, 1]) part(box(0.08, top - SILL, 0.24), frame, group, [s * half, (SILL + top) / 2, 0]);
   part(box(3.4, 0.1, 1.4, 0.04), deskWood(), group, [0, SILL - 0.05, 0.75]);
-  part(box(3.3, SILL - 0.1, 1.3, 0.04), mat('#805636'), group, [0, (SILL - 0.1) / 2, 0.75]);
+  part(box(3.3, SILL - 0.1, 1.3, 0.04), mat(COLORS.desk), group, [0, (SILL - 0.1) / 2, 0.75]);
   // Fine inlay and a dark lower edge give the broad desk a readable silhouette.
   part(box(3.26, 0.012, 0.012, 0.004), mat(BRASS), group, [0, SILL - 0.019, 1.435], undefined, undefined, false);
-  part(box(3.25, 0.035, 0.025, 0.006), mat('#62432e'), group, [0, SILL - 0.09, 1.41], undefined, undefined, false);
+  part(box(3.25, 0.035, 0.025, 0.006), mat('#533322'), group, [0, SILL - 0.09, 1.41], undefined, undefined, false);
   // The inside of the booth, for turning to the left and right walls.
   for (const s of [-1, 1]) part(box(0.16, 3.4, BOOTH_DEPTH), mat(COLORS.inside), group, [s * SIDE_WALL_X, 1.7, BOOTH_DEPTH / 2]);
   part(box(SIDE_WALL_X * 2, 0.1, BOOTH_DEPTH), mat(COLORS.floor), group, [0, -0.05, BOOTH_DEPTH / 2]);
