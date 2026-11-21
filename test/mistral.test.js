@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { describeError, makeMistralAsker, makeMistralHearer, makeMistralNoteTaker, makeMistralSpeaker } from '../server/mistral.js';
 import { buildMessages } from '../server/prompt.js';
-import { getTraveller } from '../src/travellers.js';
+import { getTraveller } from '../src/travellers/index.js';
 
 const FAKE_KEY = 'test-key-must-not-leak';
 const max = getTraveller('max');

@@ -1,7 +1,7 @@
 // Screen code only. Every rule (limits, clock, stamps, score) is decided by
 // /src/rules.js; this file shows the shift and talks to our server.
 import * as R from '/src/rules.js';
-import { getTraveller } from '/src/travellers.js';
+import { getTraveller } from '/src/travellers/index.js';
 import { mockReply } from '/src/mockBrain.js';
 import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
 import { createBooth } from '/booth.js';

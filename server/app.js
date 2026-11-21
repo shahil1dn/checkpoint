@@ -4,7 +4,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FALLBACK_LINE, checkNotes, cleanTranscript, judgeReply, parseReply, validateAskRequest } from '../src/rules.js';
-import { getTraveller, voiceFor } from '../src/travellers.js';
+import { getTraveller, voiceFor } from '../src/travellers/index.js';
 import { AUDIO_TYPES } from './mistral.js';
 import { EARLY_CONFESSION_NUDGE } from './prompt.js';
 

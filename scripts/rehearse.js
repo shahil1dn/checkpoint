@@ -10,9 +10,9 @@ import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { browserOnThisMachine } from './find-browser.js';
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = 9333;
 const LIMIT_S = 120;
 const OUT = 'docs/proof/s6-rehearsal';
@@ -78,8 +78,15 @@ function openSocket(url) {
 }
 
 async function main() {
+  // The questions are spoken by the Mac's own voice (say), so this runs on a Mac only.
+  if (process.platform !== 'darwin') {
+    console.log('npm run rehearse needs a Mac: it speaks the questions with the Mac\'s built-in voice. Play the demo by hand instead.');
+    process.exitCode = 1;
+    return;
+  }
+  const browser = browserOnThisMachine();
   const work = await mkdtemp(path.join(tmpdir(), 'checkpoint-rehearsal-'));
-  const chrome = spawn(CHROME, [
+  const chrome = spawn(browser, [
     '--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(work, 'profile')}`,
     '--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream',
     '--window-size=1280,900', 'about:blank',

@@ -1,7 +1,7 @@
 // Checkpoint game rules. Pure: no DOM, no network, no clock reads.
 // The page and the server both import this file, so a limit is enforced the
 // same way in both places.
-import { getTraveller } from './travellers.js';
+import { getTraveller, TRAVELLER_IDS } from './travellers/index.js';
 
 export const MAX_QUESTION_CHARS = 300;
 export const MAX_QUESTIONS = 5;
@@ -123,7 +123,7 @@ export function checkNotes(raw, papers = null) {
 // half-apply a rule.
 
 export const SHIFT_MS = 2 * 60 * 1000;
-export const DEMO_QUEUE = ['max', 'colin'];
+export const DEMO_QUEUE = TRAVELLER_IDS;   // shift order: src/travellers/index.js
 export const VERDICTS = ['through', 'away'];
 
 export function newShift(queue = DEMO_QUEUE, { firstRequestId = 1 } = {}) {
@@ -203,7 +203,7 @@ export function stamp(shift, verdict) {
   };
 }
 
-// Scored only from the truth stored in travellers.js (ADR-2): nothing the
+// Scored only from the truth stored in src/travellers/ (ADR-2): nothing the
 // model said during the shift is read here.
 export function shiftReport(shift) {
   const rows = shift.queue.map((id) => {

@@ -2,7 +2,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createApp } from '../server/app.js';
-import { getTraveller } from '../src/travellers.js';
+import { getTraveller } from '../src/travellers/index.js';
 import { FALLBACK_LINE } from '../src/rules.js';
 
 const FAKE_KEY = 'test-key-must-not-leak';
@@ -266,7 +266,7 @@ for (const [name, [body, type]] of Object.entries(badClips)) {
 }
 
 test('only known files are served', async () => {
-  for (const p of ['/', '/src/rules.js', '/penguins/penguin.js', '/vendor/three/build/three.module.js', '/vendor/three/addons/controls/OrbitControls.js']) {
+  for (const p of ['/', '/src/rules.js', '/src/travellers/index.js', '/src/travellers/colin.js', '/scenery.js', '/penguins/penguin.js', '/vendor/three/build/three.module.js', '/vendor/three/addons/controls/OrbitControls.js']) {
     assert.equal((await fetch(`${base}${p}`)).status, 200, p);
   }
   for (const p of ['/.env', '/src/../.env', '/server/mistral.js', '/package.json', '/%2e%2e/.env',
@@ -279,7 +279,7 @@ test('only known files are served', async () => {
 test('the key never appears in any page file or API response', async () => {
   nextRaw = GOOD_RAW;
   const bodies = await Promise.all([
-    fetch(`${base}/`), fetch(`${base}/app.js`), fetch(`${base}/src/travellers.js`),
+    fetch(`${base}/`), fetch(`${base}/app.js`), fetch(`${base}/src/travellers/index.js`), fetch(`${base}/src/travellers/max.js`),
     fetch(`${base}/src/rules.js`), fetch(`${base}/api/health`), post(valid), post('{nope'),
   ].map(async (p) => (await p).text()));
   for (const body of bodies) assert.ok(!body.includes(FAKE_KEY));

@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "prestart": "node scripts/check-node.js",
     "start": "node --env-file-if-exists=.env server/server.js",
     "test": "node --test",
     "live-check": "node --env-file-if-exists=.env scripts/live-check.js",
@@ -10,7 +11,7 @@
     "browser-check": "node scripts/browser-check.js"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=22.9"
   },
   "dependencies": {
     "three": "0.186.1"

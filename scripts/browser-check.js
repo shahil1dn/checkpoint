@@ -5,13 +5,12 @@
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { existsSync } from 'node:fs';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createApp } from '../server/app.js';
+import { browserOnThisMachine } from './find-browser.js';
 
-const CHROME = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const PORT = 9336;
 const SPEED = 60;   // a 2-minute shift ends in 2 seconds
 const OUT_OF_QUESTIONS = 'No questions left. Stamp the papers.';
@@ -62,8 +61,12 @@ async function openPage(url) {
 }
 
 async function main() {
-  if (!existsSync(CHROME)) {
-    console.log('   skipped: Google Chrome is not installed');
+  let browser;
+  try {
+    browser = browserOnThisMachine();
+  } catch (err) {
+    console.log(`   FAIL ${err.message}`);
+    process.exitCode = 1;
     return;
   }
   const offline = async () => { throw new Error('offline check: Mistral is never called'); };
@@ -71,7 +74,7 @@ async function main() {
   const server = http.createServer(handle);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const work = await mkdtemp(path.join(tmpdir(), 'checkpoint-browser-check-'));
-  const chrome = spawn(CHROME, ['--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${work}`, '--window-size=1280,800', 'about:blank'], { stdio: 'ignore' });
+  const chrome = spawn(browser, ['--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${work}`, '--window-size=1280,800', 'about:blank'], { stdio: 'ignore' });
   const failures = [];
   try {
     const page = await openPage(`http://127.0.0.1:${server.address().port}/`);

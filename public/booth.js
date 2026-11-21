@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import { createEngine, part, box, ball, mat, textPlane } from '/penguins/engine.js';
 import { makePenguin } from '/penguins/penguin.js';
 import { buildScenery } from '/scenery.js';
+import { getTraveller } from '/src/travellers/index.js';
 
 const COLORS = {
   booth: '#8fb3a8', frame: '#e8e2d4', desk: '#a8794f', deskTop: '#c8955f',
@@ -17,11 +18,6 @@ const INK = '#1f2126';
 const TYPEWRITER = '"American Typewriter", "Courier New", monospace';
 const HANDWRITING = '"Noteworthy", "Bradley Hand", "Marker Felt", cursive';
 
-// Each traveller's single accessory, so he reads at a glance (art direction, section 3).
-const LOOKS = {
-  max: { scarf: true, look: { hat: 'beanie', hatColor: '#e8743b' } },   // a fan's beanie and scarf
-  colin: { scarf: false, look: { hat: 'chef', glasses: 'round' } },     // a food trade
-};
 
 // One face per mood, the same for every traveller, so the face is a fair tell.
 const FACES = {
@@ -204,9 +200,10 @@ function buildStamp(group, verdict, x) {
 }
 
 function makeTraveller(id) {
-  const style = LOOKS[id] ?? { scarf: false, look: {} };
-  const penguin = makePenguin({ scarf: style.scarf });
-  penguin.setLook(style.look);
+  // Each traveller's file sets his single accessory, so he reads at a glance.
+  const { scarf = false, ...look } = getTraveller(id)?.look ?? {};
+  const penguin = makePenguin({ scarf });
+  penguin.setLook(look);
   penguin.showHearts = false;   // hearts are for love (art direction); nobody here is in love
   return penguin;
 }
