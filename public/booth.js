@@ -481,7 +481,7 @@ const NOTE_SPOTS = [   // [x, y, width, height, tilt] as fractions of the board
   [0.42, 0.06, 0.3, 0.42, 0.03],
   [0.07, 0.63, 0.25, 0.32, 0.04],
   [0.38, 0.55, 0.34, 0.4, -0.03],
-  [0.74, 0.69, 0.23, 0.28, 0.02],
+  [0.73, 0.68, 0.24, 0.3, 0.02],
 ];
 
 function drawPin(g, x, y, r) {
@@ -509,12 +509,12 @@ function drawNotice(g, w, h, { style, title, lines, picture, compact }, [x, y, n
   g.font = `bold ${h * (compact ? 0.043 : 0.058)}px ${style === 'clipping' ? 'Georgia, serif' : font}`;
   g.fillText(title, pad, pad * 1.2, width - pad * 2);
   if (style === 'clipping') g.fillRect(pad, pad * 1.2 + h * 0.072, width - pad * 2, h * 0.005);
-  g.font = `${h * (compact ? 0.034 : 0.046)}px ${font}`;
+  g.font = `${h * (compact ? 0.032 : 0.046)}px ${font}`;
   let lineY = pad * 1.2 + h * (compact ? 0.075 : 0.1);
   for (const text of lines) {
     for (const line of wrap(g, text, width - pad * 2)) {
       g.fillText(line, pad, lineY);
-      lineY += h * (compact ? 0.043 : 0.058);
+      lineY += h * (compact ? 0.041 : 0.058);
     }
   }
   if (picture === 'seal') drawSeal(g, width * 0.72, height * 0.68, height * 0.2);

@@ -27,8 +27,8 @@ export const NOTICES = [
   {
     style: 'sticky',
     compact: true,
-    title: 'HACKATHON MEMO',
-    lines: ['"I KNOW MISTRAL"', 'is not a passport.', 'Nice try, penguin.'],
+    title: 'DESK JOKE',
+    lines: ['Q: Why did the stapler apply for a job?', 'A: It wanted to hold things together.'],
   },
 ];
 
