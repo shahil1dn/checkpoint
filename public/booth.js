@@ -546,7 +546,7 @@ const TERM_STEP = '#9fc7a4';
 function drawTerminal(g, w, h, terminal, cursorOn) {
   const x = w * 0.04;
   const width = w * 0.92;
-  const bottom = h * 0.8;
+  const bottom = h * 0.85;
   const { lookup } = terminal ?? {};
   g.textAlign = 'left'; g.textBaseline = 'middle';
   let y = h * 0.17;
@@ -597,8 +597,8 @@ function drawTerminal(g, w, h, terminal, cursorOn) {
   y += h * 0.015;
   write('THE RECORDS SAY', TERM_DIM, h * 0.032);
   for (const line of lookup.answer) {
-    write(line, TERM_TEXT, h * 0.037, { gap: 1.22, maxLines: 5 });
-    y += h * 0.012;
+    write(line, TERM_TEXT, h * 0.034, { gap: 1.2, maxLines: 5 });
+    y += h * 0.01;
   }
 }
 
@@ -613,11 +613,11 @@ function drawComputer(g, w, h, { calls = [], terminal = null, cursorOn = true } 
     g.fillText(`Lookups left: ${terminal.left} of ${terminal.max}`, w * 0.96, h * 0.058);
   }
   drawTerminal(g, w, h, terminal, cursorOn);
-  // The Mistral calls strip: the latest three, small, under a rule.
-  g.fillStyle = '#2b2f36'; g.fillRect(w * 0.04, h * 0.815, w * 0.92, h * 0.004);
+  // The Mistral calls strip: the latest two, small, under a rule.
+  g.fillStyle = '#2b2f36'; g.fillRect(w * 0.04, h * 0.865, w * 0.92, h * 0.004);
   g.textAlign = 'left'; g.font = `${h * 0.03}px ${TERMINAL}`;
-  calls.slice(-3).forEach(({ who, what }, i) => {
-    const y = h * 0.85 + h * 0.045 * i;
+  calls.slice(-2).forEach(({ who, what }, i) => {
+    const y = h * 0.9 + h * 0.045 * i;
     const label = `${who} `;
     g.fillStyle = '#b8954a';
     g.fillText(label, w * 0.04, y);

@@ -261,7 +261,10 @@ async function lookUp(line) {
     shown = shown.then(() => new Promise((resolve) => setTimeout(resolve, STEP_PAUSE_MS))).then(() => { view.steps.push(step); renderTerminal(); });
   });
   await shown;
+  const before = shift;
   shift = R.finishLookup(shift, request.id, result ?? null);
+  // Unchanged means the shift was restarted while it searched: stay quiet.
+  if (shift === before) return;
   view.status = result ? 'done' : 'failed';
   view.answer = result?.answer ?? [];
   if (result && live) logCall(lineForLookup(result, models));
