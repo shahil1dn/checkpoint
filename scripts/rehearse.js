@@ -228,7 +228,7 @@ async function main() {
       return true;
     })()`);
     if (!started) throw new Error('could not find START SHIFT on the terminal');
-    if (!(await waitFor(`!document.getElementById('controls').hidden`, 5000))) throw new Error('the shift did not start from the terminal menu');
+    if (!(await waitFor(`!document.getElementById('controls').hidden`, 20000))) throw new Error('the shift did not start from the terminal menu');
     note('Start shift');
     await sleep(1500);   // let the camera finish turning from the terminal to the window
     desk = await mapDesk();

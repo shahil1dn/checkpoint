@@ -175,7 +175,7 @@ async function main() {
     check('the main menu is on the terminal: START SHIFT can be found there, the HTML card is hidden and no shift is running', Boolean(menuAt) && !before.controls && !before.card && before.clock === '', { menuAt, ...before });
     if (!menuAt) throw new Error('could not find START SHIFT on the terminal');
     await press(menuAt);
-    const shiftStarted = await waitFor(`!document.getElementById('controls').hidden && document.getElementById('clock').textContent.startsWith('Shift')`, 5000);
+    const shiftStarted = await waitFor(`!document.getElementById('controls').hidden && document.getElementById('clock').textContent.startsWith('Shift')`, 20000);   // the train pulls in and the travellers walk off before the shift starts
     check('clicking START SHIFT on the terminal starts the shift', shiftStarted, await page.evaluate(`document.getElementById('clock').textContent`));
     if (!shiftStarted) throw new Error('the shift did not start from the terminal menu');
     await new Promise((resolve) => setTimeout(resolve, 1500));   // the camera settles on the window
