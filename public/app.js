@@ -27,6 +27,7 @@ const HINTS = {
   notHeard: "Didn't catch that. Try again.",
   noMic: 'No microphone, so type your questions.',
   blocked: 'Click the page once so the browser lets them speak.',
+  noBribe: 'Nothing is on offer.',
 };
 const TOOL_TIPS = {
   papers: 'Papers: click to read',
@@ -137,6 +138,15 @@ async function stampTraveller(verdict) {
   render();
 }
 
+// The rules record whether a bribe was taken; the report shows it at the end.
+function answerBribe(take) {
+  const result = R.answerBribe(shift, take);
+  if (result.error) return hint(HINTS[result.error]);
+  shift = result.shift;
+  hint(take ? 'You pocket it. That goes on your record.' : 'You wave it away.');
+  render();
+}
+
 function beginTalking() {
   if (!started || shift.phase !== 'playing' || shift.pending || shift.hearing) return;
   stopVoice();
@@ -232,7 +242,7 @@ function renderReport() {
     const tr = document.createElement('tr');
     const cells = [
       row.name,
-      row.stamp ? STAMP_WORDS[row.stamp] : 'Not stamped',
+      `${row.stamp ? STAMP_WORDS[row.stamp] : 'Not stamped'}${row.bribeTaken ? ' (took a bribe)' : ''}`,
       row.honest ? `Honest. ${row.secret}` : `Lying. ${row.secret}`,
       row.correct ? 'Right' : 'Wrong',
     ];
@@ -244,6 +254,11 @@ function renderReport() {
     return tr;
   }));
   $('score').textContent = `You got ${report.correct} of ${report.total} right.`;
+  const bribers = report.rows.filter((row) => row.bribeTaken).map((row) => row.name).join(', ');
+  $('bribes').textContent = report.record === 'corrupt'
+    ? `Bribes taken: ${report.bribesTaken} (${bribers}). Inspector's record: CORRUPT.`
+    : "No bribes taken. Inspector's record: clean.";
+  $('bribes').className = report.record;
 }
 
 function renderClock() {
@@ -276,6 +291,9 @@ function render() {
   booth?.setNotes(traveller.name, shift.cases[traveller.id].notes);
   if (!booth) renderFallbackPanel(traveller);
   renderCaptions(traveller);
+  const offer = R.bribeOffer(shift);
+  $('bribe').hidden = !offer;
+  $('bribe-line').textContent = offer ? `${traveller.name} is offering you a bribe.` : '';
   const busy = Boolean(shift.pending || shift.hearing);
   $('ask').disabled = busy || left === 0;
   $('talk').disabled = busy || left === 0 || !micReady();
@@ -327,6 +345,8 @@ $('show-papers').addEventListener('click', () => booth?.toggle('papers'));
 $('show-notes').addEventListener('click', () => booth?.toggle('notebook'));
 $('stamp-through').addEventListener('click', () => stampTraveller('through'));
 $('stamp-away').addEventListener('click', () => stampTraveller('away'));
+$('take-bribe').addEventListener('click', () => answerBribe(true));
+$('ignore-bribe').addEventListener('click', () => answerBribe(false));
 $('start').addEventListener('click', startShift);
 $('again').addEventListener('click', playAgain);
 

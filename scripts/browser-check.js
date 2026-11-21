@@ -94,6 +94,13 @@ async function main() {
     for (let i = 1; i <= 5; i += 1) {
       await ask(`Question ${i}?`);
       await sleep(150);
+      // Offline, Max's 2nd answer offers a bribe (src/travellers/max.js).
+      if (i === 2) {
+        const offered = await page.evaluate(`!document.getElementById('bribe').hidden`);
+        await page.evaluate(`document.getElementById('take-bribe').click(); true`);
+        const after = await page.evaluate(`({ gone: document.getElementById('bribe').hidden, hint: document.getElementById('hint').textContent })`);
+        check('a bribe offer shows Take and Ignore, and taking it closes the offer', offered && after.gone && after.hint.includes('record'), { offered, ...after });
+      }
     }
     // A 6th question can only come by voice (the Ask button is greyed out);
     // submitting the form directly takes the same path.
@@ -105,6 +112,8 @@ async function main() {
     for (let i = 0; i < 100 && !(await screen()).over; i += 1) await sleep(100);
     seen = await screen();
     check('the shift clock runs out to the report', seen.over, seen);
+    const bribes = await page.evaluate(`document.getElementById('bribes').textContent`);
+    check('the report names the bribe taken and marks the record', bribes.includes('Max Tokens') && bribes.includes('CORRUPT'), bribes);
 
     await page.evaluate(`document.getElementById('again').click(); true`);
     await sleep(300);
