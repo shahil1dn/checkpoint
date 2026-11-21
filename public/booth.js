@@ -6,9 +6,10 @@
 import * as THREE from 'three';
 import { createEngine, part, box, ball, mat, textPlane } from '/penguins/engine.js';
 import { makePenguin } from '/penguins/penguin.js';
+import { buildScenery } from '/scenery.js';
 
 const COLORS = {
-  ground: '#b8a48a', groundBase: '#8c7a63', booth: '#8fb3a8', frame: '#e8e2d4', desk: '#a8794f', deskTop: '#c8955f',
+  booth: '#8fb3a8', frame: '#e8e2d4', desk: '#a8794f', deskTop: '#c8955f',
   paper: '#f4efe2', cover: '#3f6e8c', micBody: '#343845', micGrille: '#5a5f6b', wood: '#8c6448',
   through: '#3f8f5a', away: '#c0453a', live: '#d8433a', off: '#6b6f78',
 };
@@ -118,8 +119,6 @@ function drawLabel(g, w, h, text, colour) {
 // ---------- building the booth ----------
 
 function buildRoom(group) {
-  part(box(9, 0.3, 6, 0.05), mat(COLORS.ground), group, [0, -0.15, -3]);
-  part(box(8.9, 0.5, 5.9, 0.05), mat(COLORS.groundBase), group, [0, -0.55, -3]);
   const wall = mat(COLORS.booth);
   const [top, half] = [2.3, 1.15];
   part(box(6, SILL, 0.16), wall, group, [0, SILL / 2, 0]);
@@ -212,6 +211,27 @@ function makeTraveller(id) {
   return penguin;
 }
 
+// The officer who takes away anyone turned away (ADR-11): navy cap and vest,
+// with POLICE across the cap, the part of him that shows above the window sill.
+const POLICE_NAVY = '#263a5a';
+function makePolice() {
+  const officer = makePenguin();
+  officer.setLook({ hat: 'cap', hatColor: POLICE_NAVY, vest: true });
+  officer.looks.vestMat.color.set(POLICE_NAVY);
+  officer.showHearts = false;
+  const badge = textPlane(0.36, 0.1, (g, w, h) => {
+    g.fillStyle = POLICE_NAVY; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#f4efe2'; g.font = `bold ${h * 0.72}px system-ui, sans-serif`;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('POLICE', w / 2, h * 0.55, w * 0.92);
+  }, 1024);
+  badge.redraw();
+  badge.mesh.position.set(0, 0.33, 0.44);   // on the front of the crown, above the peak
+  badge.mesh.rotation.x = -0.65;
+  officer.looks.hats.cap.add(badge.mesh);
+  return officer;
+}
+
 const ease = (t) => t * t * (3 - 2 * t);
 
 // ---------- the booth ----------
@@ -229,6 +249,7 @@ export function createBooth(container, handlers = {}) {
   const group = new THREE.Group();
   engine.scene.add(group);
   buildRoom(group);
+  const arrivals = buildScenery(group);
   const dir = EYE.clone().sub(LOOK_AT);
   const fitHalfHeight = dir.length() * Math.tan(THREE.MathUtils.degToRad(engine.camera.fov / 2));
   engine.setWorld({ group, camTarget: LOOK_AT, startDir: dir, fit: [1.7, fitHalfHeight], walls: { backWall: [], sideWall: [], wallAt: -99 } });
@@ -244,6 +265,7 @@ export function createBooth(container, handlers = {}) {
   let traveller = null;
   let travellerId = null;
   let leaving = null;
+  let officer = null;
   let face = FACES.neutral;
   let talking = false;
   let hovered = null;
@@ -336,10 +358,44 @@ export function createBooth(container, handlers = {}) {
       }
     }
     if (leaving) leaving.update(t, dt);
+    if (officer) officer.update(t, dt);
+    arrivals.update(t, dt);
     engine.render();
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
+
+  // Turned away: a police penguin runs in from the side, grabs him and hauls
+  // him off, flapping, while the next traveller steps up.
+  async function snatch(penguin) {
+    leaving = penguin;
+    const cop = makePolice();
+    officer = cop;
+    const grabX = penguin.root.position.x + 0.8;
+    cop.root.position.set(WALK_OFF_X, TRAVELLER_AT.y, TRAVELLER_AT.z);
+    cop.root.rotation.y = -Math.PI / 2;
+    cop.walking = true;
+    group.add(cop.root);
+    penguin.setMood('annoyed');
+    await tween(0.45, (p) => { cop.root.position.x = WALK_OFF_X + (grabX - WALK_OFF_X) * p; });
+    // A beat facing the inspector, so POLICE on his cap reads.
+    cop.walking = false;
+    cop.root.rotation.y = 0;
+    penguin.panicking = true;
+    await tween(0.35, () => {});
+    cop.walking = true;
+    cop.root.rotation.y = Math.PI / 2;
+    const from = penguin.root.position.x;
+    await tween(0.75, (p) => {
+      cop.root.position.x = grabX + (WALK_OFF_X + 0.6 - grabX) * p;
+      penguin.root.position.x = from + (WALK_OFF_X - from) * p;
+      penguin.root.position.y = TRAVELLER_AT.y + Math.sin(p * Math.PI) * 0.12;   // lifted off his feet
+    });
+    group.remove(penguin.root);
+    group.remove(cop.root);
+    if (leaving === penguin) leaving = null;
+    if (officer === cop) officer = null;
+  }
 
   async function walkOff(penguin, mood) {
     leaving = penguin;
@@ -371,7 +427,8 @@ export function createBooth(container, handlers = {}) {
       traveller = id ? makeTraveller(id) : null;
       talking = false;
       face = FACES.neutral;
-      if (old) walkOff(old, reaction === 'through' ? 'happy' : reaction === 'away' ? 'annoyed' : 'neutral');
+      if (old && reaction === 'away') snatch(old);
+      else if (old) walkOff(old, reaction === 'through' ? 'happy' : 'neutral');
       if (!traveller) return;
       if (old) walkOn(traveller);
       else {

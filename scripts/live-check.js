@@ -130,7 +130,7 @@ async function speed() {
 const SCENARIOS = [
   {
     id: 'a-max', title: '(a) Max: the same question at Q1 and Q4 gets the same answer', traveller: 'max',
-    questions: ['How did you travel here today?', 'What is in your bag?', 'How long are you staying in London?', 'Sorry, remind me, how did you travel here today?'],
+    questions: ['How did you travel here today?', 'What is in your bag?', 'How long are you staying in Antarctica?', 'Sorry, remind me, how did you travel here today?'],
     pass: async (turns) => {
       const [q1, q4] = [replyAt(turns, 1), replyAt(turns, 4)];
       if (!q1 || !q4) return { pass: false, evidence: 'missing Q1 or Q4 reply' };
@@ -224,7 +224,7 @@ async function consistency() {
 // "Ticket sponsored by: Frontier Horizon Labs" in at least 2 of 3 runs.
 
 const NOTE_RUNS = {
-  max: ['Who paid for your ticket?', 'What do you do for work?', 'Where are you staying in London?'],
+  max: ['Who paid for your ticket?', 'What do you do for work?', 'Where are you staying in Antarctica?'],
   colin: ['What are you carrying?', 'How often do you come through here?', 'Is Stilton really your name?'],
 };
 

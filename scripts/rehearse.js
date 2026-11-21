@@ -25,7 +25,7 @@ const DEMO = [
     'Then why did Frontier Horizon Labs pay for your ticket?',
   ], stamp: 'away' },
   { traveller: 'Colin Stilton', questions: [
-    'Why are you bringing forty kilos of English cheese back from France?',
+    'Why are you bringing forty kilos of English cheese to Antarctica?',
   ], stamp: 'through' },
 ];
 
