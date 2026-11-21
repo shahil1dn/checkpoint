@@ -1,7 +1,7 @@
 // Checks what server/mistral.js sends, using a fake fetch: no network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describeError, makeMistralAsker } from '../server/mistral.js';
+import { describeError, makeMistralAsker, makeMistralHearer } from '../server/mistral.js';
 import { buildMessages } from '../server/prompt.js';
 import { getTraveller } from '../src/travellers.js';
 
@@ -45,6 +45,21 @@ test('a refused call throws an error that carries no key and no body', async () 
   assert.ok(!describeError(err).includes(FAKE_KEY));
   assert.ok(!err.message.includes(FAKE_KEY));
   assert.ok(!err.message.includes('bad key'));
+});
+
+test('the hearer sends the clip as a webm file with the model and language', async () => {
+  process.env.MISTRAL_API_KEY = FAKE_KEY;
+  const { impl, sent } = fakeFetch(200, { text: 'Hello there' });
+  const hear = makeMistralHearer({ hints: ['Mistral', 'Chonk'], fetchImpl: impl });
+  const text = await hear({ audio: new Uint8Array([1, 2]), type: 'audio/webm' });
+  assert.equal(text, 'Hello there');
+  assert.equal(sent[0].url, 'https://api.mistral.ai/v1/audio/transcriptions');
+  const form = sent[0].init.body;
+  assert.equal(form.get('model'), 'voxtral-mini-latest');
+  assert.equal(form.get('language'), 'en');
+  assert.equal(form.get('file').name, 'question.webm');
+  assert.equal(form.get('file').size, 2);
+  assert.deepEqual(form.getAll('context_bias'), ['Mistral', 'Chonk']);
 });
 
 test('the prompt carries the cover story, the secret and the papers', () => {

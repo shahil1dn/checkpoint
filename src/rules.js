@@ -44,6 +44,13 @@ export function validateAskRequest(body) {
   return { ok: true, value: { travellerId: body.travellerId, question: checked.question, history } };
 }
 
+// A transcript becomes the next question, so it obeys the question limit.
+// Underscores are how Voxtral joins words from a hint list.
+export function cleanTranscript(text) {
+  if (typeof text !== 'string') return '';
+  return [...text.replace(/_/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, MAX_QUESTION_CHARS).join('').trim();
+}
+
 // Markdown would be read aloud as symbols, so it goes before the length cut.
 export function cleanReplyText(text) {
   const plain = text.replace(/[*_`#~]/g, '').replace(/\s+/g, ' ').trim();

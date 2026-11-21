@@ -3,11 +3,15 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseReply, validateAskRequest } from '../src/rules.js';
+import { cleanTranscript, parseReply, validateAskRequest } from '../src/rules.js';
 import { getTraveller } from '../src/travellers.js';
+import { AUDIO_TYPES } from './mistral.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const MAX_JSON_BYTES = 16 * 1024;
+// A 15-second clip at the page's 32 kbit/s is about 60 KB; 1 MB leaves room
+// for browsers that ignore the bitrate hint.
+const MAX_AUDIO_BYTES = 1024 * 1024;
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
 // Only files that exist at startup in public/ and src/ are servable, so no
@@ -49,8 +53,23 @@ async function readJsonBody(req) {
   }
 }
 
-export async function createApp({ ask, liveAvailable, log = () => {} }) {
+export async function createApp({ ask, hear, liveAvailable, log = () => {} }) {
   const routes = await staticRoutes();
+
+  async function handleHear(req, res) {
+    const type = (req.headers['content-type'] ?? '').split(';')[0].trim().toLowerCase();
+    if (!AUDIO_TYPES.includes(type)) return send(res, 415, { error: 'badType' });
+    const { bytes, error } = await readBody(req, MAX_AUDIO_BYTES);
+    if (error) return send(res, 413, { error });
+    if (bytes.length === 0) return send(res, 400, { error: 'empty' });
+    if (!liveAvailable) return send(res, 503, { error: 'noKey' });
+    try {
+      return send(res, 200, { text: cleanTranscript(await hear({ audio: bytes, type })) });
+    } catch (err) {
+      log(err);
+      return send(res, 502, { error: 'callFailed' });
+    }
+  }
 
   async function handleAsk(req, res) {
     const { body, error } = await readJsonBody(req);
@@ -80,6 +99,10 @@ export async function createApp({ ask, liveAvailable, log = () => {} }) {
     if (url.pathname === '/api/ask') {
       if (req.method !== 'POST') return send(res, 405, { error: 'method' });
       return handleAsk(req, res);
+    }
+    if (url.pathname === '/api/hear') {
+      if (req.method !== 'POST') return send(res, 405, { error: 'method' });
+      return handleHear(req, res);
     }
 
     const file = req.method === 'GET' ? routes.get(url.pathname) : undefined;

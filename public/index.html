@@ -16,8 +16,12 @@
 
   <section>
     <ol id="conversation"></ol>
+    <p>
+      <button id="mic-on" type="button">Turn on microphone</button>
+      <button id="talk" type="button" hidden>Hold to talk (or hold Space)</button>
+    </p>
     <form id="ask-form">
-      <input id="question" type="text" maxlength="300" autocomplete="off" placeholder="Type a question">
+      <input id="question" type="text" maxlength="300" autocomplete="off" placeholder="Or type a question">
       <button id="ask" type="submit">Ask</button>
     </form>
     <p id="hint" role="status"></p>

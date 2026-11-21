@@ -8,6 +8,8 @@ let server;
 let base;
 const calls = [];
 let nextRaw;
+const heard = [];
+let nextTranscript = 'Who paid for your ticket?';
 
 before(async () => {
   process.env.MISTRAL_API_KEY = FAKE_KEY;
@@ -17,6 +19,10 @@ before(async () => {
       calls.push(req);
       if (nextRaw instanceof Error) throw nextRaw;
       return nextRaw;
+    },
+    hear: async (req) => {
+      heard.push(req);
+      return nextTranscript;
     },
   });
   server = http.createServer(handle);
@@ -87,6 +93,42 @@ test('a reply that is not JSON returns 502, not a broken reply', async () => {
   assert.equal(res.status, 502);
   assert.deepEqual(await res.json(), { error: 'badReply' });
 });
+
+const postClip = (body, type = 'audio/webm;codecs=opus') => fetch(`${base}/api/hear`, {
+  method: 'POST', headers: { 'content-type': type }, body,
+});
+
+test('a recorded clip is passed on as audio and its words come back', async () => {
+  heard.length = 0;
+  nextTranscript = '  Who paid   for_your ticket?  ';
+  const res = await postClip(new Uint8Array([1, 2, 3]));
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { text: 'Who paid for your ticket?' });
+  assert.equal(heard.length, 1);
+  assert.equal(heard[0].type, 'audio/webm');
+  assert.equal(heard[0].audio.length, 3);
+});
+
+test('a transcript longer than a question is cut to the question limit', async () => {
+  nextTranscript = 'a'.repeat(500);
+  const { text } = await (await postClip(new Uint8Array([1]))).json();
+  assert.equal(text.length, 300);
+});
+
+const badClips = {
+  'an empty clip': [new Uint8Array(0)],
+  'a clip over 1 MB': [new Uint8Array(1024 * 1024 + 1)],
+  'a clip that is not audio': [new Uint8Array([1]), 'text/html'],
+  'a clip with no type': [new Uint8Array([1]), ''],
+};
+for (const [name, [body, type]] of Object.entries(badClips)) {
+  test(`${name} is refused before Mistral is called`, async () => {
+    heard.length = 0;
+    const res = await postClip(body, type).catch(() => null);
+    if (res) assert.ok(res.status >= 400 && res.status < 500, `status ${res.status}`);
+    assert.equal(heard.length, 0);
+  });
+}
 
 test('only known files are served', async () => {
   assert.equal((await fetch(`${base}/`)).status, 200);

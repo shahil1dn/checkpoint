@@ -1,6 +1,7 @@
 // Screen code only. Limits and reply checks live in /src/rules.js.
 import { checkQuestion } from '/src/rules.js';
 import { getTraveller } from '/src/travellers.js';
+import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
 
 const $ = (id) => document.getElementById(id);
 const traveller = getTraveller('max');
@@ -12,6 +13,9 @@ const HINTS = {
   tooLong: 'Keep it under 300 characters.',
   noKey: 'No Mistral key on the server.',
   unclear: 'He mumbles something unclear.',
+  tap: 'Hold Space while you talk, then let go.',
+  notHeard: "Didn't catch that. Try again.",
+  noMic: 'No microphone. Type your question instead.',
 };
 
 function renderPapers() {
@@ -31,47 +35,108 @@ function addLine(speaker, text) {
   $('conversation').append(li);
 }
 
+const hint = (text) => { $('hint').textContent = text; };
+
+async function postJson(url, body) {
+  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  return { res, body: await res.json() };
+}
+
 async function askServer(question) {
   try {
-    const res = await fetch('/api/ask', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ travellerId: traveller.id, question, history }),
-    });
-    const body = await res.json();
+    const { res, body } = await postJson('/api/ask', { travellerId: traveller.id, question, history });
     if (res.status === 503) return { error: 'noKey' };
-    if (!res.ok) return { error: 'unclear' };
-    return { reply: body };
+    return res.ok ? { reply: body } : { error: 'unclear' };
   } catch {
     return { error: 'unclear' };
   }
 }
 
-async function onAsk(event) {
-  event.preventDefault();
-  if (waiting) return;
-  const checked = checkQuestion($('question').value);
-  if (!checked.ok) {
-    $('hint').textContent = HINTS[checked.reason];
-    return;
+async function hearServer(clip) {
+  try {
+    const res = await fetch('/api/hear', { method: 'POST', headers: { 'content-type': clip.type }, body: clip });
+    const body = await res.json();
+    if (res.status === 503) return { error: 'noKey' };
+    return res.ok && body.text ? { text: body.text } : { error: 'notHeard' };
+  } catch {
+    return { error: 'notHeard' };
   }
-  waiting = true;
-  $('ask').disabled = true;
-  $('hint').textContent = `${traveller.name} is thinking…`;
-  addLine('You', checked.question);
-  $('question').value = '';
+}
 
+function setWaiting(on, message = '') {
+  waiting = on;
+  $('ask').disabled = on;
+  $('talk').disabled = on;
+  hint(message);
+}
+
+// Typed and spoken questions both end up here.
+async function askQuestion(text) {
+  const checked = checkQuestion(text);
+  if (!checked.ok) return hint(HINTS[checked.reason]);
+  setWaiting(true, `${traveller.name} is thinking…`);
+  addLine('You', checked.question);
   const { reply, error } = await askServer(checked.question);
   if (reply) {
     history.push({ question: checked.question, reply: reply.reply, mood: reply.mood });
     addLine(traveller.name, `${reply.reply} [${reply.mood}]`);
-    $('hint').textContent = '';
-  } else {
-    $('hint').textContent = HINTS[error];
   }
-  waiting = false;
-  $('ask').disabled = false;
+  setWaiting(false, error ? HINTS[error] : '');
 }
+
+function onTypedAsk(event) {
+  event.preventDefault();
+  if (waiting) return;
+  const text = $('question').value;
+  $('question').value = '';
+  askQuestion(text);
+}
+
+function beginTalking() {
+  if (waiting || !startClip()) return;
+  $('talk').textContent = 'Listening… let go to ask';
+  hint('');
+}
+
+async function finishTalking() {
+  if (!recording()) return;
+  $('talk').textContent = 'Hold to talk (or hold Space)';
+  const clip = await endClip();
+  if (!clip) return hint(HINTS.tap);
+  setWaiting(true, 'Listening back…');
+  const { text, error } = await hearServer(clip);
+  setWaiting(false, error ? HINTS[error] : '');
+  if (text) await askQuestion(text);
+}
+
+async function turnOnMic() {
+  try {
+    await prepareMic();
+    $('mic-on').hidden = true;
+    $('talk').hidden = false;
+    hint('Microphone on. Hold Space or the button and ask your question.');
+  } catch {
+    hint(HINTS.noMic);
+  }
+}
+
+const typingInBox = (event) => event.target instanceof HTMLInputElement;
+
+document.addEventListener('keydown', (event) => {
+  if (event.code !== 'Space' || event.repeat || typingInBox(event) || !micReady()) return;
+  event.preventDefault();
+  beginTalking();
+});
+document.addEventListener('keyup', (event) => {
+  if (event.code !== 'Space' || typingInBox(event) || !micReady()) return;
+  event.preventDefault();
+  finishTalking();
+});
+$('talk').addEventListener('pointerdown', beginTalking);
+$('talk').addEventListener('pointerup', finishTalking);
+$('talk').addEventListener('pointerleave', finishTalking);
+$('mic-on').addEventListener('click', turnOnMic);
+$('ask-form').addEventListener('submit', onTypedAsk);
 
 async function showStatus() {
   try {
@@ -83,5 +148,4 @@ async function showStatus() {
 }
 
 renderPapers();
-$('ask-form').addEventListener('submit', onAsk);
 showStatus();

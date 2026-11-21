@@ -55,6 +55,23 @@ export function makeMistralAsker({ fetchImpl = fetch } = {}) {
   };
 }
 
+export const HEAR_MODEL = 'voxtral-mini-latest';
+const FILE_EXTENSIONS = { 'audio/webm': 'webm', 'audio/ogg': 'ogg', 'audio/mp4': 'm4a', 'audio/mpeg': 'mp3', 'audio/wav': 'wav' };
+export const AUDIO_TYPES = Object.keys(FILE_EXTENSIONS);
+
+// Turns one recorded clip into words. The clip stays in memory only.
+export function makeMistralHearer({ hints = [], fetchImpl = fetch } = {}) {
+  return async function hear({ audio, type }) {
+    const form = new FormData();
+    form.append('model', HEAR_MODEL);
+    form.append('language', 'en');
+    for (const word of hints) form.append('context_bias', word);
+    form.append('file', new Blob([audio], { type }), `question.${FILE_EXTENSIONS[type]}`);
+    const data = await postToMistral('/audio/transcriptions', { body: form }, fetchImpl);
+    return typeof data?.text === 'string' ? data.text : '';
+  };
+}
+
 // Safe to log: the error's kind and status only.
 export function describeError(error) {
   if (error instanceof MistralError) return error.message;

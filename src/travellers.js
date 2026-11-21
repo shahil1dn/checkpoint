@@ -32,6 +32,14 @@ export const TRAVELLERS = [
 
 export const TRAVELLER_IDS = TRAVELLERS.map((t) => t.id);
 
+// Words the inspector is likely to say that speech-to-text gets wrong
+// ("Large 4" came back as "Lodge 4"). Single words: Voxtral writes a
+// multi-word hint back with underscores in it.
+export const HEARING_HINTS = [
+  'Mistral', 'Large', 'Medium', 'Mixtral', 'Ministral', 'Codestral', 'Voxtral', 'Magistral',
+  'Chonk', 'Le', 'hackathon', 'Frontier', 'Horizon', 'Labs', 'Max', 'Tokens',
+];
+
 export function getTraveller(id) {
   return TRAVELLERS.find((t) => t.id === id) ?? null;
 }
