@@ -97,3 +97,9 @@ test('a report keeps record lines and drops any line with a verdict word', () =>
   assert.equal(R.checkLookupAnswer('a\nb\nc\nd\ne\nf').lines.length, R.MAX_REPORT_LINES);
   assert.ok([...R.checkLookupAnswer('y'.repeat(500)).lines[0]].length <= R.MAX_REPORT_LINE_CHARS);
 });
+
+test("the computer's call strip names the records model, its time and tool calls", async () => {
+  const { lineForLookup } = await import('../public/computer.js');
+  assert.deepEqual(lineForLookup({ ms: 2340, tools: 3 }, { records: 'mistral-medium-3.5' }), { who: 'Records, Medium 3.5', what: 'searched the records in 2.34 s with 3 tool calls' });
+  assert.equal(lineForLookup({ ms: 900, tools: 1 }, {}).what, 'searched the records in 0.90 s with 1 tool call');
+});

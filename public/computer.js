@@ -41,6 +41,10 @@ export function linesForAnswer(answer, travellerName, models) {
   return lines;
 }
 
+export function lineForLookup({ ms, tools }, models) {
+  return { who: `Records, ${modelName(models?.records)}`, what: `searched the records in ${seconds(ms)} with ${tools === 1 ? '1 tool call' : `${tools} tool calls`}` };
+}
+
 export function lineForSpeech(audioSeconds, speechMs, models) {
   return { who: modelName(models?.speech), what: `spoke ${audioSeconds.toFixed(1)} s of audio, made in ${seconds(speechMs)}` };
 }

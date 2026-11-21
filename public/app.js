@@ -2,10 +2,11 @@
 // /src/rules.js; this file shows the shift and talks to our server.
 import * as R from '/src/rules.js';
 import { getTraveller } from '/src/travellers/index.js';
+import { ticketFor } from '/src/records/tickets.js';
 import { mockReply } from '/src/mockBrain.js';
 import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
 import { createBooth } from '/booth.js';
-import { MAX_LINES, lineForHeard, lineForSpeech, lineForTyped, linesForAnswer, modelName } from '/computer.js';
+import { MAX_LINES, lineForHeard, lineForLookup, lineForSpeech, lineForTyped, linesForAnswer, modelName } from '/computer.js';
 import { createSounds } from '/sounds.js';
 
 const $ = (id) => document.getElementById(id);
@@ -20,6 +21,10 @@ let stampingNow = false;
 let talkingTo = null;
 let micSetup = false;
 let lastFrame = performance.now();
+// What the records terminal shows: the latest lookup, while it searches and after.
+let screenLookup = null;
+let cursorOn = true;
+const STEP_PAUSE_MS = 450;   // steps can arrive together; each gets a moment on screen
 
 const HINTS = {
   empty: 'Say or type a question first.',
@@ -33,9 +38,18 @@ const HINTS = {
   noMic: 'No microphone, so type your questions.',
   blocked: 'Click the page once so the browser lets them speak.',
   noBribe: 'Nothing is on offer.',
+  lookingUp: 'Looking it up on the records terminal (turn left to watch).',
+  recordsReady: 'The records report is ready: turn left to the computer.',
+  lookupPending: 'The records terminal is still searching.',
+  outOfLookups: 'No lookups left for this traveller.',
+  alreadyLookedUp: 'Already looked up: the report is on the computer.',
+  notGathered: 'The terminal only checks lines from his papers, his ticket or his own answers.',
+  noReport: "The records terminal found nothing it could report. That lookup wasn't counted.",
+  lookupFailed: "The records terminal didn't answer. That lookup wasn't counted.",
 };
 const TOOL_TIPS = {
   papers: 'Papers: click to read',
+  ticket: 'Ship ticket: click to read',
   notebook: 'Scratchpad: click to open',
   transcript: 'Transcript: click to read it all',
   bribe: 'A bribe: click to pocket it',
@@ -81,9 +95,24 @@ const booth = createBooth($('booth'), {
   onMicUp: () => finishTalking(),
   onStampClick: (verdict) => stampTraveller(verdict),
   onBribeClick: () => pocketBribe(),
-  onHover: (tool) => { $('tool-tip').textContent = TOOL_TIPS[tool] ?? ''; },
-  onView: (view) => renderLook(view),
+  onHover: (tool, line) => { $('tool-tip').textContent = tool === 'line' ? lineTip(line) : TOOL_TIPS[tool] ?? ''; },
+  onLookup: (line) => lookUp(line),
+  onView: (view) => {
+    renderLook(view);
+    $('tool-tip').textContent = '';
+    if (view === 'left' && [HINTS.recordsReady, HINTS.lookingUp].includes($('hint').textContent)) hint('');
+  },
 });
+
+// The hover label on a line of a lifted paper.
+function lineTip(line) {
+  const id = R.currentTravellerId(shift);
+  if (!id) return '';
+  if (shift.cases[id].lookups.some((l) => l.line === line)) return 'Looked up: the report is on the computer';
+  const left = R.lookupsLeft(shift, id);
+  const shown = line.length > 44 ? `${line.slice(0, 43)}…` : line;
+  return left ? `Look up: ${shown} (${left} of ${R.MAX_LOOKUPS} left)` : 'No lookups left for this traveller';
+}
 
 // ---- Server calls. Each returns a value or an error name, never throws. ----
 
@@ -108,6 +137,37 @@ async function fetchTranscript(clip) {
     return res.ok && body.text ? { text: body.text, ms: body.ms } : { error: 'notHeard' };
   } catch {
     return { error: 'notHeard' };
+  }
+}
+
+// The records terminal streams one JSON object a line: each step as it
+// happens, then the report or an error.
+async function fetchLookup(request, onStep) {
+  try {
+    const res = await fetch('/api/lookup', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ travellerId: request.travellerId, line: request.line, earlier: request.earlier }),
+    });
+    if (!res.ok) return { error: (await res.json().catch(() => ({}))).error ?? 'lookupFailed' };
+    const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+    const steps = [];
+    let outcome = { error: 'lookupFailed' };
+    let buffered = '';
+    for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      const lines = (buffered + value).split('\n');
+      buffered = lines.pop();
+      for (const event of lines.filter((l) => l.trim()).map((l) => JSON.parse(l))) {
+        if (event.step) { steps.push(event.step); onStep(event.step); }
+        if (event.answer) outcome = { result: { steps, answer: event.answer, ms: event.ms, tools: event.tools } };
+        if (event.error) outcome = { error: event.error };
+      }
+    }
+    return outcome;
+  } catch {
+    return { error: 'lookupFailed' };
   }
 }
 
@@ -166,6 +226,36 @@ async function askQuestion(text, { typed = false } = {}) {
   else hint(bribeOnTheLedge() ? `${traveller.name} slides a ${bribeOnTheLedge()} onto the ledge.` : '');
   if (reply) booth?.setMood(reply.mood);
   if (reply?.audio) playVoice(reply.audio, reply.timings?.speechMs);
+  render();
+}
+
+// Clicking a line on a lifted paper looks it up. The inspector can keep
+// questioning while it searches; the steps show on the computer as they come.
+async function lookUp(line) {
+  if (!started) return;
+  const asked = R.startLookup(shift, line);
+  if (asked.error) return hint(HINTS[asked.error]);
+  shift = asked.shift;
+  const { request } = asked;
+  const searcher = live ? `asking ${modelName(models?.records)} to search the records` : 'searching the records (offline: by code alone)';
+  const view = { travellerId: request.travellerId, line: request.line, steps: [searcher], answer: [], status: 'searching' };
+  screenLookup = view;
+  if (booth?.view() !== 'left') hint(HINTS.lookingUp);
+  render();
+  let shown = Promise.resolve();
+  const { result, error } = await fetchLookup(request, (step) => {
+    shown = shown.then(() => new Promise((resolve) => setTimeout(resolve, STEP_PAUSE_MS))).then(() => { view.steps.push(step); renderTerminal(); });
+  });
+  await shown;
+  shift = R.finishLookup(shift, request.id, result ?? null);
+  view.status = result ? 'done' : 'failed';
+  view.answer = result?.answer ?? [];
+  if (result && live) logCall(lineForLookup(result, models));
+  const stillHere = R.currentTravellerId(shift) === request.travellerId;
+  if (stillHere && !shift.pending && !shift.hearing) {
+    if (error) hint(HINTS[error] ?? HINTS.lookupFailed);
+    else hint(booth?.view() === 'left' ? '' : HINTS.recordsReady);
+  }
   render();
 }
 
@@ -254,6 +344,7 @@ async function startShift() {
 
 function playAgain() {
   shift = R.restartShift(shift);
+  screenLookup = null;
   stopVoice();
   hint('');
   $('last-stamp').textContent = '';
@@ -338,6 +429,14 @@ function renderReport() {
   $('bribes').className = report.record;
 }
 
+function renderTerminal() {
+  const id = R.currentTravellerId(shift);
+  if (!booth || !id) return booth?.setTerminal(null);
+  const searching = shift.lookup?.travellerId === id ? 1 : 0;
+  const lookup = screenLookup?.travellerId === id ? screenLookup : null;
+  booth.setTerminal({ name: getTraveller(id).name, left: R.lookupsLeft(shift, id) - searching, max: R.MAX_LOOKUPS, lookup }, cursorOn);
+}
+
 function renderClock() {
   const secondsLeft = Math.ceil(R.timeLeftMs(shift) / 1000);
   const clock = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
@@ -370,7 +469,11 @@ function render() {
   $('traveller-name').textContent = traveller.name;
   $('queue-position').textContent = `Traveller ${shift.current + 1} of ${shift.queue.length}`;
   $('questions-left').textContent = `Questions left: ${left} of ${R.MAX_QUESTIONS}`;
+  $('lookups-left').textContent = booth ? `Lookups left: ${R.lookupsLeft(shift, traveller.id)} of ${R.MAX_LOOKUPS}` : '';
   booth?.setPapers(traveller.papers, shift.cases[traveller.id].stamp);
+  booth?.setTicket(ticketFor(traveller.id));
+  booth?.setLookedUp(shift.cases[traveller.id].lookups.map((l) => l.line));
+  renderTerminal();
   booth?.setNotes(traveller.name, shift.cases[traveller.id].notes);
   if (!booth) renderFallbackPanel(traveller);
   renderCaptions(traveller);
@@ -390,6 +493,12 @@ function frame(now) {
       renderClock();
     }
   }
+  // The terminal's cursor blinks while it searches.
+  const blink = Math.floor(now / 500) % 2 === 0;
+  if (screenLookup?.status === 'searching' && blink !== cursorOn) {
+    cursorOn = blink;
+    renderTerminal();
+  }
   lastFrame = now;
   requestAnimationFrame(frame);
 }
@@ -404,6 +513,7 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     beginTalking();
   } else if (event.code === 'KeyP') booth?.toggle('papers');
+  else if (event.code === 'KeyT') booth?.toggle('ticket');
   else if (event.code === 'KeyN') booth?.toggle('notebook');
   else if (event.code === 'Escape') booth?.putDown();
   else if (event.code === 'ArrowLeft') booth?.look(-1);

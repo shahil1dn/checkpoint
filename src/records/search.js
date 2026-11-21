@@ -66,25 +66,24 @@ export const TOOLS = {
     const onShips = ARCHIVE.passengers.filter((p) => ships.some((s) => s.name === p.ship));
     const query = name || ticket_or_account;
     const matches = query ? best(onShips, query, (p) => (name ? p.name : `${p.ticket} ${p.bookedBy}`)) : [];
-    const where = ship ? (ships.length ? `the ${ships.map((s) => s.name).join(', ')} list` : `lists for "${ship}"`) : 'today\'s passenger lists';
-    const looking = query ? ` for "${query}"` : '';
+    const where = ship ? (ships.length ? `${ships.map((s) => s.name).join(', ')} list` : `lists for "${ship}"`) : 'passenger lists';
     return {
       result: { ships, searched: onShips.length, matches: shown(matches) },
-      step: query ? `searched ${where}${looking} (${onShips.length} passengers): ${matchWord(matches)}` : `opened ${where} (${onShips.length} passengers)`,
+      step: query ? `${where} (${onShips.length}): "${query}"… ${matchWord(matches)}` : `${where} (${onShips.length}): opened`,
     };
   },
   find_person({ name } = {}) {
     const matches = name ? best(ARCHIVE.people, name, (p) => p.name) : [];
     return {
       result: { searched: ARCHIVE.people.length, matches: shown(matches) },
-      step: `searched the penguin registry for "${name ?? ''}" (${ARCHIVE.people.length} entries): ${matchWord(matches)}`,
+      step: `penguin registry (${ARCHIVE.people.length}): "${name ?? ''}"… ${matchWord(matches)}`,
     };
   },
   find_company({ name } = {}) {
     const matches = name ? best(ARCHIVE.companies, name, (c) => `${c.name} ${c.note}`) : [];
     return {
       result: { searched: ARCHIVE.companies.length, matches: shown(matches).map(({ account, ...c }) => c) },
-      step: `searched the company register for "${name ?? ''}" (${ARCHIVE.companies.length} entries): ${matchWord(matches)}`,
+      step: `company register (${ARCHIVE.companies.length}): "${name ?? ''}"… ${matchWord(matches)}`,
     };
   },
   read_rulebook({ topic } = {}) {
@@ -96,7 +95,7 @@ export const TOOLS = {
       .map((m) => m.s);
     return {
       result: { sections },
-      step: sections.length ? `read rulebook ${sections.map((s) => s.section).join(' and ')}` : `found nothing in the rulebook on "${topic ?? ''}"`,
+      step: sections.length ? `rulebook: reading ${sections.map((s) => s.section).join(' and ')}` : `rulebook: nothing on "${topic ?? ''}"`,
     };
   },
 };

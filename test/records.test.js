@@ -48,7 +48,7 @@ test("Colin's misspelled name is a near match on the delayed Paris ship", () => 
   assert.equal(result.ships[0].name, 'Seine Star');
   assert.match(result.ships[0].note, /delayed/);
   assert.deepEqual(result.matches.map((m) => [m.name, m.match]), [['Colin Stiltn', 'near']]);
-  assert.match(step, /Seine Star list .*1 near match/);
+  assert.equal(step, 'Seine Star list (42): "Colin Stilton"… 1 near match');
 });
 
 test('names match in any order and through common misspellings, but not loosely', () => {

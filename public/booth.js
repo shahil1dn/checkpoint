@@ -77,7 +77,21 @@ function wrap(g, text, maxWidth) {
   return lines;
 }
 
-function drawPapers(g, w, h, papers, stamp) {
+// Lines on a paper can be clicked to look up on the records terminal
+// (ADR-12). Each paper keeps where its lines are, as fractions of its height,
+// so a click on the lifted paper finds its line.
+const LOOK_BAND = 'rgba(242, 181, 68, 0.32)';
+function markLine(g, w, top, bottom, line, marks) {
+  if (marks.hover === line) { g.fillStyle = LOOK_BAND; g.fillRect(w * 0.06, top, w * 0.88, bottom - top); }
+  if (marks.looked?.includes(line)) {
+    g.save();
+    g.fillStyle = '#9a6a12'; g.font = `bold ${w * 0.03}px ${TERMINAL}`; g.textAlign = 'right'; g.textBaseline = 'top';
+    g.fillText('LOOKED UP', w * 0.92, top + w * 0.008);
+    g.restore();
+  }
+}
+
+function drawPapers(g, w, h, papers, stamp, marks = {}) {
   g.fillStyle = COLORS.paper; g.fillRect(0, 0, w, h);
   g.strokeStyle = '#c9bfa8'; g.lineWidth = w * 0.006; g.strokeRect(w * 0.04, h * 0.03, w * 0.92, h * 0.94);
   g.fillStyle = INK; g.textAlign = 'center';
@@ -85,16 +99,24 @@ function drawPapers(g, w, h, papers, stamp) {
   g.fillText('TRAVEL PAPERS', w / 2, h * 0.11);
   g.textAlign = 'left';
   let y = h * 0.21;
+  const rows = [];
   for (const [label, value] of Object.entries(papers ?? {})) {
+    const line = `${label}: ${value}`;
+    g.font = `${w * 0.055}px ${TYPEWRITER}`;
+    const valueLines = wrap(g, value, w * 0.82);
+    const [top, bottom] = [y - h * 0.035, y + h * 0.05 * valueLines.length + h * 0.02];
+    markLine(g, w, top, bottom, line, marks);
+    rows.push({ line, top: top / h, bottom: bottom / h });
     g.fillStyle = '#6b6457'; g.font = `${w * 0.04}px ${TYPEWRITER}`;
     g.fillText(label.toUpperCase(), w * 0.09, y);
     g.fillStyle = INK; g.font = `${w * 0.055}px ${TYPEWRITER}`;
-    for (const line of wrap(g, value, w * 0.82)) {
+    for (const valueLine of valueLines) {
       y += h * 0.05;
-      g.fillText(line, w * 0.09, y);
+      g.fillText(valueLine, w * 0.09, y);
     }
     y += h * 0.075;
   }
+  marks.rows = rows;
   if (stamp) {
     g.save();
     g.translate(w * 0.55, h * 0.8); g.rotate(-0.2);
@@ -106,6 +128,39 @@ function drawPapers(g, w, h, papers, stamp) {
     g.fillText(STAMP_WORDS[stamp], 0, h * 0.025);
     g.restore();
   }
+}
+
+// The ship ticket, his second paper: label and value on one row each.
+function drawTicket(g, w, h, fields, marks = {}) {
+  g.fillStyle = '#efe4c8'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h * 0.17);
+  g.fillStyle = '#f4efe2'; g.font = `bold ${h * 0.1}px ${TYPEWRITER}`; g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.fillText('SHIP TICKET', w * 0.05, h * 0.09);
+  g.textAlign = 'right'; g.font = `${h * 0.06}px ${TYPEWRITER}`;
+  g.fillText('ANTARCTIC SEA LINES', w * 0.95, h * 0.09);
+  // The tear-off stub's perforations.
+  g.fillStyle = '#c9b98f';
+  for (let y = h * 0.21; y < h * 0.97; y += h * 0.05) g.fillRect(w * 0.8, y, w * 0.006, h * 0.025);
+  const rows = [];
+  const entries = Object.entries(fields ?? {});
+  const step = Math.min(h * 0.13, (h * 0.78) / Math.max(entries.length, 1));
+  entries.forEach(([label, value], i) => {
+    const line = `${label}: ${value}`;
+    const middle = h * 0.25 + step * (i + 0.5);
+    markLine(g, w * 0.82, middle - step / 2, middle + step / 2, line, marks);
+    rows.push({ line, top: (middle - step / 2) / h, bottom: (middle + step / 2) / h });
+    g.textBaseline = 'middle'; g.textAlign = 'left';
+    g.fillStyle = '#6b6457'; g.font = `${h * 0.055}px ${TYPEWRITER}`;
+    g.fillText(label.toUpperCase(), w * 0.05, middle, w * 0.22);
+    g.fillStyle = INK; g.font = `${h * 0.07}px ${TYPEWRITER}`;
+    g.fillText(value, w * 0.28, middle, w * 0.5);
+  });
+  marks.rows = rows;
+  g.save();
+  g.translate(w * 0.9, h * 0.58); g.rotate(-Math.PI / 2);
+  g.fillStyle = '#6b6457'; g.font = `bold ${h * 0.07}px ${TYPEWRITER}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('ADMIT ONE', 0, 0);
+  g.restore();
 }
 
 function drawNotes(g, w, h, name, notes) {
@@ -174,9 +229,29 @@ function buildPapers(group) {
   const print = textPlane(0.42, 0.56, drawPapers, 2048);
   print.mesh.position.z = 0.006;
   item.holder.add(print.mesh);
-  item.redraw = print.redraw;
+  print.mesh.userData.paper = item;
+  item.marks = {};
+  item.repaint = () => print.redraw(item.fields, item.stamp, item.marks);
+  item.redraw = (fields, stamp) => { item.fields = fields; item.stamp = stamp; item.repaint(); };
   return item;
 }
+
+function buildTicket(group) {
+  const item = liftable(group, 'ticket', new THREE.Vector3(0.1, SILL + 0.012, 0.8), 0.12, 0.62);
+  const card = part(box(0.5, 0.3, 0.006, 0.002), mat('#efe4c8'), item.holder, undefined, undefined, undefined, false);
+  card.castShadow = card.receiveShadow = false;
+  const print = textPlane(0.5, 0.3, drawTicket, 2048);
+  print.mesh.position.z = 0.005;
+  item.holder.add(print.mesh);
+  print.mesh.userData.paper = item;
+  item.marks = {};
+  item.repaint = () => print.redraw(item.fields, item.marks);
+  item.redraw = (fields) => { item.fields = fields; item.holder.visible = Boolean(fields); if (fields) item.repaint(); };
+  return item;
+}
+
+// The line under a point on a paper, as a fraction of its height from the top.
+const rowAt = (paper, y) => paper.marks.rows?.find((r) => y >= r.top && y <= r.bottom)?.line ?? null;
 
 function buildNotebook(group) {
   const item = liftable(group, 'notebook', new THREE.Vector3(-0.88, SILL + 0.02, 0.5), 0.18, 0.6);
@@ -353,28 +428,83 @@ function buildThoughtBubble(group) {
   return bubble.mesh;
 }
 
-// The inspector's computer on the left wall. Its screen lists the real
-// Mistral calls, one line each (lines come from public/computer.js).
-function drawComputer(g, w, h, lines = []) {
+// The inspector's computer on the left wall: the records terminal (ADR-12)
+// above, and the real Mistral calls in a strip below (lines come from
+// public/computer.js). terminal: { name, left, max, lookup }, where lookup is
+// { line, steps, answer, status: 'searching' | 'done' | 'failed' } or null.
+const TERM_TEXT = '#e8e2d4';
+const TERM_DIM = '#8a8f98';
+const TERM_STEP = '#9fc7a4';
+function drawTerminal(g, w, h, terminal, cursorOn) {
+  const x = w * 0.04;
+  const width = w * 0.92;
+  const bottom = h * 0.8;
+  const { lookup } = terminal ?? {};
+  g.textAlign = 'left'; g.textBaseline = 'middle';
+  let y = h * 0.17;
+  const write = (text, colour, size, { gap = 1.3, maxLines = 3 } = {}) => {
+    g.fillStyle = colour; g.font = `${size}px ${TERMINAL}`;
+    for (const piece of wrap(g, text, width).slice(0, maxLines)) {
+      if (y > bottom) return;
+      g.fillText(piece, x, y, width);
+      y += size * gap;
+    }
+  };
+  if (!lookup) {
+    write('Click a line on his papers or his ticket to look it up.', TERM_TEXT, h * 0.046);
+    y += h * 0.02;
+    write("Today's records: 6 ship passenger lists, the penguin registry, the company register and the rulebook. Too much to read in an interview: the terminal searches them for you.", TERM_DIM, h * 0.04, { maxLines: 4 });
+    y += h * 0.02;
+    write('It reports what the records say. You decide.', TERM_DIM, h * 0.04);
+    return;
+  }
+  write(`LOOKUP › "${lookup.line}"`, AMBER, h * 0.044, { maxLines: 2 });
+  y += h * 0.01;
+  const steps = lookup.steps.slice(-4);
+  for (const [i, step] of steps.entries()) {
+    const last = i === steps.length - 1 && lookup.status === 'searching';
+    // One row each, squeezed to fit rather than cut.
+    g.fillStyle = TERM_STEP; g.font = `${h * 0.034}px ${TERMINAL}`;
+    g.fillText(`› ${step}${last ? '…' : ''}`, x, y, width);
+    y += h * 0.034 * 1.3;
+  }
+  if (lookup.status === 'searching') {
+    write(cursorOn ? '█' : ' ', TERM_STEP, h * 0.034);
+    return;
+  }
+  if (lookup.status === 'failed') {
+    write('The records could not be searched. That lookup was not counted.', TERM_DIM, h * 0.04);
+    return;
+  }
+  y += h * 0.015;
+  write('THE RECORDS SAY', TERM_DIM, h * 0.032);
+  for (const line of lookup.answer) {
+    write(line, TERM_TEXT, h * 0.037, { gap: 1.22, maxLines: 5 });
+    y += h * 0.012;
+  }
+}
+
+function drawComputer(g, w, h, { calls = [], terminal = null, cursorOn = true } = {}) {
   g.fillStyle = '#14161a'; g.fillRect(0, 0, w, h);
   g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h * 0.11);
   g.textAlign = 'left'; g.textBaseline = 'middle';
   g.fillStyle = '#f4efe2'; g.font = `600 ${h * 0.055}px system-ui, sans-serif`;
-  g.fillText('INSPECTOR TERMINAL  ·  live Mistral calls', w * 0.04, h * 0.058, w * 0.92);
-  const row = h * 0.088;
-  g.font = `${h * 0.046}px ${TERMINAL}`;
-  if (!lines.length) {
-    g.fillStyle = '#8a8f98';
-    g.fillText('Waiting for the first question…', w * 0.04, h * 0.11 + row);
-    return;
+  g.fillText(`BORDER RECORDS${terminal?.name ? `  ·  ${terminal.name}` : ''}`, w * 0.04, h * 0.058, w * 0.6);
+  if (terminal) {
+    g.textAlign = 'right'; g.fillStyle = terminal.left ? AMBER : TERM_DIM;
+    g.fillText(`Lookups left: ${terminal.left} of ${terminal.max}`, w * 0.96, h * 0.058);
   }
-  lines.forEach(({ who, what }, i) => {
-    const y = h * 0.11 + row * (i + 0.9);
+  drawTerminal(g, w, h, terminal, cursorOn);
+  // The Mistral calls strip: the latest three, small, under a rule.
+  g.fillStyle = '#2b2f36'; g.fillRect(w * 0.04, h * 0.815, w * 0.92, h * 0.004);
+  g.textAlign = 'left'; g.font = `${h * 0.03}px ${TERMINAL}`;
+  calls.slice(-3).forEach(({ who, what }, i) => {
+    const y = h * 0.85 + h * 0.045 * i;
     const label = `${who} `;
-    g.fillStyle = AMBER;
+    g.fillStyle = '#b8954a';
     g.fillText(label, w * 0.04, y);
     const x = w * 0.04 + g.measureText(label).width;
-    g.fillStyle = '#e8e2d4';
+    g.fillStyle = TERM_DIM;
     g.fillText(what, x, y, w * 0.96 - x);
   });
 }
@@ -387,7 +517,7 @@ function buildComputer(group) {
   part(box(0.06, 0.22, 0.12), mat(COLORS.micBody), group, [wallX + 0.16, 1.1, z]);
   part(box(0.05, 0.74, 1.14, 0.02), mat(COLORS.micBody), group, [wallX + 0.2, 1.4, z]);
   const screen = textPlane(1.06, 0.66, drawComputer, 1600);
-  screen.redraw([]);
+  screen.redraw();
   screen.mesh.position.set(wallX + 0.23, 1.4, z);
   screen.mesh.rotation.y = Math.PI / 2;
   group.add(screen.mesh);
@@ -614,16 +744,20 @@ export function createBooth(container, handlers = {}) {
   engine.setWorld({ group, camTarget: LOOK_AT, startDir: dir, fit: [1.7, fitHalfHeight], walls: { backWall: [], sideWall: [], wallAt: -99 } });
 
   const papers = buildPapers(group);
+  const ticket = buildTicket(group);
   const notebook = buildNotebook(group);
   const { item: transcript, printer } = buildTranscript(group);
-  const liftables = [papers, notebook, transcript];
+  const liftables = [papers, ticket, notebook, transcript];
   const mic = buildMic(group);
   const computer = buildComputer(group);
   buildRightWall(group);
   const thoughtBubble = buildThoughtBubble(group);
   const bribe = buildBribe(group);
   const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };
-  const tools = [papers.holder, notebook.holder, transcript.holder, printer, mic.holder, stamps.through.holder, stamps.away.holder];
+  const tools = [papers.holder, ticket.holder, notebook.holder, transcript.holder, printer, mic.holder, stamps.through.holder, stamps.away.holder];
+  const clickablePapers = [papers, ticket];
+  let screenState = { calls: [], terminal: null };
+  let hoveredLine = null;
 
   let lifted = null;
   let traveller = null;
@@ -659,18 +793,31 @@ export function createBooth(container, handlers = {}) {
     // full page while the slip is down, a bribe not on offer) must be skipped,
     // or they catch the pointer meant for what's behind them.
     const hit = raycaster.intersectObjects([...tools, bribe.holder], true).find((h) => shown(h.object));
-    for (let o = hit?.object; o; o = o.parent) if (o.userData.tool) return o.userData.tool;
-    return null;
+    let tool = null;
+    for (let o = hit?.object; o && !tool; o = o.parent) tool = o.userData.tool ?? null;
+    // A line can be picked only on a paper held up to read.
+    const paper = hit?.object.userData.paper;
+    const line = paper && lifted === paper.name && paper.t > 0.9 && hit.uv ? rowAt(paper, 1 - hit.uv.y) : null;
+    return { tool, line };
+  }
+  function hoverLine(line) {
+    if (line === hoveredLine) return;
+    hoveredLine = line;
+    for (const paper of clickablePapers) {
+      paper.marks.hover = line;
+      if (paper.fields) paper.repaint();
+    }
   }
   canvas.addEventListener('pointermove', (event) => {
-    const tool = toolAt(event);
-    if (tool === hovered) return;
+    const { tool, line } = toolAt(event);
+    if (tool === hovered && line === hoveredLine) return;
     hovered = tool;
+    hoverLine(line);
     canvas.style.cursor = tool ? 'pointer' : 'default';
-    handlers.onHover?.(tool);
+    handlers.onHover?.(line ? 'line' : tool, line);
   });
   canvas.addEventListener('pointerdown', (event) => {
-    const tool = toolAt(event);
+    const { tool } = toolAt(event);
     if (tool === 'mic') {
       micHeld = true;
       canvas.setPointerCapture(event.pointerId);
@@ -683,8 +830,9 @@ export function createBooth(container, handlers = {}) {
       handlers.onMicUp?.();
       return;
     }
-    const tool = toolAt(event);
-    if (tool === 'papers' || tool === 'notebook' || tool === 'transcript') booth.toggle(tool);
+    const { tool, line } = toolAt(event);
+    if (line) handlers.onLookup?.(line);
+    else if (['papers', 'ticket', 'notebook', 'transcript'].includes(tool)) booth.toggle(tool);
     else if (tool?.startsWith('stamp-')) handlers.onStampClick?.(tool.slice(6));
     else if (tool === 'bribe') handlers.onBribeClick?.();
     else if (lifted) booth.putDown();
@@ -854,10 +1002,23 @@ export function createBooth(container, handlers = {}) {
     setNotes(name, notes) { notebook.redraw(name, notes); },
     // lines: [{ who, text }], oldest first; 'You' marks the inspector's own words.
     setTranscript(name, lines) { transcript.redraw(name, lines); },
-    setComputer(lines) { computer.redraw(lines); },
+    setComputer(lines) { screenState = { ...screenState, calls: lines }; computer.redraw(screenState); },
+    // The records terminal's state, drawn above the calls; cursorOn blinks it.
+    setTerminal(terminal, cursorOn = true) { screenState = { ...screenState, terminal, cursorOn }; computer.redraw(screenState); },
+    setTicket(fields) { ticket.redraw(fields); },
+    // Lines already looked up get a mark on the paper they came from.
+    setLookedUp(lines) {
+      for (const paper of clickablePapers) {
+        paper.marks.looked = lines;
+        if (paper.fields) paper.repaint();
+      }
+    },
     // 'croissant', 'cheese' or 'sticker' on the window ledge, or null for none.
     setBribe(item) { bribe.show(item); },
-    toggle(name) { lifted = lifted === name ? null : name; },
+    toggle(name) {
+      if (name === 'ticket' && !ticket.fields) return;
+      lifted = lifted === name ? null : name;
+    },
     // Turns one view left (-1) or right (+1); papers in hand go back on the desk.
     look(step) {
       const next = VIEW_ORDER[VIEW_ORDER.indexOf(view) + step];

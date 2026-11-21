@@ -37,8 +37,8 @@ test('the model asks for tools, the code runs them over the records and reports 
   assert.equal(sent[0].model, LOOKUP_MODEL);
   assert.deepEqual(sent[0].tools.map((t) => t.function.name), ['search_passenger_lists', 'find_person', 'find_company', 'read_rulebook']);
   assert.deepEqual(steps, [
-    'searched the company register for "Frontier Horizon Labs" (51 entries): 1 exact match',
-    'searched today\'s passenger lists for "FHL-0042" (247 passengers): 1 exact match',
+    'company register (51): "Frontier Horizon Labs"… 1 exact match',
+    'passenger lists (247): "FHL-0042"… 1 exact match',
   ]);
   // The second call carries the tool results, each tied to its call.
   const toolMessages = sent[1].messages.filter((m) => m.role === 'tool');

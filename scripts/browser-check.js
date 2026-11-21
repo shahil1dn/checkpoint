@@ -156,6 +156,29 @@ async function main() {
     check('hidden parts of the desk never catch the pointer', aboveSlip === 0, { transcriptAboveTheSlip: aboveSlip });
     await page.evaluate(`document.getElementById('start').click(); true`);
     await waitFor(`!document.getElementById('controls').hidden`);
+
+    // ADR-12: lift the papers, click a line, and the records terminal looks it
+    // up (offline, by the code's own search). Facing the window, a hint says
+    // the report is ready; turning to the computer clears it.
+    await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyP', bubbles: true })); true`);
+    await sleep(700);   // the papers rise to the eyes
+    const sponsorAt = await page.evaluate(DESK_SPOT('Look up: Ticket sponsored by', { left: 0.2, right: 0.8, top: 0.05, bottom: 0.95 }));
+    if (sponsorAt) {
+      for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+        await page.send('Input.dispatchMouseEvent', { type, x: sponsorAt[0], y: sponsorAt[1], button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
+      }
+    }
+    await waitFor(`document.getElementById('lookups-left').textContent.includes(' 2 of ')`, 10000);
+    await waitFor(`document.getElementById('hint').textContent.startsWith('The records report is ready')`, 5000);
+    const looked = await page.evaluate(`({ left: document.getElementById('lookups-left').textContent, hint: document.getElementById('hint').textContent })`);
+    await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft', bubbles: true })); true`);
+    const afterTurning = await page.evaluate(`document.getElementById('hint').textContent`);
+    check('clicking a line on the papers looks it up, and a hint says when the report is ready', Boolean(sponsorAt) && looked.left === 'Lookups left: 2 of 3' && looked.hint.startsWith('The records report is ready') && afterTurning === '', { sponsorAt, ...looked, afterTurning });
+    await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight', bubbles: true })); true`);
+    // A line he never said, sent straight to the server, is refused and costs nothing.
+    const refused = await page.evaluate(`fetch('/api/lookup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ travellerId: 'max', line: 'Is he a spy for a rival lab?', earlier: [] }) })
+      .then(async (res) => ({ status: res.status, error: (await res.json()).error, left: document.getElementById('lookups-left').textContent }))`);
+    check('a line he never gave is refused by the server', refused.status === 403 && refused.error === 'notGathered' && refused.left === 'Lookups left: 2 of 3', refused);
     // Shahil 13:40: no button row in the booth; you click the desk, and a typed question goes with Enter.
     const buttons = await page.evaluate(`({ booth: Boolean(document.querySelector('#booth canvas')), ask: Boolean(document.getElementById('ask')), row: !document.getElementById('tools').hidden })`);
     check('the booth has no on-screen button row', buttons.booth && !buttons.ask && !buttons.row, buttons);
