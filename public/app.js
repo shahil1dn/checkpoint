@@ -32,11 +32,13 @@ const HINTS = {
   notHeard: "Didn't catch that. Try again.",
   noMic: 'No microphone, so type your questions.',
   blocked: 'Click the page once so the browser lets them speak.',
+  noBribe: 'Nothing is on offer.',
 };
 const TOOL_TIPS = {
   papers: 'Papers: click to read',
   notebook: 'Scratchpad: click to open',
   transcript: 'Transcript: click to read it all',
+  bribe: 'A bribe: click to pocket it',
   mic: 'Microphone: hold to ask (or hold Space)',
   'stamp-through': 'Stamp: let them through',
   'stamp-away': 'Stamp: turn them away',
@@ -78,6 +80,7 @@ const booth = createBooth($('booth'), {
   onMicDown: () => beginTalking(),
   onMicUp: () => finishTalking(),
   onStampClick: (verdict) => stampTraveller(verdict),
+  onBribeClick: () => pocketBribe(),
   onHover: (tool) => { $('tool-tip').textContent = TOOL_TIPS[tool] ?? ''; },
   onView: (view) => renderLook(view),
 });
@@ -160,7 +163,8 @@ async function askQuestion(text, { typed = false } = {}) {
   if (reply?.timings) logCall(...linesForAnswer(reply, traveller.name, models));
   else if (error && live) logCall({ who: modelName(models?.answer), what: 'call failed, so nothing was counted' });
   if (error) hint(HINTS[error]);
-  else hint(reply.fallback ? `${traveller.name}: "${reply.reply}" (that question wasn't counted)` : '');
+  else if (reply.fallback) hint(`${traveller.name}: "${reply.reply}" (that question wasn't counted)`);
+  else hint(bribeOnTheLedge() ? `${traveller.name} slides a ${bribeOnTheLedge()} onto the ledge.` : '');
   if (reply) booth?.setMood(reply.mood);
   if (reply?.audio) playVoice(reply.audio, reply.timings?.speechMs);
   render();
@@ -181,6 +185,21 @@ async function stampTraveller(verdict) {
   booth?.show(R.currentTravellerId(shift), { reaction: verdict });
   $('last-stamp').textContent = `${getTraveller(travellerId).name}: stamped ${STAMP_WORDS[verdict].toUpperCase()}`;
   hint('');
+  render();
+}
+
+// A bribe sits on the window ledge until you pocket it (click it) or move on
+// (ask again or stamp). The rules record a pocketed one; the report shows it.
+function bribeOnTheLedge() {
+  const offer = R.bribeOffer(shift);
+  return offer ? R.offeredItem(offer.reply) : null;
+}
+
+function pocketBribe() {
+  const result = R.answerBribe(shift, true);
+  if (result.error) return hint(HINTS[result.error]);
+  shift = result.shift;
+  hint('You pocket it. That goes on your record.');
   render();
 }
 
@@ -301,7 +320,7 @@ function renderReport() {
     tr.dataset.result = row.correct ? 'right' : 'wrong';
     const cells = [
       row.name,
-      row.stamp ? STAMP_WORDS[row.stamp] : 'Not stamped',
+      `${row.stamp ? STAMP_WORDS[row.stamp] : 'Not stamped'}${row.bribeTaken ? ' (took a bribe)' : ''}`,
       row.honest ? `Honest. ${row.secret}` : `Lying. ${row.secret}`,
       row.correct ? 'Right' : 'Wrong',
     ];
@@ -313,6 +332,11 @@ function renderReport() {
     return tr;
   }));
   $('score').textContent = `You got ${report.correct} of ${report.total} right.`;
+  const bribers = report.rows.filter((row) => row.bribeTaken).map((row) => row.name).join(', ');
+  $('bribes').textContent = report.record === 'corrupt'
+    ? `Bribes taken: ${report.bribesTaken} (${bribers}). Inspector's record: CORRUPT.`
+    : "No bribes taken. Inspector's record: clean.";
+  $('bribes').className = report.record;
 }
 
 function renderClock() {
@@ -351,6 +375,7 @@ function render() {
   if (!booth) renderFallbackPanel(traveller);
   renderCaptions(traveller);
   renderTranscript(traveller);
+  booth?.setBribe(bribeOnTheLedge());
   $('talk').disabled = Boolean(shift.pending || shift.hearing) || left === 0 || !micReady();
 }
 

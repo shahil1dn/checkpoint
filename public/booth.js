@@ -268,6 +268,43 @@ function buildTranscript(group) {
   return { item, printer };
 }
 
+// A bribe on the window ledge (PR #3): what the traveller slid across, shown
+// only while it's on offer. Click it to pocket it.
+const LEDGE = new THREE.Vector3(-0.52, SILL + 0.04, 0.02);
+function buildBribe(group) {
+  const holder = new THREE.Group();
+  holder.userData.tool = 'bribe';
+  holder.position.copy(LEDGE);
+  holder.visible = false;
+  group.add(holder);
+  const croissant = new THREE.Group();
+  part(new THREE.TorusGeometry(0.06, 0.028, 10, 18, Math.PI * 1.25), mat('#d9a04a'), croissant, [0, 0.03, 0], [-Math.PI / 2, 0, 0.6]);
+  const cheese = new THREE.Group();
+  part(new THREE.CylinderGeometry(0.1, 0.1, 0.07, 10, 1, false, 0, Math.PI / 3), mat('#e8c95a'), cheese, [0, 0.035, 0], [0, 2.2, 0]);
+  const sticker = textPlane(0.11, 0.11, (g, w, h) => {
+    g.fillStyle = '#e8743b'; g.beginPath(); g.arc(w / 2, h / 2, w * 0.48, 0, Math.PI * 2); g.fill();
+    g.fillStyle = '#fbf8ef'; g.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const r = (i % 2 ? 0.17 : 0.38) * w;
+      const a = -Math.PI / 2 + (i * Math.PI) / 5;
+      g.lineTo(w / 2 + r * Math.cos(a), h / 2 + r * Math.sin(a));
+    }
+    g.fill();
+  }, 512);
+  sticker.redraw();
+  sticker.mesh.position.set(0, 0.06, -0.05);
+  sticker.mesh.rotation.x = -0.35;   // propped against the glass, facing the inspector
+  const items = { croissant, cheese, sticker: sticker.mesh };
+  for (const item of Object.values(items)) holder.add(item);
+  return {
+    holder,
+    show(name) {
+      holder.visible = Boolean(items[name]);
+      for (const [key, item] of Object.entries(items)) item.visible = key === name;
+    },
+  };
+}
+
 function buildMic(group) {
   const holder = new THREE.Group();
   holder.userData.tool = 'mic';
@@ -583,6 +620,7 @@ export function createBooth(container, handlers = {}) {
   const computer = buildComputer(group);
   buildRightWall(group);
   const thoughtBubble = buildThoughtBubble(group);
+  const bribe = buildBribe(group);
   const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };
   const tools = [papers.holder, notebook.holder, transcript.holder, printer, mic.holder, stamps.through.holder, stamps.away.holder];
 
@@ -612,7 +650,8 @@ export function createBooth(container, handlers = {}) {
     const box = canvas.getBoundingClientRect();
     pointer.set(((event.clientX - box.left) / box.width) * 2 - 1, -((event.clientY - box.top) / box.height) * 2 + 1);
     raycaster.setFromCamera(pointer, engine.camera);
-    const hit = raycaster.intersectObjects(tools, true)[0];
+    // A hidden bribe can't be picked: three's raycaster ignores visibility.
+    const hit = raycaster.intersectObjects(bribe.holder.visible ? [...tools, bribe.holder] : tools, true)[0];
     for (let o = hit?.object; o; o = o.parent) if (o.userData.tool) return o.userData.tool;
     return null;
   }
@@ -640,6 +679,7 @@ export function createBooth(container, handlers = {}) {
     const tool = toolAt(event);
     if (tool === 'papers' || tool === 'notebook' || tool === 'transcript') booth.toggle(tool);
     else if (tool?.startsWith('stamp-')) handlers.onStampClick?.(tool.slice(6));
+    else if (tool === 'bribe') handlers.onBribeClick?.();
     else if (lifted) booth.putDown();
   });
 
@@ -684,6 +724,7 @@ export function createBooth(container, handlers = {}) {
       if (!stamping) s.holder.position.y = s.home.y + (hovered === `stamp-${verdict}` ? 0.03 : 0);
     }
     mic.holder.position.y = SILL + (hovered === 'mic' && !micHeld ? 0.02 : 0);
+    bribe.holder.position.y = LEDGE.y + (hovered === 'bribe' ? 0.02 : 0);
     if (recording) {
       const pulse = reducedMotion ? 0 : Math.sin(t * 5);
       mic.ring.scale.setScalar(1.08 + pulse * 0.05);
@@ -807,6 +848,8 @@ export function createBooth(container, handlers = {}) {
     // lines: [{ who, text }], oldest first; 'You' marks the inspector's own words.
     setTranscript(name, lines) { transcript.redraw(name, lines); },
     setComputer(lines) { computer.redraw(lines); },
+    // 'croissant', 'cheese' or 'sticker' on the window ledge, or null for none.
+    setBribe(item) { bribe.show(item); },
     toggle(name) { lifted = lifted === name ? null : name; },
     // Turns one view left (-1) or right (+1); papers in hand go back on the desk.
     look(step) {

@@ -15,7 +15,7 @@ test('an ask request keeps only the known fields of past exchanges', () => {
     travellerId: 'max', question: 'Why?', history: [{ question: 'a', reply: 'b', extra: 'x' }],
   });
   assert.equal(checked.ok, true);
-  assert.deepEqual(checked.value.history, [{ question: 'a', reply: 'b', mood: 'neutral', cracked: false }]);
+  assert.deepEqual(checked.value.history, [{ question: 'a', reply: 'b', mood: 'neutral', cracked: false, bribe: false }]);
 });
 
 test('confessions: honest ignored, liar refused before question 3, accepted from 3', () => {
@@ -101,4 +101,24 @@ test('a reply that is not JSON, or has no reply text, is unusable', () => {
   assert.equal(R.parseReply('[]'), null);
   assert.equal(R.parseReply('{"mood":"happy"}'), null);
   assert.equal(R.parseReply('{"reply":"  ** "}'), null);
+});
+
+// Bribes: the model's flag is untrusted, like mood and cracked.
+test('a reply offers a bribe only when bribe is exactly true', () => {
+  const raw = (bribe) => JSON.stringify({ reply: 'A croissant, inspector?', mood: 'happy', cracked: false, bribe });
+  assert.equal(R.parseReply(raw(true)).bribe, true);
+  for (const junk of [false, 'yes', 1, null, { fish: 3 }]) assert.equal(R.parseReply(raw(junk)).bribe, false, JSON.stringify(junk));
+  assert.equal(R.parseReply('{"reply":"Hello.","mood":"happy","cracked":false}').bribe, false);
+});
+
+test('a past exchange with a bribe flag that is not true or false is refused', () => {
+  const ask = (bribe) => R.validateAskRequest({ travellerId: 'max', question: 'Why?', history: [{ question: 'a', reply: 'b', bribe }] });
+  assert.equal(ask('yes').reason, 'badHistory');
+  assert.equal(ask(true).value.history[0].bribe, true);
+});
+
+test('the bribe on the ledge matches what was offered, and is a sticker otherwise', () => {
+  assert.equal(R.offeredItem('Would you like a sticker? Or a croissant?'), 'croissant');
+  assert.equal(R.offeredItem('Yes, I am from Stilton. Taste?'), 'cheese');
+  assert.equal(R.offeredItem('A little something for your trouble.'), 'sticker');
 });

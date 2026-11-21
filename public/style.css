@@ -183,3 +183,7 @@ button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); ou
   #tools { padding: 6px 8px 8px; }
   .tool-row button { flex: 1 1 130px; }
 }
+
+/* The inspector's record on the filed report. */
+#bribes { margin: 12px 0 0; font-weight: 600; }
+#bribes.corrupt { color: #9a332c; }
