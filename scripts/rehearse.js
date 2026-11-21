@@ -11,6 +11,7 @@ import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { browserOnThisMachine } from './find-browser.js';
+import { TRAVELLERS } from '../src/travellers/index.js';
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
 // Three travellers with two minutes each (Shahil 15:25); the demo slot is 5 minutes.
@@ -257,9 +258,9 @@ async function main() {
       const voicesBefore = await evaluate('window.__voices.length');
       await click(step.stamp);
       note(`brought the ${step.stamp} stamp down on ${step.traveller}'s papers`);
-      // Shahil 14:34: the first TURNED AWAY brings out his last-ditch bribe.
-      // The demo refuses it with a second TURNED AWAY, so the police still come.
-      if (step.stamp === 'away') {
+      // Shahil 14:34: the first TURNED AWAY brings out his last-ditch bribe, if
+      // he has one (ADR-13). The demo refuses it with a second TURNED AWAY, so the police still come.
+      if (step.stamp === 'away' && TRAVELLERS.find((t) => t.name === step.traveller).bribe) {
         if (!(await waitFor(`!document.getElementById('take-bribe').hidden`))) throw new Error(`${step.traveller} made no offer`);
         note(`he pleads: ${await evaluate(`document.getElementById('subtitle').textContent`)}`);
         if (await waitFor(`window.__voices.length > ${voicesBefore}`)) {
