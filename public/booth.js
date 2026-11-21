@@ -11,7 +11,7 @@ import { FORM_TITLE, NOTICES, RULE_SPOT, TIN_LABEL } from '/notices.js';
 import { getTraveller } from '/src/travellers/index.js';
 
 const COLORS = {
-  booth: '#8fb3a8', inside: '#c9d6d0', floor: '#7d8a8f', frame: '#e8e2d4', desk: '#754a32', deskTop: '#a86e45',
+  booth: '#8fb3a8', inside: '#c9d6d0', floor: '#7d8a8f', frame: '#e8e2d4', desk: '#754a32',
   paper: '#f4efe2', cover: '#3f6e8c', micBody: '#343845', micGrille: '#5a5f6b', wood: '#8c6448',
   through: '#3f8f5a', away: '#c0453a', live: '#d8433a', off: '#6b6f78',
 };
@@ -173,7 +173,7 @@ function deskWood() {
   return mapMat(texture);
 }
 
-function buildRoom(group) {
+function buildRoom(group, wood) {
   const wall = mat(COLORS.booth);
   const [top, half] = [2.3, 1.15];
   part(box(6, SILL, 0.16), wall, group, [0, SILL / 2, 0]);
@@ -183,7 +183,7 @@ function buildRoom(group) {
   part(box(half * 2 + 0.16, 0.08, 0.24), frame, group, [0, SILL, 0]);
   part(box(half * 2 + 0.16, 0.08, 0.24), frame, group, [0, top, 0]);
   for (const s of [-1, 1]) part(box(0.08, top - SILL, 0.24), frame, group, [s * half, (SILL + top) / 2, 0]);
-  part(box(3.4, 0.1, 1.4, 0.04), deskWood(), group, [0, SILL - 0.05, 0.75]);
+  part(box(3.4, 0.1, 1.4, 0.04), wood, group, [0, SILL - 0.05, 0.75]);
   part(box(3.3, SILL - 0.1, 1.3, 0.04), mat(COLORS.desk), group, [0, (SILL - 0.1) / 2, 0.75]);
   // Fine inlay and a dark lower edge give the broad desk a readable silhouette.
   part(box(3.26, 0.012, 0.012, 0.004), mat(BRASS), group, [0, SILL - 0.019, 1.435], undefined, undefined, false);
@@ -435,11 +435,21 @@ function drawComputer(g, w, h, lines = []) {
   });
 }
 
-function buildComputer(group) {
+function buildSideDesk(group, x, inward, wood) {
+  part(box(0.6, 0.95, 2.35, 0.03), mat(COLORS.desk), group, [x, 0.475, 2.72]);
+  const top = box(0.62, 0.05, 2.37, 0.02);
+  const uv = top.getAttribute('uv');
+  // The side desks run along z; turn the shared wood map so its grain follows their long edge.
+  for (let i = 0; i < uv.count; i += 1) uv.setXY(i, uv.getY(i), uv.getX(i));
+  part(top, wood, group, [x, 0.97, 2.72]);
+  part(box(0.012, 0.008, 2.28, 0.003), mat(BRASS), group, [x + inward * 0.29, 1.001, 2.72], undefined, undefined, false);
+  part(box(0.025, 0.035, 2.28, 0.005), mat('#533322'), group, [x + inward * 0.3, 0.92, 2.72], undefined, undefined, false);
+}
+
+function buildComputer(group, wood) {
   const z = 2.25;   // straight ahead when the inspector turns left
   const wallX = -SIDE_WALL_X + 0.08;
-  part(box(0.6, 0.95, 2.35, 0.03), mat(COLORS.desk), group, [wallX + 0.3, 0.475, 2.72]);
-  part(box(0.62, 0.05, 2.37, 0.02), mat(COLORS.deskTop), group, [wallX + 0.3, 0.97, 2.72]);
+  buildSideDesk(group, wallX + 0.3, 1, wood);
   part(box(0.06, 0.22, 0.12), mat(COLORS.micBody), group, [wallX + 0.16, 1.1, z]);
   part(box(0.05, 0.74, 1.14, 0.02), mat(COLORS.micBody), group, [wallX + 0.2, 1.4, z]);
   const screen = textPlane(1.06, 0.66, drawComputer, 1600);
@@ -471,6 +481,7 @@ const NOTE_SPOTS = [   // [x, y, width, height, tilt] as fractions of the board
   [0.42, 0.06, 0.3, 0.42, 0.03],
   [0.07, 0.63, 0.25, 0.32, 0.04],
   [0.38, 0.55, 0.34, 0.4, -0.03],
+  [0.74, 0.69, 0.23, 0.28, 0.02],
 ];
 
 function drawPin(g, x, y, r) {
@@ -487,7 +498,7 @@ function drawSeal(g, x, y, size) {
   for (const dx of [0.28, 0.5]) { g.beginPath(); g.arc(x + size * dx, y - size * 0.24, size * 0.05, 0, Math.PI * 2); g.fill(); }
 }
 
-function drawNotice(g, w, h, { style, title, lines, picture }, [x, y, nw, nh, tilt]) {
+function drawNotice(g, w, h, { style, title, lines, picture, compact }, [x, y, nw, nh, tilt]) {
   const [width, height] = [nw * w, nh * h];
   g.save();
   g.translate(x * w + width / 2, y * h + height / 2); g.rotate(tilt); g.translate(-width / 2, -height / 2);
@@ -495,15 +506,15 @@ function drawNotice(g, w, h, { style, title, lines, picture }, [x, y, nw, nh, ti
   const pad = width * 0.07;
   const font = style === 'sticky' ? HANDWRITING : TYPEWRITER;
   g.fillStyle = INK; g.textAlign = 'left'; g.textBaseline = 'top';
-  g.font = `bold ${h * 0.058}px ${style === 'clipping' ? 'Georgia, serif' : font}`;
+  g.font = `bold ${h * (compact ? 0.043 : 0.058)}px ${style === 'clipping' ? 'Georgia, serif' : font}`;
   g.fillText(title, pad, pad * 1.2, width - pad * 2);
   if (style === 'clipping') g.fillRect(pad, pad * 1.2 + h * 0.072, width - pad * 2, h * 0.005);
-  g.font = `${h * 0.046}px ${font}`;
-  let lineY = pad * 1.2 + h * 0.1;
+  g.font = `${h * (compact ? 0.034 : 0.046)}px ${font}`;
+  let lineY = pad * 1.2 + h * (compact ? 0.075 : 0.1);
   for (const text of lines) {
     for (const line of wrap(g, text, width - pad * 2)) {
       g.fillText(line, pad, lineY);
-      lineY += h * 0.058;
+      lineY += h * (compact ? 0.043 : 0.058);
     }
   }
   if (picture === 'seal') drawSeal(g, width * 0.72, height * 0.68, height * 0.2);
@@ -584,11 +595,10 @@ function buildForms(group, at) {
   group.add(top.mesh);
 }
 
-function buildRightWall(group) {
+function buildRightWall(group, wood) {
   const z = 2.25;   // straight ahead when the inspector turns right
   const wallX = SIDE_WALL_X - 0.08;
-  part(box(0.6, 0.95, 2.35, 0.03), mat(COLORS.desk), group, [wallX - 0.3, 0.475, 2.72]);
-  part(box(0.62, 0.05, 2.37, 0.02), mat(COLORS.deskTop), group, [wallX - 0.3, 0.97, 2.72]);
+  buildSideDesk(group, wallX - 0.3, -1, wood);
   const top = 0.995;
   buildNoticeBoard(group, wallX, z);
   buildPenPot(group, new THREE.Vector3(wallX - 0.32, top, z - 0.15));
@@ -667,7 +677,8 @@ export function createBooth(container, handlers = {}) {
   engine.camera.fov = FRAMING.fov;
   const group = new THREE.Group();
   engine.scene.add(group);
-  buildRoom(group);
+  const wood = deskWood();
+  buildRoom(group, wood);
   const arrivals = buildScenery(group);
   const dir = EYE.clone().sub(LOOK_AT);
   const fitHalfHeight = dir.length() * Math.tan(THREE.MathUtils.degToRad(engine.camera.fov / 2));
@@ -678,8 +689,8 @@ export function createBooth(container, handlers = {}) {
   const { item: transcript, printer } = buildTranscript(group);
   const liftables = [papers, notebook, transcript];
   const mic = buildMic(group);
-  const computer = buildComputer(group);
-  buildRightWall(group);
+  const computer = buildComputer(group, wood);
+  buildRightWall(group, wood);
   const thoughtBubble = buildThoughtBubble(group);
   const bribe = buildBribe(group);
   const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };

@@ -24,6 +24,12 @@ export const NOTICES = [
     lines: ['The seal. Again.'],
     picture: 'seal',
   },
+  {
+    style: 'sticky',
+    compact: true,
+    title: 'HACKATHON MEMO',
+    lines: ['"I KNOW MISTRAL"', 'is not a passport.', 'Nice try, penguin.'],
+  },
 ];
 
 // The empty spot kept on the board for the judge's rule card (SPEC stretch 11).
