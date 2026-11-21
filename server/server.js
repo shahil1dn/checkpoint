@@ -2,7 +2,7 @@
 import http from 'node:http';
 import { HEARING_HINTS } from '../src/travellers.js';
 import { createApp } from './app.js';
-import { describeError, hasApiKey, makeMistralAsker, makeMistralHearer, makeMistralSpeaker } from './mistral.js';
+import { describeError, hasApiKey, makeMistralAsker, makeMistralHearer, makeMistralNoteTaker, makeMistralSpeaker } from './mistral.js';
 
 const PORT = Number(process.env.PORT) || 5173;
 const live = hasApiKey();
@@ -11,6 +11,7 @@ const handle = await createApp({
   ask: live ? makeMistralAsker() : null,
   hear: live ? makeMistralHearer({ hints: HEARING_HINTS }) : null,
   speak: live ? makeMistralSpeaker() : null,
+  takeNotes: live ? makeMistralNoteTaker() : null,
   liveAvailable: live,
   log: (err) => console.error(describeError(err)),
 });

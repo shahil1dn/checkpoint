@@ -170,15 +170,24 @@ function renderPapers(traveller) {
 
 function renderConversation(traveller) {
   const lines = [];
+  // No mood label: mood comes through the voice (and the face), never as text.
   for (const exchange of shift.cases[traveller.id].history) {
     lines.push(`You: ${exchange.question}`);
-    // A traveller with mood voices shows his mood by voice alone: that's the tell.
-    const mood = traveller.voices ? '' : ` (${exchange.mood})`;
     const cracked = exchange.cracked ? ' [He cracked!]' : '';
-    lines.push(`${traveller.name}${mood}: ${exchange.reply}${cracked}`);
+    lines.push(`${traveller.name}: ${exchange.reply}${cracked}`);
   }
   if (shift.pending) lines.push(`You: ${shift.pending.question}`, `${traveller.name}: …`);
   $('conversation').replaceChildren(...lines.map((text) => {
+    const li = document.createElement('li');
+    li.textContent = text;
+    return li;
+  }));
+}
+
+function renderNotes(traveller) {
+  const notes = shift.cases[traveller.id].notes;
+  const items = notes.length ? notes : ['Nothing noted yet.'];
+  $('notes').replaceChildren(...items.map((text) => {
     const li = document.createElement('li');
     li.textContent = text;
     return li;
@@ -226,6 +235,7 @@ function render() {
   const traveller = getTraveller(R.currentTravellerId(shift));
   $('queue-position').textContent = started ? `Traveller ${shift.current + 1} of ${shift.queue.length}` : '';
   renderPapers(traveller);
+  renderNotes(traveller);
   renderConversation(traveller);
   const left = R.questionsLeft(shift, traveller.id);
   $('questions-left').textContent = `Questions left: ${left} of ${R.MAX_QUESTIONS}`;

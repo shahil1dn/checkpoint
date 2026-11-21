@@ -6,8 +6,8 @@
 import http from 'node:http';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { createApp } from '../server/app.js';
-import { describeError, hasApiKey, makeMistralAsker, makeMistralJsonChat, makeMistralSpeaker } from '../server/mistral.js';
-import { MOODS, FALLBACK_LINE } from '../src/rules.js';
+import { describeError, hasApiKey, makeMistralAsker, makeMistralJsonChat, makeMistralNoteTaker, makeMistralSpeaker } from '../server/mistral.js';
+import { MOODS, FALLBACK_LINE, checkNotes } from '../src/rules.js';
 
 if (!hasApiKey()) {
   console.error('No MISTRAL_API_KEY in .env');
@@ -30,20 +30,24 @@ function timed(fn, into) {
   };
 }
 
-async function startServer({ withSpeech }) {
+async function startServer({ withSpeech, withNotes = false }) {
   const chatMs = [];
   const speechMs = [];
+  const rawNotes = [];
+  const noteTaker = makeMistralNoteTaker();
   const handle = await createApp({
     ask: timed(makeMistralAsker(), chatMs),
     // Consistency is about words, so those runs skip the voice to save time.
     speak: withSpeech ? timed(makeMistralSpeaker(), speechMs) : async () => 'none',
+    // The model's notes before the code's check, so refusals can be counted.
+    takeNotes: withNotes ? async (args) => { const raw = await noteTaker(args); rawNotes.push(raw); return raw; } : undefined,
     liveAvailable: true,
     log: (err) => console.error(describeError(err)),
   });
   const server = http.createServer(handle);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  return { base, chatMs, speechMs, close: () => server.close() };
+  return { base, chatMs, speechMs, rawNotes, close: () => server.close() };
 }
 
 // Plays questions in order the way the page does: a fallback or a failed
@@ -70,8 +74,9 @@ async function interrogate(base, travellerId, questions) {
 // the travellers, never inside the game.
 async function judge(question) {
   const raw = await chatJson({
-    messages: [{ role: 'user', content: `${question}\nAnswer with JSON: {"yes": true or false, "why": "one short sentence"}.` }],
-    format: { type: 'json_schema', json_schema: { name: 'verdict', strict: true, schema: { type: 'object', additionalProperties: false, required: ['yes', 'why'], properties: { yes: { type: 'boolean' }, why: { type: 'string' } } } } },
+    // "why" comes before "yes" so the judge reasons before it answers.
+    messages: [{ role: 'user', content: `${question}\nAnswer with JSON: {"why": "one short sentence", "yes": true or false}.` }],
+    format: { type: 'json_schema', json_schema: { name: 'verdict', strict: true, schema: { type: 'object', additionalProperties: false, required: ['why', 'yes'], properties: { why: { type: 'string' }, yes: { type: 'boolean' } } } } },
     maxTokens: 120,
   });
   try {
@@ -209,9 +214,51 @@ async function consistency() {
   return { title: 'C6: consistency, each scenario run 3 times', pass: results.every((r) => r.pass) && early.length === 0, lines };
 }
 
+// ---- Section: notes (A12, A13), pass rules first ----
+// A12: across 3 runs of each traveller, the code refuses no note at all.
+// A13: asked who paid for his ticket, Max's notes point out the clash with
+// "Ticket sponsored by: Frontier Horizon Labs" in at least 2 of 3 runs.
+
+const NOTE_RUNS = {
+  max: ['Who paid for your ticket?', 'What do you do for work?', 'Where are you staying in London?'],
+  colin: ['What are you carrying?', 'How often do you come through here?', 'Is Stilton really your name?'],
+};
+
+async function notes() {
+  const server = await startServer({ withSpeech: false, withNotes: true });
+  const jobs = Object.entries(NOTE_RUNS).flatMap(([traveller, questions]) =>
+    Array.from({ length: RUNS }, (_, run) => ({ traveller, questions, run: run + 1 })));
+  const results = await Promise.all(jobs.map(async (job) => ({ ...job, turns: await interrogate(server.base, job.traveller, job.questions) })));
+  server.close();
+
+  const refused = server.rawNotes.reduce((sum, raw) => sum + checkNotes(raw).refused, 0);
+  const sameFact = server.rawNotes.reduce((sum, raw) => sum + checkNotes(raw).sameFact, 0);
+  const refusedText = server.rawNotes.flatMap((raw) => {
+    try { return JSON.parse(raw).notes.filter((n) => !checkNotes(JSON.stringify({ notes: [n] })).kept.length); } catch { return [raw]; }
+  });
+  const sponsorRuns = await Promise.all(results.filter((r) => r.traveller === 'max').map(async (r) => {
+    const first = r.turns[0];
+    const v = await judge(`A traveller's papers say "Ticket sponsored by: Frontier Horizon Labs". Asked who paid for his ticket, he said: ${quote(first.reply)}\nNotes written about that answer: ${first.notes.map(quote).join(' ') || '(none)'}\nDoes any note point out that his answer does not match who his papers say sponsored the ticket?`);
+    return { run: r.run, flagged: v.yes === true, reply: first.reply, notes: first.notes, why: v.why };
+  }));
+  const flagged = sponsorRuns.filter((s) => s.flagged).length;
+
+  const lines = [
+    `A12: notes from the model: ${server.rawNotes.length} answers; notes refused by the code: ${refused}${refused ? ` (${refusedText.map(quote).join(', ')})` : ''}. ${refused === 0 ? 'PASS' : 'FAIL'}. Dropped as the same fact written as a clash: ${sameFact}.`,
+    `A13: sponsor clash noted in ${flagged} of ${sponsorRuns.length} runs (need 2). ${flagged >= 2 ? 'PASS' : 'FAIL'}`,
+    '',
+    '| Traveller | Run | Q | Question | Reply | Notes |',
+    '|---|---|---|---|---|---|',
+    ...results.flatMap((r) => r.turns.map((t) => `| ${r.traveller} | ${r.run} | ${t.n} | ${quote(t.question)} | ${quote(t.reply)} | ${(t.notes ?? []).map(quote).join(' ') || '(none)'} |`)),
+    '',
+    ...sponsorRuns.map((s) => `A13 run ${s.run}: ${s.flagged ? 'noted' : 'not noted'}. Judge: ${s.why}`),
+  ];
+  return { title: 'A12 and A13: the scratchpad', pass: refused === 0 && flagged >= 2, lines };
+}
+
 // ---- Run and save ----
 
-const SECTIONS = { speed, consistency };
+const SECTIONS = { speed, consistency, notes };
 const chosen = process.argv.slice(2).filter((name) => SECTIONS[name]);
 const names = chosen.length ? chosen : Object.keys(SECTIONS);
 const sections = [];

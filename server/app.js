@@ -3,7 +3,7 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { FALLBACK_LINE, cleanTranscript, judgeReply, parseReply, validateAskRequest } from '../src/rules.js';
+import { FALLBACK_LINE, checkNotes, cleanTranscript, judgeReply, parseReply, validateAskRequest } from '../src/rules.js';
 import { getTraveller, voiceFor } from '../src/travellers.js';
 import { AUDIO_TYPES } from './mistral.js';
 import { EARLY_CONFESSION_NUDGE } from './prompt.js';
@@ -54,7 +54,7 @@ async function readJsonBody(req) {
   }
 }
 
-export async function createApp({ ask, hear, speak, liveAvailable, log = () => {} }) {
+export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, log = () => {} }) {
   const routes = await staticRoutes();
 
   async function handleHear(req, res) {
@@ -87,7 +87,25 @@ export async function createApp({ ask, hear, speak, liveAvailable, log = () => {
       log(err);
       return send(res, 502, { error: 'callFailed' });
     }
-    return send(res, 200, { ...reply, audio: await speakOrNull(traveller, reply) });
+    // Notes are taken while the voice is made, so they add no wait.
+    const exchanges = [...history, { question, reply: reply.reply, mood: reply.mood }];
+    const [audio, notes] = await Promise.all([
+      speakOrNull(traveller, reply),
+      reply.fallback ? [] : notesOrNone(traveller.papers, exchanges),
+    ]);
+    return send(res, 200, { ...reply, audio, notes });
+  }
+
+  // Only the papers and the conversation go to the note-taker (ADR-8).
+  // A failed or refused note is dropped; the answer still arrives.
+  async function notesOrNone(papers, exchanges) {
+    if (!takeNotes) return [];
+    try {
+      return checkNotes(await takeNotes({ papers, exchanges })).kept;
+    } catch (err) {
+      log(err);
+      return [];
+    }
   }
 
   // C5: a broken or refused reply gets one retry. After that the traveller

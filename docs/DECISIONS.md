@@ -80,3 +80,14 @@ can't. It's the Fang Street lesson again: the code guarantees what matters, and 
 shapes the style.
 **Turned down:** notes written by the traveller's own call (it knows the secret); notes built
 purely by code from fixed fields (they'd miss dodges and changes of manner).
+
+## ADR-9: A lying traveller may contradict his papers (21 Nov 11:18)
+
+**Decided:** honest travellers never contradict their papers. A liar may deny, twist or explain
+away a detail on his papers, and whatever he says then stays true. Everyone still never
+contradicts his own earlier answers. Amends C2 in `docs/ai-consistency.md`.
+**Why:** Shahil's call. With C2 as first written ("never contradict your papers"), Max always
+admitted "Frontier Horizon Labs paid, they're Mistral fans too", so the scratchpad had no clash
+to note (A13: 0 of 3). Players can't know a made-up lab is a rival, so an answer that clashes
+with the papers is the clearest clue a liar gives.
+**Turned down:** keeping papers binding for everyone and testing A13 against a different clash.

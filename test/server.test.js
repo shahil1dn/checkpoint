@@ -14,6 +14,9 @@ const heard = [];
 let nextTranscript = 'Who paid for your ticket?';
 const spoken = [];
 let speechFails = false;
+const noted = [];
+const NOTE = 'Says he came for the hackathon.';
+let nextNotes = JSON.stringify({ notes: [NOTE] });
 
 before(async () => {
   process.env.MISTRAL_API_KEY = FAKE_KEY;
@@ -33,6 +36,11 @@ before(async () => {
       spoken.push(req);
       if (speechFails) throw new Error('speech down');
       return 'QUJD';
+    },
+    takeNotes: async (req) => {
+      noted.push(req);
+      if (nextNotes instanceof Error) throw nextNotes;
+      return nextNotes;
     },
   });
   server = http.createServer(handle);
@@ -56,7 +64,7 @@ test('a good question reaches Mistral and the checked, spoken reply comes back',
   nextRaw = GOOD_RAW;
   const res = await post(valid);
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false, audio: 'QUJD' });
+  assert.deepEqual(await res.json(), { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false, audio: 'QUJD', notes: [NOTE] });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].traveller.id, 'max');
   assert.equal(calls[0].question, 'Why are you here?');
@@ -118,6 +126,33 @@ test('a failed Mistral call returns 502 without detail', async () => {
   assert.deepEqual(await res.json(), { error: 'callFailed' });
 });
 
+// ---- The scratchpad ----
+
+// A11, at the call site: the note-taker is handed the papers and the
+// conversation, and nothing else of the traveller.
+test('the note-taker gets only the papers and the conversation', async () => {
+  noted.length = 0;
+  nextRaw = GOOD_RAW;
+  await post({ ...valid, history: [pastExchange] });
+  assert.equal(noted.length, 1);
+  assert.deepEqual(Object.keys(noted[0]).sort(), ['exchanges', 'papers']);
+  assert.deepEqual(noted[0].papers, getTraveller('max').papers);
+  assert.deepEqual(noted[0].exchanges.map((e) => e.question), ['Hello?', 'Why are you here?']);
+  assert.ok(!JSON.stringify(noted[0]).includes(getTraveller('max').truth.secret));
+});
+
+test('notes with a verdict are dropped, and the answer still arrives', async () => {
+  nextRaw = GOOD_RAW;
+  nextNotes = JSON.stringify({ notes: ['He is lying about the sponsor.', 'Offered a sticker.'] });
+  const body = await (await post(valid)).json();
+  assert.deepEqual(body.notes, ['Offered a sticker.']);
+  nextNotes = new Error('notes down');
+  const res = await post(valid);
+  assert.equal(res.status, 200);
+  assert.deepEqual((await res.json()).notes, []);
+  nextNotes = JSON.stringify({ notes: [NOTE] });
+});
+
 // ---- C3 and C5: the code owns confessions; one retry, then "say that again" ----
 
 const raw = (reply, cracked = false) => JSON.stringify({ reply, mood: 'sad', cracked });
@@ -140,7 +175,7 @@ test('two broken replies become an in-character "say that again", spoken', async
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(calls.length, 2);
-  assert.deepEqual({ reply: body.reply, fallback: body.fallback, cracked: body.cracked }, { reply: FALLBACK_LINE, fallback: true, cracked: false });
+  assert.deepEqual({ reply: body.reply, fallback: body.fallback, cracked: body.cracked, notes: body.notes }, { reply: FALLBACK_LINE, fallback: true, cracked: false, notes: [] });
   assert.equal(spoken[0].text, FALLBACK_LINE);
 });
 

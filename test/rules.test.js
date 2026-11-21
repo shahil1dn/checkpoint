@@ -28,6 +28,42 @@ test('confessions: honest ignored, liar refused before question 3, accepted from
   assert.equal(R.judgeReply(max, 1, { ...cracked, cracked: false }).ok, true);
 });
 
+// A12: notes never give a verdict.
+test('every verdict word, a tick or a cross gets a note refused', () => {
+  const words = ['lie', 'liar', 'lying', 'truth', 'honest', 'suspicious', 'guilty', 'innocent', '✓', '✗',
+    'Lies about the sponsor', 'Sounds dishonest', 'Truthful so far', 'Honestly odd'];
+  for (const word of words) {
+    const { kept, refused } = R.checkNotes(JSON.stringify({ notes: [`Note: ${word}`] }));
+    assert.deepEqual([kept, refused], [[], 1], word);
+  }
+});
+
+test('a plain observation is kept, even with words that contain a verdict word', () => {
+  const notes = ['Believes the hackathon is in Paris.', 'Papers say 40 kg; he said "a few wheels".'];
+  assert.deepEqual(R.checkNotes(JSON.stringify({ notes })), { kept: notes, refused: 0, sameFact: 0 });
+});
+
+test('a 3rd note in one answer and a note over 120 characters are refused', () => {
+  const three = R.checkNotes(JSON.stringify({ notes: ['One.', 'Two.', 'Three.'] }));
+  assert.deepEqual(three, { kept: ['One.', 'Two.'], refused: 1, sameFact: 0 });
+  const long = R.checkNotes(JSON.stringify({ notes: ['a'.repeat(121), 'b'.repeat(120)] }));
+  assert.deepEqual(long, { kept: ['b'.repeat(120)], refused: 1, sameFact: 0 });
+});
+
+test('a two-sided note where both sides say the same thing is dropped; a real clash is kept', () => {
+  const same = ['Says Stilton; papers say Colin Stilton', "Says 'Stilton, Cambridgeshire'; papers say 'Stilton'", 'Says Frontier Horizon Labs paid; papers say Frontier Horizon Labs'];
+  const real = ["Says 'a kind sponsor from my local AI meetup'; papers say 'Frontier Horizon Labs'", "Says 'Every few days'; papers say '9'"];
+  assert.deepEqual(R.checkNotes(JSON.stringify({ notes: same.slice(0, 2) })), { kept: [], refused: 0, sameFact: 2 });
+  assert.deepEqual(R.checkNotes(JSON.stringify({ notes: [same[2]] })).sameFact, 1);
+  assert.deepEqual(R.checkNotes(JSON.stringify({ notes: real })), { kept: real, refused: 0, sameFact: 0 });
+});
+
+test('broken note output shows no notes rather than breaking', () => {
+  assert.deepEqual(R.checkNotes('not json'), { kept: [], refused: 0, sameFact: 0 });
+  assert.deepEqual(R.checkNotes('{"notes":"one"}'), { kept: [], refused: 0, sameFact: 0 });
+  assert.deepEqual(R.checkNotes('{"notes":[42,"",null," ok "]}'), { kept: ['ok'], refused: 0, sameFact: 0 });
+});
+
 test('a past exchange with a cracked flag that is not true or false is refused', () => {
   const checked = R.validateAskRequest({ travellerId: 'max', question: 'Why?', history: [{ question: 'a', reply: 'b', cracked: 'yes' }] });
   assert.equal(checked.reason, 'badHistory');

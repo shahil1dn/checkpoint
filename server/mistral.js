@@ -1,6 +1,6 @@
 // The only file that reads the Mistral key. Plain fetch, no SDK (ADR-5).
 // fetchImpl is injectable so tests can check what is sent without the network.
-import { REPLY_FORMAT, buildMessages } from './prompt.js';
+import { NOTES_FORMAT, REPLY_FORMAT, buildMessages, buildNoteMessages } from './prompt.js';
 
 const API = 'https://api.mistral.ai/v1';
 const TIMEOUT_MS = 20_000;
@@ -55,6 +55,13 @@ export function makeMistralAsker({ fetchImpl = fetch } = {}) {
   const chatJson = makeMistralJsonChat({ fetchImpl });
   return ({ traveller, history, question, nudge }) =>
     chatJson({ messages: buildMessages(traveller, history, question, { nudge }), format: REPLY_FORMAT });
+}
+
+// The scratchpad's notes on the latest answer. Takes only what the player sees.
+export function makeMistralNoteTaker({ fetchImpl = fetch } = {}) {
+  const chatJson = makeMistralJsonChat({ fetchImpl });
+  return ({ papers, exchanges }) =>
+    chatJson({ messages: buildNoteMessages({ papers, exchanges }), format: NOTES_FORMAT, maxTokens: 200 });
 }
 
 export const HEAR_MODEL = 'voxtral-mini-latest';

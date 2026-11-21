@@ -66,6 +66,43 @@ export function cleanTranscript(text) {
   return [...text.replace(/_/g, ' ').replace(/\s+/g, ' ').trim()].slice(0, MAX_QUESTION_CHARS).join('').trim();
 }
 
+// ---- The scratchpad (ADR-8) ----
+// Notes are observations, never verdicts: the player still has to decide.
+
+export const MAX_NOTES_PER_ANSWER = 2;
+export const MAX_NOTE_CHARS = 120;
+// The spec's list, plus the forms of those words a note would actually use.
+const VERDICT = /\b(lie|lies|lied|liar|liars|lying|truth\w*|untruth\w*|honest\w*|dishonest\w*|suspicious\w*|suspicion\w*|suspect\w*|guilt\w*|innocen\w*)\b|[✓✔✗✘]/i;
+
+// "Says Stilton; papers say Colin Stilton" is the same fact in the form of a
+// clash, which would mislead the player. Measured live: the model writes these
+// for honest Colin even when told not to.
+const TWO_SIDED = /^says\s+(.+?);\s*papers say\s+(.+)$/i;
+const plain = (s) => s.toLowerCase().replace(/['"‘’“”.,]/g, '').trim();
+function isSameFact(text) {
+  const match = TWO_SIDED.exec(text);
+  if (!match) return false;
+  const [said, papers] = [plain(match[1]), plain(match[2])];
+  return said.includes(papers) || papers.includes(said);
+}
+
+// Returns the notes to show, how many broke the rules (refused) and how many
+// were dropped as a false clash. A dropped note is simply not shown.
+export function checkNotes(raw) {
+  let data;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return { kept: [], refused: 0, sameFact: 0 };
+  }
+  const candidates = (Array.isArray(data?.notes) ? data.notes : [])
+    .map((note) => (typeof note === 'string' ? note.replace(/\s+/g, ' ').trim() : ''))
+    .filter((text) => text !== '');
+  const allowed = candidates.filter((text, i) => i < MAX_NOTES_PER_ANSWER && charCount(text) <= MAX_NOTE_CHARS && !VERDICT.test(text));
+  const kept = allowed.filter((text) => !isSameFact(text));
+  return { kept, refused: candidates.length - allowed.length, sameFact: allowed.length - kept.length };
+}
+
 // ---- The shift ----
 // Each function takes a shift and returns a new one, so the page can't
 // half-apply a rule.
@@ -84,7 +121,7 @@ export function newShift(queue = DEMO_QUEUE, { firstRequestId = 1 } = {}) {
     pending: null,
     hearing: false,
     nextRequestId: firstRequestId,
-    cases: Object.fromEntries(queue.map((id) => [id, { history: [], stamp: null }])),
+    cases: Object.fromEntries(queue.map((id) => [id, { history: [], notes: [], stamp: null }])),
   };
 }
 
@@ -117,10 +154,11 @@ export function finishQuestion(shift, requestId, reply) {
   if (!reply) return { ...shift, pending: null };
   const exchange = { question, reply: reply.reply, mood: reply.mood, cracked: reply.cracked };
   const record = shift.cases[travellerId];
+  const notes = [...record.notes, ...(reply.notes ?? []).slice(0, MAX_NOTES_PER_ANSWER)];
   return {
     ...shift,
     pending: null,
-    cases: { ...shift.cases, [travellerId]: { ...record, history: [...record.history, exchange] } },
+    cases: { ...shift.cases, [travellerId]: { ...record, history: [...record.history, exchange], notes } },
   };
 }
 

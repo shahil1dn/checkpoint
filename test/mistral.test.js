@@ -1,7 +1,7 @@
 // Checks what server/mistral.js sends, using a fake fetch: no network.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { describeError, makeMistralAsker, makeMistralHearer, makeMistralSpeaker } from '../server/mistral.js';
+import { describeError, makeMistralAsker, makeMistralHearer, makeMistralNoteTaker, makeMistralSpeaker } from '../server/mistral.js';
 import { buildMessages } from '../server/prompt.js';
 import { getTraveller } from '../src/travellers.js';
 
@@ -82,6 +82,21 @@ test('the prompt carries the cover story, the secret and the papers', () => {
   assert.match(system.content, /Ticket sponsored by: Frontier Horizon Labs/);
 });
 
+// A11: with a fake fetch, see exactly what the note-taker sends to Mistral.
+test('the note-taker sends the papers and the conversation, never the prompt or the truth', async () => {
+  const { impl, sent } = fakeFetch(200, { choices: [{ message: { content: '{"notes":[]}' } }] });
+  const exchanges = [{ question: 'Who paid for your ticket?', reply: 'Mistral did, of course!', mood: 'confident' }];
+  await makeMistralNoteTaker({ fetchImpl: impl })({ papers: max.papers, exchanges });
+  const body = sent[0].init.body;
+  for (const value of Object.values(max.papers)) assert.ok(body.includes(value), value);
+  assert.ok(body.includes('Who paid for your ticket?') && body.includes('Mistral did, of course!'));
+  assert.ok(!body.includes(max.prompt.slice(0, 60)), 'traveller prompt leaked');
+  assert.ok(!body.includes(max.truth.secret), 'secret leaked');
+  assert.ok(!body.includes('rival AI lab'), 'secret wording leaked');
+  assert.ok(!body.includes('"honest"'), 'truth flag leaked');
+  assert.equal(JSON.parse(body).response_format.json_schema.name, 'notes');
+});
+
 const past = (cracked = false) => ({ question: 'a', reply: 'b', mood: 'sad', cracked });
 
 test('past exchanges alternate inspector and traveller turns', () => {
@@ -103,10 +118,20 @@ test("the inspector's words are fenced and can't close the fence", () => {
 test('every traveller gets the shared consistency rules', () => {
   for (const traveller of [max, getTraveller('colin')]) {
     const [system] = buildMessages(traveller, [], 'Hi');
-    assert.match(system.content, /Never contradict your papers or your earlier answers/);
+    assert.match(system.content, /Never contradict your earlier answers/);
     assert.match(system.content, /once you have said them, they stay true/);
     assert.match(system.content, /slightly misheard/);
   }
+});
+
+// ADR-9
+test('only a liar may contradict his papers', () => {
+  const [colin] = buildMessages(getTraveller('colin'), [], 'Hi');
+  const [maxSystem] = buildMessages(max, [], 'Hi');
+  assert.match(colin.content, /Everything on your papers is true: never contradict them/);
+  assert.doesNotMatch(colin.content, /deny it/);
+  assert.match(maxSystem.content, /do not confirm it: deny it, twist it or blame a mistake/);
+  assert.doesNotMatch(maxSystem.content, /never contradict them/);
 });
 
 // C3 and C4

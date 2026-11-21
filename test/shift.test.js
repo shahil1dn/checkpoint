@@ -100,6 +100,13 @@ test('only one question can be out at a time, and a failed one is not counted', 
   assert.equal(R.questionsLeft(failed, 'max'), 5);
 });
 
+test("each answer's notes are kept on that traveller's scratchpad", () => {
+  const asked = R.startQuestion(R.newShift(), 'Who paid?');
+  const shift = R.finishQuestion(asked.shift, asked.request.id, { reply: 'Mistral!', mood: 'happy', cracked: false, notes: ['Says Mistral paid.'] });
+  assert.deepEqual(shift.cases.max.notes, ['Says Mistral paid.']);
+  assert.deepEqual(shift.cases.colin.notes, []);
+});
+
 test('a bad verdict is refused', () => {
   assert.equal(R.stamp(R.newShift(), 'maybe').error, 'badVerdict');
 });
