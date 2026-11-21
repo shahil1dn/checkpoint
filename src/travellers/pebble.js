@@ -3,10 +3,10 @@
 export default {
   id: 'pebble',
   name: 'Granny Pebble',
+  // Six one-line entries: any more and the bottom line falls off the papers card.
   papers: {
     Name: 'Edna Pebble',
     From: 'Fang Street, London',
-    Occupation: 'Retired',
     'Purpose of visit': 'Visiting her grandson',
     'Length of stay': '2 days',
     Luggage: 'One handbag',

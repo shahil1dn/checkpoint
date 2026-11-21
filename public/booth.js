@@ -597,9 +597,10 @@ function buildStamp(group, verdict, x) {
 
 function makeTraveller(id) {
   // Each traveller's file sets his single accessory, so he reads at a glance.
-  const { scarf = false, ...look } = getTraveller(id)?.look ?? {};
+  const { scarf = false, vestColor, ...look } = getTraveller(id)?.look ?? {};
   const penguin = makePenguin({ scarf });
   penguin.setLook(look);
+  if (vestColor) penguin.looks.vestMat.color.set(vestColor);
   penguin.showHearts = false;   // hearts are for love (art direction); nobody here is in love
   return penguin;
 }
