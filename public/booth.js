@@ -281,7 +281,9 @@ function buildBribe(group) {
   const croissant = new THREE.Group();
   part(new THREE.TorusGeometry(0.06, 0.028, 10, 18, Math.PI * 1.25), mat('#d9a04a'), croissant, [0, 0.03, 0], [-Math.PI / 2, 0, 0.6]);
   const cheese = new THREE.Group();
-  part(new THREE.CylinderGeometry(0.1, 0.1, 0.07, 10, 1, false, 0, Math.PI / 3), mat('#e8c95a'), cheese, [0, 0.035, 0], [0, 2.2, 0]);
+  // Stood on its long edge with its cut face to the inspector: lying flat, it was
+  // a thin yellow sliver from the chair.
+  part(new THREE.CylinderGeometry(0.1, 0.1, 0.07, 10, 1, false, Math.PI / 2, Math.PI / 3), mat('#e8c95a'), cheese, [-0.05, 0.002, 0], [Math.PI / 2, 0, 0]);
   const sticker = textPlane(0.11, 0.11, (g, w, h) => {
     g.fillStyle = '#e8743b'; g.beginPath(); g.arc(w / 2, h / 2, w * 0.48, 0, Math.PI * 2); g.fill();
     g.fillStyle = '#fbf8ef'; g.beginPath();

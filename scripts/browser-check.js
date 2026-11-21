@@ -186,7 +186,7 @@ async function main() {
     }
     // Shahil 14:34: nobody bribes while he's being questioned.
     seen = await desk();
-    check('no bribe is offered during the questions', !seen.offer && !seen.hint.includes('ledge'), seen);
+    check('no bribe is offered during the questions', !seen.offer && !seen.hint.includes('offers a'), seen);
     // A 6th question can still be typed; it must be refused with a hint.
     await ask('One more?');
     await waitFor(`document.getElementById('hint').textContent === ${JSON.stringify(OUT_OF_QUESTIONS)}`, 5000);
@@ -198,7 +198,7 @@ async function main() {
     await press(awayAt);
     await waitFor(OFFER_OUT, 5000);
     seen = await desk();
-    check('TURNED AWAY does not land: Max says "wait" and a croissant comes out', seen.name === 'Max Tokens' && seen.offer && seen.said.includes('Wait, wait!') && seen.hint.includes('croissant onto the ledge'), seen);
+    check('TURNED AWAY does not land: Max says "wait" and a croissant comes out', seen.name === 'Max Tokens' && seen.offer && seen.said.includes('Wait, wait!') && seen.hint.includes('offers a croissant'), seen);
     // Only the ledge's left half is scanned, to keep the check quick.
     const bribeAt = (await page.evaluate(DESK_SPOT('A bribe', { left: 0.15, right: 0.5, top: 0.45, bottom: 0.7 }))) ?? [0, 0];
     await press(bribeAt);

@@ -222,7 +222,7 @@ async function hearPlea() {
   const { shift: offered, offer } = R.stamp(shift, 'away');
   shift = offered;
   const name = getTraveller(offer.travellerId).name;
-  hint(`${name} slides a ${ITEM_WORDS[offer.item]} onto the ledge. Take it, or stamp TURNED AWAY again.`);
+  hint(`${name} offers a ${ITEM_WORDS[offer.item]}. Take it, or stamp TURNED AWAY.`);
   booth?.setMood(offer.mood);
   render();
   const endPlea = () => { shift = R.setPleading(shift, false); };
