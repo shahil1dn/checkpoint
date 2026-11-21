@@ -115,3 +115,17 @@ or logos.
 never committed.
 **Knock-on:** the travellers' stories now end at the Antarctic border post. They arrive by ship,
 and the Mistral hackathon is down there.
+
+## ADR-12: The records terminal checks only what the player gathered, and never sees the truth (21 Nov 15:05)
+
+**Decided:** the left computer is a records terminal powered by Mistral. The player sends it a
+line they've gathered, from the papers or the transcript, by clicking it. No free typing. It
+searches the game's records with tools and reports what they say. It gets the records and that
+line only: no traveller prompt, truth or secret, and no verdict words. 3 lookups per traveller.
+**Why:** Shahil: "it can only help you from what you gathered, it's up to player to ask right
+questions". The justification for an AI is scale and mess: records too big and too messy to read
+during an interview, near-matching misspelled names, and quoting a long rulebook. The judgement
+stays human, because only the player hears the story and can set it against the records. Clicking
+gathered lines instead of typing removes off-topic and trick prompts, which matters live on stage.
+**Turned down:** free-typed questions (too many failure modes in a live demo); a terminal that
+listens to the whole interview (it would become a lie detector and decide the game).
