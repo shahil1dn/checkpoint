@@ -279,7 +279,7 @@ export function checkLookupAnswer(raw) {
 
 // What can sit on the window ledge, and the words the hints use for it.
 // public/booth.js draws each one: a new item needs a drawing there too.
-export const BRIBE_ITEMS = { croissant: 'croissant', cheese: 'wedge of cheese', sticker: 'sticker', card: 'business card', pie: 'fish pie' };
+export const BRIBE_ITEMS = { cheese: 'wedge of cheese', sticker: 'sticker', card: 'business card' };
 
 // The offer on the ledge, until the inspector takes it or stamps.
 export function bribeOffer(shift) {
