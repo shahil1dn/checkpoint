@@ -537,28 +537,67 @@ function drawSeal(g, x, y, size) {
   g.beginPath(); g.arc(x + size * 0.38, y - size * 0.18, size * 0.32, 0, Math.PI * 2); g.fill();
   g.fillStyle = INK;
   for (const dx of [0.28, 0.5]) { g.beginPath(); g.arc(x + size * dx, y - size * 0.24, size * 0.05, 0, Math.PI * 2); g.fill(); }
+  g.strokeStyle = INK; g.lineWidth = size * 0.035;
+  g.beginPath(); g.arc(x + size * 0.39, y - size * 0.04, size * 0.13, 0.15, Math.PI - 0.15); g.stroke();
+  g.beginPath(); g.moveTo(x - size * 0.7, y + size * 0.34); g.lineTo(x - size * 0.95, y + size * 0.03); g.stroke();
+}
+
+const NOTE_FONTS = {
+  typed: '"Cascadia Mono", Consolas, monospace',
+  clipping: 'Georgia, serif',
+  sticky: '"Segoe UI", "Trebuchet MS", sans-serif',
+};
+
+function noticeLines(g, texts, maxWidth) {
+  return texts.map((text) => wrap(g, text, maxWidth));
 }
 
 function drawNotice(g, w, h, { style, title, lines, picture, compact }, [x, y, nw, nh, tilt]) {
   const [width, height] = [nw * w, nh * h];
   g.save();
   g.translate(x * w + width / 2, y * h + height / 2); g.rotate(tilt); g.translate(-width / 2, -height / 2);
+  g.fillStyle = '#35281855'; g.fillRect(h * 0.008, h * 0.012, width, height);
   g.fillStyle = NOTE_PAPER[style]; g.fillRect(0, 0, width, height);
-  const pad = width * 0.07;
-  const font = style === 'sticky' ? HANDWRITING : TYPEWRITER;
-  g.fillStyle = INK; g.textAlign = 'left'; g.textBaseline = 'top';
-  g.font = `bold ${h * (compact ? 0.043 : 0.058)}px ${style === 'clipping' ? 'Georgia, serif' : font}`;
-  g.fillText(title, pad, pad * 1.2, width - pad * 2);
-  if (style === 'clipping') g.fillRect(pad, pad * 1.2 + h * 0.072, width - pad * 2, h * 0.005);
-  g.font = `${h * (compact ? 0.032 : 0.046)}px ${font}`;
-  let lineY = pad * 1.2 + h * (compact ? 0.075 : 0.1);
-  for (const text of lines) {
-    for (const line of wrap(g, text, width - pad * 2)) {
-      g.fillText(line, pad, lineY);
-      lineY += h * (compact ? 0.041 : 0.058);
-    }
+  g.strokeStyle = '#624b3277'; g.lineWidth = h * 0.003; g.strokeRect(0, 0, width, height);
+  g.beginPath(); g.rect(0, 0, width, height); g.clip();
+  const pad = Math.min(width * 0.07, height * 0.09);
+  const textWidth = width - pad * 2;
+  const titleFont = '"Trebuchet MS", "Segoe UI", sans-serif';
+  let titleSize = Math.min(h * (compact ? 0.043 : 0.058), height * (compact ? 0.15 : 0.19));
+  do {
+    g.font = `800 ${titleSize}px ${titleFont}`;
+    if (g.measureText(title).width <= textWidth) break;
+    titleSize -= h * 0.002;
+  } while (titleSize > h * 0.025);
+  g.fillStyle = '#26333b'; g.textAlign = 'left'; g.textBaseline = 'top';
+  g.fillText(title, pad, pad, textWidth);
+  const ruleY = pad + titleSize * 1.28;
+  g.fillStyle = style === 'sticky' ? '#916b2f' : '#8a7967';
+  g.fillRect(pad, ruleY, textWidth, h * 0.003);
+
+  const bodyTop = ruleY + titleSize * (compact ? 0.18 : 0.3);
+  const bodyWidth = picture ? width * 0.56 - pad : textWidth;
+  const bodyBottom = height - pad;
+  const font = NOTE_FONTS[style];
+  let size = Math.min(h * 0.052, height * 0.18);
+  let paragraphs;
+  for (; size > h * 0.018; size -= h * 0.002) {
+    g.font = `${style === 'clipping' ? 'italic ' : ''}${size}px ${font}`;
+    paragraphs = noticeLines(g, lines, bodyWidth);
+    const rows = paragraphs.reduce((sum, paragraph) => sum + paragraph.length, 0);
+    const needed = rows * size * (compact ? 1.18 : 1.27) + (paragraphs.length - 1) * size * (compact ? 0.08 : 0.22);
+    if (bodyTop + needed <= bodyBottom) break;
   }
-  if (picture === 'seal') drawSeal(g, width * 0.72, height * 0.68, height * 0.2);
+  g.fillStyle = '#292d31';
+  let lineY = bodyTop;
+  for (const paragraph of paragraphs) {
+    for (const line of paragraph) {
+      g.fillText(line, pad, lineY, bodyWidth);
+      lineY += size * (compact ? 1.18 : 1.27);
+    }
+    lineY += size * (compact ? 0.08 : 0.22);
+  }
+  if (picture === 'seal') drawSeal(g, width * 0.75, height * 0.7, height * 0.19);
   drawPin(g, width / 2, h * 0.025, h * 0.016);
   g.restore();
 }

@@ -5,18 +5,18 @@
 export const NOTICES = [
   {
     style: 'typed',
-    title: 'STAFF NOTICE',
-    lines: ['Whoever keeps taking the krill from the staff fridge: we know.', 'Please stop.', '- The Management'],
+    title: 'SHIFT REMINDER',
+    lines: ['A good question opens doors.', 'A steady hand stamps them.'],
   },
   {
     style: 'clipping',
-    title: 'RIVAL LAB BULLETIN',
-    lines: ['"Our new model is 4% better at something."', 'Details to follow. Probably.'],
+    title: 'KEEP GOING',
+    lines: ['One penguin at a time.', "You've got this, inspector."],
   },
   {
     style: 'sticky',
-    title: 'LOST',
-    lines: ['One left mitten.', 'Answers to "Mitten".'],
+    title: 'BREAK ROOM',
+    lines: ['The office plant is on leave.', 'Please water the rock.'],
   },
   {
     style: 'typed',
@@ -27,7 +27,7 @@ export const NOTICES = [
   {
     style: 'sticky',
     compact: true,
-    title: 'DESK JOKE',
+    title: 'JOKE',
     lines: ['Q: Why did the stapler apply for a job?', 'A: It wanted to hold things together.'],
   },
 ];
