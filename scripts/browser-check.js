@@ -1,29 +1,33 @@
 // Checks the real page in headless Chrome, offline: its own server with no
-// Mistral (canned replies, no cost), and the page's clock sped up so a whole
-// shift runs out in seconds. Catches screen bugs the rules tests can't see,
-// such as a hint left over from the last shift. Run: npm run browser-check
+// Mistral (canned replies, no cost). Catches screen bugs the rules tests can't
+// see, such as a hint left over from the last shift. Run: npm run browser-check
+// It must pass on a busy machine and with two copies running at once, so it
+// waits for what it checks instead of sleeping a set time, the shift clock
+// runs at real speed until the check skips it to the end, and each run gets
+// its own Chrome port and profile.
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createApp } from '../server/app.js';
 import { browserOnThisMachine } from './find-browser.js';
 
-const PORT = 9336;
-const SPEED = 30;   // a 2-minute shift ends in 4 seconds (2 was a race on a busy machine)
 const OUT_OF_QUESTIONS = 'No questions left. Stamp the papers.';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Runs before the page's own scripts: every clock the page reads goes SPEED times faster.
-const FAST_CLOCK = `(() => {
+// Runs before the page's own scripts: the page's clock runs at real speed,
+// and window.__skipClock(ms) jumps it forward when the check wants time to pass.
+const SKIPPABLE_CLOCK = `(() => {
   const realNow = performance.now.bind(performance);
-  const start = realNow();
-  performance.now = () => start + (realNow() - start) * ${SPEED};
+  let skipped = 0;
+  performance.now = () => realNow() + skipped;
+  window.__skipClock = (ms) => { skipped += ms; };
   const realFrame = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = (draw) => realFrame(() => draw(performance.now()));
 })();`;
+const SHIFT_AND_A_BIT_MS = 125000;
 
 // Finds a desk object on screen: hover a grid over the lower screen and keep
 // the middle of the spots whose hover label starts with the given words.
@@ -42,10 +46,22 @@ const DESK_SPOT = (label, { left = 0, right = 1, top = 0.35, bottom = 0.95 } = {
   return hits[Math.floor(hits.length / 2)];
 })()`;
 
-async function openPage(url) {
-  for (let i = 0; i < 50; i += 1) {
+// Chrome picks a free port and writes it into the profile folder, so two runs never share one.
+async function devtoolsPort(profile) {
+  for (let i = 0; i < 150; i += 1) {
     try {
-      const page = (await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()).find((t) => t.type === 'page');
+      const [port] = (await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')).split('\n');
+      if (port) return port;
+    } catch { /* Chrome still starting */ }
+    await sleep(200);
+  }
+  throw new Error('Chrome did not start');
+}
+
+async function openPage(port, url) {
+  for (let i = 0; i < 100; i += 1) {
+    try {
+      const page = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page');
       if (page) {
         const ws = new WebSocket(page.webSocketDebuggerUrl);
         await once(ws, 'open');
@@ -61,15 +77,23 @@ async function openPage(url) {
           ws.send(JSON.stringify({ id, method, params }));
         });
         await send('Page.enable');
-        await send('Page.addScriptToEvaluateOnNewDocument', { source: FAST_CLOCK });
+        await send('Page.addScriptToEvaluateOnNewDocument', { source: SKIPPABLE_CLOCK });
         await send('Page.navigate', { url });
-        await sleep(1500);
         const evaluate = async (expression) => {
           const msg = await send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
           if (msg.result?.exceptionDetails) throw new Error(msg.result.exceptionDetails.exception?.description);
           return msg.result.result.value;
         };
-        return { evaluate, send, close: () => ws.close() };
+        // Up to 20 s for the page and its 3D desk on a slow machine.
+        const waitFor = async (expression, ms = 20000) => {
+          for (let waited = 0; waited < ms; waited += 100) {
+            try { if (await evaluate(expression)) return true; } catch { /* page still loading */ }
+            await sleep(100);
+          }
+          return false;
+        };
+        if (!(await waitFor(`Boolean(document.querySelector('#booth canvas') && window.__skipClock)`))) throw new Error('the page and its 3D desk did not load');
+        return { evaluate, send, waitFor, close: () => ws.close() };
       }
     } catch { /* Chrome still starting */ }
     await sleep(200);
@@ -78,12 +102,12 @@ async function openPage(url) {
 }
 
 async function main() {
-  // It normally takes about 7 s. A stuck Chrome once hung check.sh for 5 minutes;
+  // It normally takes about 10 s. A stuck Chrome once hung check.sh for 5 minutes;
   // fail plainly instead, so a rerun is the obvious next step.
   setTimeout(() => {
-    console.log('   FAIL the browser check took over 60 s (Chrome stuck?): run it again');
+    console.log('   FAIL the browser check took over 120 s (Chrome stuck?): run it again');
     process.exit(1);
-  }, 60000).unref();
+  }, 120000).unref();
   let browser;
   try {
     browser = browserOnThisMachine();
@@ -97,10 +121,11 @@ async function main() {
   const server = http.createServer(handle);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const work = await mkdtemp(path.join(tmpdir(), 'checkpoint-browser-check-'));
-  const chrome = spawn(browser, ['--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${work}`, '--window-size=1280,800', 'about:blank'], { stdio: 'ignore' });
+  const chrome = spawn(browser, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${work}`, '--window-size=1280,800', 'about:blank'], { stdio: 'ignore' });
   const failures = [];
   try {
-    const page = await openPage(`http://127.0.0.1:${server.address().port}/`);
+    const page = await openPage(await devtoolsPort(work), `http://127.0.0.1:${server.address().port}/`);
+    const { waitFor } = page;
     const screen = () => page.evaluate(`({
       hint: document.getElementById('hint').textContent,
       left: document.getElementById('questions-left').textContent,
@@ -113,7 +138,6 @@ async function main() {
     let seen;
     const ask = (text) => page.evaluate(`document.getElementById('question').value = ${JSON.stringify(text)}; document.getElementById('ask-form').requestSubmit(); true`);
 
-    // Found before the shift starts: the scan is slow, and the sped-up clock would run out meanwhile.
     const stampAt = await page.evaluate(DESK_SPOT('Stamp: let them through'));
     if (!stampAt) throw new Error('could not find the THROUGH stamp on the desk');
     // The transcript's full page is hidden while the slip is down; it must not
@@ -131,26 +155,24 @@ async function main() {
     })()`);
     check('hidden parts of the desk never catch the pointer', aboveSlip === 0, { transcriptAboveTheSlip: aboveSlip });
     await page.evaluate(`document.getElementById('start').click(); true`);
-    await sleep(300);
+    await waitFor(`!document.getElementById('controls').hidden`);
     // Shahil 13:40: no button row in the booth; you click the desk, and a typed question goes with Enter.
     const buttons = await page.evaluate(`({ booth: Boolean(document.querySelector('#booth canvas')), ask: Boolean(document.getElementById('ask')), row: !document.getElementById('tools').hidden })`);
     check('the booth has no on-screen button row', buttons.booth && !buttons.ask && !buttons.row, buttons);
     await page.evaluate(`document.getElementById('question').focus(); true`);
     await page.send('Input.insertText', { text: 'Question 1?' });
     for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: type === 'keyDown' ? '\r' : undefined });
-    await sleep(300);
+    await waitFor(`document.getElementById('questions-left').textContent.includes(' 4 of ')`, 5000);
     seen = await screen();
     check('a typed question is asked with Enter', seen.left.includes(' 4 of '), seen);
     for (let i = 2; i <= 5; i += 1) {
       await ask(`Question ${i}?`);
-      // Offline answers land at once; a short wait keeps the whole run well inside the 2 s shift.
-      await sleep(40);
+      await waitFor(`document.getElementById('questions-left').textContent.includes(' ${5 - i} of ')`, 5000);
       // Offline, Max's 2nd answer offers a bribe (src/travellers/max.js): it
-      // sits on the window ledge, and clicking it pockets it. One round trip,
-      // because the sped-up clock leaves little time to spare.
+      // sits on the window ledge, and clicking it pockets it.
       if (i === 2) {
         const offered = await page.evaluate(`document.getElementById('hint').textContent`);
-        // Only the ledge's left half is scanned: the whole desk takes too long for the sped-up shift.
+        // Only the ledge's left half is scanned, to keep the check quick.
         const bribeAt = (await page.evaluate(DESK_SPOT('A bribe', { left: 0.15, right: 0.5, top: 0.45, bottom: 0.7 }))) ?? [0, 0];
         const bribe = await page.evaluate(`(() => {
           const canvas = document.querySelector('#booth canvas');
@@ -165,18 +187,19 @@ async function main() {
     }
     // A 6th question can still be typed; it must be refused with a hint.
     await ask('One more?');
-    await sleep(150);
+    await waitFor(`document.getElementById('hint').textContent === ${JSON.stringify(OUT_OF_QUESTIONS)}`, 5000);
     seen = await screen();
     check('a 6th question shows the out-of-questions hint', seen.hint === OUT_OF_QUESTIONS && seen.left.includes(' 0 of '), seen);
 
-    for (let i = 0; i < 100 && !(await screen()).over; i += 1) await sleep(100);
+    await page.evaluate(`window.__skipClock(${SHIFT_AND_A_BIT_MS}); true`);
+    await waitFor(`!document.getElementById('report').hidden`, 10000);
     seen = await screen();
     check('the shift clock runs out to the report', seen.over, seen);
     const bribes = await page.evaluate(`document.getElementById('bribes').textContent`);
     check('the report names the bribe taken and marks the record', bribes.includes('Max Tokens') && bribes.includes('CORRUPT'), bribes);
 
     await page.evaluate(`document.getElementById('again').click(); true`);
-    await sleep(300);
+    await waitFor(`!document.getElementById('controls').hidden`, 5000);
     seen = await screen();
     check('Play again starts with no hint left over from the last shift', seen.hint === '' && seen.left.includes(' 5 of '), seen);
 
@@ -198,11 +221,8 @@ async function main() {
     for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
       await page.send('Input.dispatchMouseEvent', { type, x: stampAt[0], y: stampAt[1], button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
     }
-    let next = first;
-    for (let i = 0; i < 50 && next === first; i += 1) {
-      await sleep(100);
-      next = await page.evaluate(`document.getElementById('traveller-name').textContent`);
-    }
+    await waitFor(`document.getElementById('traveller-name').textContent !== ${JSON.stringify(first)}`, 10000);
+    const next = await page.evaluate(`document.getElementById('traveller-name').textContent`);
     check('stamping before any question moves the queue on', next !== first, { first, next, ...(await screen()) });
 
     // Sounds: headless Chrome may have no audio device; the page must not mind.
