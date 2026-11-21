@@ -70,6 +70,28 @@ so a note is never proof by itself.
 - The mood label (`[confident]`) comes off the screen. Mood shows only through the voice, and
   later the penguin's face; changes of manner can appear in the notes as observations.
 
+**The booth, seen through the inspector's eyes (Shahil, 11:07).** The page becomes a 3D scene from
+the player's point of view, sitting in the booth. The window is in front, with the penguin
+traveller standing beyond it; the desk is below it, with the tools on it. The camera doesn't move,
+and there's no walking.
+- **Point and click.** Every tool is an object on the desk. Hovering lights it up and changes the
+  cursor; clicking uses it. Works with a laptop trackpad.
+  - **Papers:** click to lift them close and read them; click again to put them down.
+  - **Scratchpad:** a notebook; click to open or close it. The notes appear in it as handwriting.
+  - **Microphone:** click and hold to ask a question. Holding Space still works too.
+  - **Two rubber stamps**, through and turned away: click one to stamp the papers. The traveller
+    reacts and leaves, and the next one steps up.
+- **The traveller** is a Fang Street penguin (ADR-6). His face follows `mood`, and he turns to
+  face you while talking.
+- **Subtitles:** each reply also appears as a line of text at the bottom of the screen, because
+  the pitch room will be loud.
+- **Look:** the penguin art direction (`system-design-lab/docs/ART-DIRECTION.md` section 3) and
+  the Fang Street room and palette helpers (`fang-street-mvp/src/penguins/engine.js`). It's our
+  own look, with nothing drawn from any existing game. Where the checkpoint stands is still open
+  (S7), so the booth stays plain until then.
+- Everything that already works must keep working: the shift clock, question limit, scoring,
+  scratchpad, `npm test` and A6, and the demo still under 2 minutes.
+
 **Stretch, only once 1 to 10 work end to end:**
 
 11. **Today's rule card.** Before the shift, a judge handwrites a rule on paper ("nobody
