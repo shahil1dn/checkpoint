@@ -40,7 +40,7 @@ async function startServer({ withSpeech, withNotes = false }) {
     // Consistency is about words, so those runs skip the voice to save time.
     speak: withSpeech ? timed(makeMistralSpeaker(), speechMs) : async () => 'none',
     // The model's notes before the code's check, so refusals can be counted.
-    takeNotes: withNotes ? async (args) => { const raw = await noteTaker(args); rawNotes.push(raw); return raw; } : undefined,
+    takeNotes: withNotes ? async (args) => { const raw = await noteTaker(args); rawNotes.push({ raw, papers: args.papers }); return raw; } : undefined,
     liveAvailable: true,
     log: (err) => console.error(describeError(err)),
   });
@@ -235,9 +235,9 @@ async function notes() {
   const results = await Promise.all(jobs.map(async (job) => ({ ...job, turns: await interrogate(server.base, job.traveller, job.questions) })));
   server.close();
 
-  const refused = server.rawNotes.reduce((sum, raw) => sum + checkNotes(raw).refused, 0);
-  const sameFact = server.rawNotes.reduce((sum, raw) => sum + checkNotes(raw).sameFact, 0);
-  const refusedText = server.rawNotes.flatMap((raw) => {
+  const refused = server.rawNotes.reduce((sum, { raw, papers }) => sum + checkNotes(raw, papers).refused, 0);
+  const falseClash = server.rawNotes.reduce((sum, { raw, papers }) => sum + checkNotes(raw, papers).falseClash, 0);
+  const refusedText = server.rawNotes.flatMap(({ raw }) => {
     try { return JSON.parse(raw).notes.filter((n) => !checkNotes(JSON.stringify({ notes: [n] })).kept.length); } catch { return [raw]; }
   });
   const sponsorRuns = await Promise.all(results.filter((r) => r.traveller === 'max').map(async (r) => {
@@ -248,7 +248,7 @@ async function notes() {
   const flagged = sponsorRuns.filter((s) => s.flagged).length;
 
   const lines = [
-    `A12: notes from the model: ${server.rawNotes.length} answers; notes refused by the code: ${refused}${refused ? ` (${refusedText.map(quote).join(', ')})` : ''}. ${refused === 0 ? 'PASS' : 'FAIL'}. Dropped as the same fact written as a clash: ${sameFact}.`,
+    `A12: notes from the model: ${server.rawNotes.length} answers; notes refused by the code: ${refused}${refused ? ` (${refusedText.map(quote).join(', ')})` : ''}. ${refused === 0 ? 'PASS' : 'FAIL'}. Dropped as a false clash (the same fact, or not what the papers say): ${falseClash}.`,
     `A13: sponsor clash noted in ${flagged} of ${sponsorRuns.length} runs (need 2). ${flagged >= 2 ? 'PASS' : 'FAIL'}`,
     '',
     '| Traveller | Run | Q | Question | Reply | Notes |',

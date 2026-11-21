@@ -111,7 +111,7 @@ export async function createApp({ ask, hear, speak, takeNotes, liveAvailable, lo
     if (!takeNotes) return [];
     try {
       const seen = new Set(earlierNotes.map((n) => n.toLowerCase()));
-      const { kept } = checkNotes(await takeNotes({ papers, exchanges, earlierNotes }));
+      const { kept } = checkNotes(await takeNotes({ papers, exchanges, earlierNotes }), papers);
       return kept.filter((n) => !seen.has(n.toLowerCase()));
     } catch (err) {
       log(err);

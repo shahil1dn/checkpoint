@@ -84,33 +84,38 @@ export const MAX_NOTE_CHARS = 120;
 // The spec's list, plus the forms of those words a note would actually use.
 const VERDICT = /\b(lie|lies|lied|liar|liars|lying|truth\w*|untruth\w*|honest\w*|dishonest\w*|suspicious\w*|suspicion\w*|suspect\w*|guilt\w*|innocen\w*)\b|[✓✔✗✘]/i;
 
-// "Says Stilton; papers say Colin Stilton" is the same fact in the form of a
-// clash, which would mislead the player. Measured live: the model writes these
-// for honest Colin even when told not to.
+// A "Says X; papers say Y" note would mislead the player if it isn't a real
+// clash. Measured live, the model writes two kinds even when told not to:
+// the same fact as a clash ("Says Stilton; papers say Colin Stilton") and a
+// papers line that doesn't exist ("papers say 'Mistral Large'").
 const TWO_SIDED = /^says\s+(.+?);\s*papers say\s+(.+)$/i;
-const plain = (s) => s.toLowerCase().replace(/['"‘’“”.,]/g, '').trim();
-function isSameFact(text) {
+const plain = (s) => s.toLowerCase().replace(/['"‘’“”.,:;]/g, '').replace(/\s+/g, ' ').trim();
+function isFalseClash(text, papers) {
   const match = TWO_SIDED.exec(text);
   if (!match) return false;
-  const [said, papers] = [plain(match[1]), plain(match[2])];
-  return said.includes(papers) || papers.includes(said);
+  const [said, onPapers] = [plain(match[1]), plain(match[2])];
+  if (said.includes(onPapers) || onPapers.includes(said)) return true;
+  if (!papers) return false;
+  const paperLines = Object.entries(papers).map(([label, value]) => plain(`${label} ${value}`));
+  return !paperLines.some((line) => line.includes(onPapers));
 }
 
 // Returns the notes to show, how many broke the rules (refused) and how many
 // were dropped as a false clash. A dropped note is simply not shown.
-export function checkNotes(raw) {
+// With `papers`, a note's "papers say" side must quote the papers.
+export function checkNotes(raw, papers = null) {
   let data;
   try {
     data = JSON.parse(raw);
   } catch {
-    return { kept: [], refused: 0, sameFact: 0 };
+    return { kept: [], refused: 0, falseClash: 0 };
   }
   const candidates = (Array.isArray(data?.notes) ? data.notes : [])
     .map((note) => (typeof note === 'string' ? note.replace(/\s+/g, ' ').trim() : ''))
     .filter((text) => text !== '');
   const allowed = candidates.filter((text, i) => i < MAX_NOTES_PER_ANSWER && charCount(text) <= MAX_NOTE_CHARS && !VERDICT.test(text));
-  const kept = allowed.filter((text) => !isSameFact(text));
-  return { kept, refused: candidates.length - allowed.length, sameFact: allowed.length - kept.length };
+  const kept = allowed.filter((text) => !isFalseClash(text, papers));
+  return { kept, refused: candidates.length - allowed.length, falseClash: allowed.length - kept.length };
 }
 
 // ---- The shift ----

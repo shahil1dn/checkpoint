@@ -40,28 +40,37 @@ test('every verdict word, a tick or a cross gets a note refused', () => {
 
 test('a plain observation is kept, even with words that contain a verdict word', () => {
   const notes = ['Believes the hackathon is in Paris.', 'Papers say 40 kg; he said "a few wheels".'];
-  assert.deepEqual(R.checkNotes(JSON.stringify({ notes })), { kept: notes, refused: 0, sameFact: 0 });
+  assert.deepEqual(R.checkNotes(JSON.stringify({ notes })), { kept: notes, refused: 0, falseClash: 0 });
 });
 
 test('a 3rd note in one answer and a note over 120 characters are refused', () => {
   const three = R.checkNotes(JSON.stringify({ notes: ['One.', 'Two.', 'Three.'] }));
-  assert.deepEqual(three, { kept: ['One.', 'Two.'], refused: 1, sameFact: 0 });
+  assert.deepEqual(three, { kept: ['One.', 'Two.'], refused: 1, falseClash: 0 });
   const long = R.checkNotes(JSON.stringify({ notes: ['a'.repeat(121), 'b'.repeat(120)] }));
-  assert.deepEqual(long, { kept: ['b'.repeat(120)], refused: 1, sameFact: 0 });
+  assert.deepEqual(long, { kept: ['b'.repeat(120)], refused: 1, falseClash: 0 });
 });
 
 test('a two-sided note where both sides say the same thing is dropped; a real clash is kept', () => {
   const same = ['Says Stilton; papers say Colin Stilton', "Says 'Stilton, Cambridgeshire'; papers say 'Stilton'", 'Says Frontier Horizon Labs paid; papers say Frontier Horizon Labs'];
   const real = ["Says 'a kind sponsor from my local AI meetup'; papers say 'Frontier Horizon Labs'", "Says 'Every few days'; papers say '9'"];
-  assert.deepEqual(R.checkNotes(JSON.stringify({ notes: same.slice(0, 2) })), { kept: [], refused: 0, sameFact: 2 });
-  assert.deepEqual(R.checkNotes(JSON.stringify({ notes: [same[2]] })).sameFact, 1);
-  assert.deepEqual(R.checkNotes(JSON.stringify({ notes: real })), { kept: real, refused: 0, sameFact: 0 });
+  assert.deepEqual(R.checkNotes(JSON.stringify({ notes: same.slice(0, 2) })), { kept: [], refused: 0, falseClash: 2 });
+  assert.deepEqual(R.checkNotes(JSON.stringify({ notes: [same[2]] })).falseClash, 1);
+  assert.deepEqual(R.checkNotes(JSON.stringify({ notes: real })), { kept: real, refused: 0, falseClash: 0 });
+});
+
+test('with the papers given, a "papers say" that is not on the papers is dropped', () => {
+  const papers = { Name: 'Max Tokens', 'Ticket sponsored by': 'Frontier Horizon Labs', 'Visits this month': '9' };
+  const madeUp = ["Says 'Le Grand'; papers say 'Mistral Large'", 'Says The Mistral Inn; papers say no address'];
+  const quoted = ["Says 'a fan club'; papers say 'Frontier Horizon Labs'", 'Says a fan paid; papers say ticket sponsored by Frontier Horizon Labs', "Says 'every few days'; papers say '9'"];
+  assert.deepEqual(R.checkNotes(JSON.stringify({ notes: madeUp }), papers), { kept: [], refused: 0, falseClash: 2 });
+  for (const note of quoted) assert.deepEqual(R.checkNotes(JSON.stringify({ notes: [note] }), papers).kept, [note], note);
+  assert.deepEqual(R.checkNotes(JSON.stringify({ notes: ['Offered a sticker.'] }), papers).kept, ['Offered a sticker.']);
 });
 
 test('broken note output shows no notes rather than breaking', () => {
-  assert.deepEqual(R.checkNotes('not json'), { kept: [], refused: 0, sameFact: 0 });
-  assert.deepEqual(R.checkNotes('{"notes":"one"}'), { kept: [], refused: 0, sameFact: 0 });
-  assert.deepEqual(R.checkNotes('{"notes":[42,"",null," ok "]}'), { kept: ['ok'], refused: 0, sameFact: 0 });
+  assert.deepEqual(R.checkNotes('not json'), { kept: [], refused: 0, falseClash: 0 });
+  assert.deepEqual(R.checkNotes('{"notes":"one"}'), { kept: [], refused: 0, falseClash: 0 });
+  assert.deepEqual(R.checkNotes('{"notes":[42,"",null," ok "]}'), { kept: ['ok'], refused: 0, falseClash: 0 });
 });
 
 test('a past exchange with a cracked flag that is not true or false is refused', () => {
