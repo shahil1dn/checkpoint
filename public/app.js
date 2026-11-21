@@ -40,6 +40,20 @@ const END_REASONS = { queueEmpty: 'Queue cleared.', time: "Time's up. Anyone not
 
 const hint = (text) => { $('hint').textContent = text; };
 
+// What each edge arrow turns to, from each view.
+const LOOK_LABELS = {
+  left: [null, 'Window ›'],
+  window: ['‹ Computer', 'Notices ›'],
+  right: ['‹ Window', null],
+};
+function renderLook(view) {
+  const [left, right] = LOOK_LABELS[view];
+  $('look-left').textContent = left ?? '';
+  $('look-right').textContent = right ?? '';
+  $('look-left').hidden = !left;
+  $('look-right').hidden = !right;
+}
+
 // The 3D booth is scenery and controls together; without it the plain papers
 // panel and the toolbar still run the whole game.
 const booth = createBooth($('booth'), {
@@ -47,6 +61,7 @@ const booth = createBooth($('booth'), {
   onMicUp: () => finishTalking(),
   onStampClick: (verdict) => stampTraveller(verdict),
   onHover: (tool) => { $('tool-tip').textContent = TOOL_TIPS[tool] ?? ''; },
+  onView: (view) => renderLook(view),
 });
 
 // ---- Server calls. Each returns a value or an error name, never throws. ----
@@ -259,6 +274,7 @@ function render() {
   $('report').hidden = !started || !over;
   $('shift-info').hidden = !playing;
   $('controls').hidden = !playing;
+  $('look').hidden = !playing || !booth;
   $('fallback').hidden = Boolean(booth) || !playing;
   renderClock();
   if (!stampingNow) booth?.show(over ? null : R.currentTravellerId(shift));
@@ -308,6 +324,8 @@ document.addEventListener('keydown', (event) => {
   } else if (event.code === 'KeyP') booth?.toggle('papers');
   else if (event.code === 'KeyN') booth?.toggle('notebook');
   else if (event.code === 'Escape') booth?.putDown();
+  else if (event.code === 'ArrowLeft') booth?.look(-1);
+  else if (event.code === 'ArrowRight') booth?.look(1);
 });
 document.addEventListener('keyup', (event) => {
   if (event.code !== 'Space' || typingInBox(event) || !micReady()) return;
@@ -327,6 +345,8 @@ $('show-papers').addEventListener('click', () => booth?.toggle('papers'));
 $('show-notes').addEventListener('click', () => booth?.toggle('notebook'));
 $('stamp-through').addEventListener('click', () => stampTraveller('through'));
 $('stamp-away').addEventListener('click', () => stampTraveller('away'));
+$('look-left').addEventListener('click', () => booth?.look(-1));
+$('look-right').addEventListener('click', () => booth?.look(1));
 $('start').addEventListener('click', startShift);
 $('again').addEventListener('click', playAgain);
 
@@ -339,6 +359,7 @@ async function checkLive() {
   $('status').textContent = live ? 'Live: Mistral connected.' : 'Offline: canned replies, no voices.';
 }
 
+if (booth) renderLook(booth.view());
 render();
 checkLive();
 requestAnimationFrame(frame);

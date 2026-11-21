@@ -10,7 +10,7 @@ import { buildScenery } from '/scenery.js';
 import { getTraveller } from '/src/travellers/index.js';
 
 const COLORS = {
-  booth: '#8fb3a8', frame: '#e8e2d4', desk: '#a8794f', deskTop: '#c8955f',
+  booth: '#8fb3a8', inside: '#c9d6d0', floor: '#7d8a8f', frame: '#e8e2d4', desk: '#a8794f', deskTop: '#c8955f',
   paper: '#f4efe2', cover: '#3f6e8c', micBody: '#343845', micGrille: '#5a5f6b', wood: '#8c6448',
   through: '#3f8f5a', away: '#c0453a', live: '#d8433a', off: '#6b6f78',
 };
@@ -49,6 +49,14 @@ const READ_HEIGHT = 0.745;
 const READ_DISTANCE = READ_HEIGHT / (2 * Math.tan(THREE.MathUtils.degToRad(FRAMING.fov / 2)));
 const READ_RAISE = READ_DISTANCE * 0.072;
 const WALK_OFF_X = 3.2;
+const SIDE_WALL_X = 1.85;
+const BOOTH_DEPTH = 4.6;   // deep enough that a side view never sees past the back wall
+
+// Three ways to face (SPEC "Looking around the booth"): the computer on the
+// left wall, the window, and the notice board on the right wall.
+const VIEWS = { left: Math.PI / 2, window: 0, right: -Math.PI / 2 };
+const VIEW_ORDER = ['left', 'window', 'right'];
+const UP = new THREE.Vector3(0, 1, 0);
 
 // ---------- drawing the papers and the scratchpad ----------
 
@@ -136,6 +144,10 @@ function buildRoom(group) {
   for (const s of [-1, 1]) part(box(0.08, top - SILL, 0.24), frame, group, [s * half, (SILL + top) / 2, 0]);
   part(box(3.4, 0.1, 1.4, 0.04), mat(COLORS.deskTop), group, [0, SILL - 0.05, 0.75]);
   part(box(3.3, SILL - 0.1, 1.3, 0.04), mat(COLORS.desk), group, [0, (SILL - 0.1) / 2, 0.75]);
+  // The inside of the booth, for turning to the left and right walls.
+  for (const s of [-1, 1]) part(box(0.16, 3.4, BOOTH_DEPTH), mat(COLORS.inside), group, [s * SIDE_WALL_X, 1.7, BOOTH_DEPTH / 2]);
+  part(box(SIDE_WALL_X * 2, 0.1, BOOTH_DEPTH), mat(COLORS.floor), group, [0, -0.05, BOOTH_DEPTH / 2]);
+  part(box(SIDE_WALL_X * 2, 3.4, 0.16), mat(COLORS.inside), group, [0, 1.7, BOOTH_DEPTH]);
   // The booth throws no shadow outside, or the traveller would stand in the dark.
   group.traverse((o) => { o.castShadow = false; });
 }
@@ -328,6 +340,10 @@ export function createBooth(container, handlers = {}) {
   const readPos = new THREE.Vector3();
   const forward = new THREE.Vector3();
   const upward = new THREE.Vector3();
+  const baseForward = LOOK_AT.clone().sub(EYE).normalize();
+  const facing = new THREE.Vector3();
+  let view = 'window';
+  let yaw = 0;
   function frame() {
     const dt = Math.min(clock.getDelta(), 0.1);
     const t = clock.elapsedTime;
@@ -337,6 +353,10 @@ export function createBooth(container, handlers = {}) {
       if (tw.age >= tw.seconds) { tweens.splice(tweens.indexOf(tw), 1); tw.resolve(); }
     }
     // Lifted things come up in front of the eyes, facing the inspector.
+    // Turning eases the head round; the camera stays in the chair.
+    yaw += (VIEWS[view] - yaw) * Math.min(dt * 5, 1);
+    facing.copy(baseForward).applyAxisAngle(UP, yaw);
+    engine.camera.lookAt(facing.add(engine.camera.position));
     engine.camera.getWorldDirection(forward);
     upward.copy(engine.camera.up).applyQuaternion(engine.camera.quaternion);
     readPos.copy(engine.camera.position).addScaledVector(forward, READ_DISTANCE).addScaledVector(upward, READ_RAISE);
@@ -455,6 +475,15 @@ export function createBooth(container, handlers = {}) {
     setPapers(paperFields, stamp = null) { papers.redraw(paperFields, stamp); },
     setNotes(name, notes) { notebook.redraw(name, notes); },
     toggle(name) { lifted = lifted === name ? null : name; },
+    // Turns one view left (-1) or right (+1); papers in hand go back on the desk.
+    look(step) {
+      const next = VIEW_ORDER[VIEW_ORDER.indexOf(view) + step];
+      if (!next) return;
+      view = next;
+      lifted = null;
+      handlers.onView?.(view);
+    },
+    view: () => view,
     putDown() { lifted = null; },
     lifted: () => lifted,
     // The stamp comes down on the papers, leaves its mark, and goes home.
@@ -462,6 +491,12 @@ export function createBooth(container, handlers = {}) {
       if (stamping) return;
       stamping = true;
       lifted = null;
+      // Stamping happens at the window, so turn back to it first.
+      if (view !== 'window') {
+        view = 'window';
+        handlers.onView?.(view);
+        await tween(0.6, () => {});
+      }
       const s = stamps[verdict];
       const over = papers.desk.position.clone().setY(SILL + 0.06);
       const lift = (a, b, p, h) => s.holder.position.lerpVectors(a, b, p).setY(s.holder.position.y + Math.sin(p * Math.PI) * h);
