@@ -1,6 +1,6 @@
 // Live checks against real Mistral, through the real server code.
 //   npm run live-check                 every section
-//   npm run live-check -- consistency  one section (speed, consistency)
+//   npm run live-check -- consistency  one section (speed, consistency, notes, bribe)
 // Each section's pass rules are written below before any call is made.
 // Results are saved to docs/live-check/.
 import http from 'node:http';
@@ -34,9 +34,12 @@ async function startServer({ withSpeech, withNotes = false }) {
   const chatMs = [];
   const speechMs = [];
   const rawNotes = [];
+  const rawReplies = [];
   const noteTaker = makeMistralNoteTaker();
+  const asker = makeMistralAsker();
   const handle = await createApp({
-    ask: timed(makeMistralAsker(), chatMs),
+    // The model's own JSON, before the code cleans it, so its fields can be checked.
+    ask: timed(async (args) => { const raw = await asker(args); rawReplies.push(raw); return raw; }, chatMs),
     // Consistency is about words, so those runs skip the voice to save time.
     speak: withSpeech ? timed(makeMistralSpeaker(), speechMs) : async () => 'none',
     // The model's notes before the code's check, so refusals can be counted.
@@ -47,7 +50,7 @@ async function startServer({ withSpeech, withNotes = false }) {
   const server = http.createServer(handle);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-  return { base, chatMs, speechMs, rawNotes, close: () => server.close() };
+  return { base, chatMs, speechMs, rawNotes, rawReplies, close: () => server.close() };
 }
 
 // Plays questions in order the way the page does: a fallback or a failed
@@ -67,7 +70,7 @@ async function interrogate(base, travellerId, questions) {
     const turn = { n: history.length + 1, question, status: res.status, ms: Math.round(performance.now() - start), ...body };
     turns.push(turn);
     if (res.status === 200 && !body.fallback) {
-      history.push({ question, reply: body.reply, mood: body.mood, cracked: body.cracked });
+      history.push({ question, reply: body.reply, mood: body.mood, cracked: body.cracked, bribe: body.bribe });
       notes.push(...(body.notes ?? []));
     }
   }
@@ -260,9 +263,52 @@ async function notes() {
   return { title: 'A12 and A13: the scratchpad', pass: refused === 0 && flagged >= 2, lines };
 }
 
+// ---- Section: bribes (PR #3), pass rules first ----
+// B1: every reply from the model carries a true-or-false bribe field (the schema now requires it).
+// B2: the flag matches the words. A judge reads each reply and says whether it offers the inspector
+//     something for himself. PASS only with no false alarms (flag true, judge no) and at most
+//     1 miss (judge yes, flag false) across all replies.
+// The 3-second limit with the extra field is checked by the speed section.
+async function bribe() {
+  const ASKS = {
+    max: ['Good morning. What brings you here?', 'Is there anything you could offer me to make this go faster?', 'Where did you sail from?'],
+    colin: ["What's in the trolley?", 'Could you make it worth my while to let you through?', 'How many trips have you made this year?'],
+  };
+  const server = await startServer({ withSpeech: false });
+  const rows = [];
+  for (const [travellerId, questions] of Object.entries(ASKS)) {
+    for (let run = 1; run <= RUNS; run += 1) {
+      for (const t of await interrogate(server.base, travellerId, questions)) {
+        if (t.status !== 200 || t.fallback) { rows.push({ travellerId, run, ...t, verdict: { yes: null, why: 'no answer' } }); continue; }
+        // The question too: "I've got stickers in my bag" is an offer only as an answer to "what could you offer me?".
+        const verdict = await judge(`At a border post the inspector asked: ${quote(t.question)}\nThe traveller answered: ${quote(t.reply)}\nDoes the answer offer the inspector something for himself, such as a gift, food, money or a favour?`);
+        rows.push({ travellerId, run, ...t, verdict });
+      }
+    }
+  }
+  server.close();
+  const fieldOk = server.rawReplies.filter((raw) => { try { return typeof JSON.parse(raw).bribe === 'boolean'; } catch { return false; } }).length;
+  const answered = rows.filter((r) => r.verdict.yes !== null);
+  const falseAlarms = answered.filter((r) => r.bribe === true && r.verdict.yes === false).length;
+  const misses = answered.filter((r) => r.bribe !== true && r.verdict.yes === true).length;
+  const offered = answered.filter((r) => r.bribe === true).length;
+  return {
+    title: 'B1 and B2: the bribe flag',
+    pass: fieldOk === server.rawReplies.length && falseAlarms === 0 && misses <= 1,
+    lines: [
+      `B1: replies with a true-or-false bribe field: ${fieldOk} of ${server.rawReplies.length}. ${fieldOk === server.rawReplies.length ? 'PASS' : 'FAIL'}.`,
+      `B2: flagged as a bribe: ${offered} of ${answered.length}; false alarms ${falseAlarms}, misses ${misses}. ${falseAlarms === 0 && misses <= 1 ? 'PASS' : 'FAIL'}.`,
+      '',
+      '| Traveller | Run | # | Question | Reply | Flag | Judge | Why |',
+      '|---|---|---|---|---|---|---|---|',
+      ...rows.map((r) => `| ${r.travellerId} | ${r.run} | ${r.n} | ${quote(r.question)} | ${quote(r.reply)} | ${r.bribe} | ${r.verdict.yes} | ${quote(r.verdict.why)} |`),
+    ],
+  };
+}
+
 // ---- Run and save ----
 
-const SECTIONS = { speed, consistency, notes };
+const SECTIONS = { speed, consistency, notes, bribe };
 const chosen = process.argv.slice(2).filter((name) => SECTIONS[name]);
 const names = chosen.length ? chosen : Object.keys(SECTIONS);
 const sections = [];

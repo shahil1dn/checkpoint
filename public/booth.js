@@ -270,11 +270,12 @@ function buildTranscript(group) {
 
 // A bribe on the window ledge (PR #3): what the traveller slid across, shown
 // only while it's on offer. Click it to pocket it.
-const LEDGE = new THREE.Vector3(-0.52, SILL + 0.04, 0.02);
+const LEDGE = new THREE.Vector3(-0.62, SILL + 0.04, 0.04);
 function buildBribe(group) {
   const holder = new THREE.Group();
   holder.userData.tool = 'bribe';
   holder.position.copy(LEDGE);
+  holder.scale.setScalar(1.9);   // big enough to read from the chair
   holder.visible = false;
   group.add(holder);
   const croissant = new THREE.Group();
