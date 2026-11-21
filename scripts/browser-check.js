@@ -204,9 +204,10 @@ async function main() {
       const button = document.getElementById('mute');
       const before = button?.textContent;
       button?.click();
-      return { before, after: button?.textContent };
+      return { chips: document.querySelectorAll('#mute').length, before, after: button?.textContent };
     })()`);
-    check('the mute button turns the sound off', sound.before === 'Sound: on (M)' && sound.after === 'Sound: off (M)', sound);
+    // One chip: wiring the sounds up twice doubled every sound and the chip.
+    check('the mute button turns the sound off', sound.chips === 1 && sound.before === 'Sound: on (M)' && sound.after === 'Sound: off (M)', sound);
     page.close();
   } finally {
     const exited = once(chrome, 'exit');
