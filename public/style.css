@@ -54,8 +54,38 @@ body { font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: v
 .border-form button { min-height: 44px; padding: 8px 14px; font: bold 16px var(--typewriter); background: var(--form-ink); }
 
 /* The start card sits low, so the traveller's face shows above it. */
-#start-screen { top: auto; bottom: 28px; transform: translateX(-50%); text-align: center; }
-#start-screen h1 { margin: 0 0 12px; font-size: 46px; font-weight: bold; }
+#start-screen { top: auto; bottom: 28px; transform: translateX(-50%); text-align: center; animation: menu-rise 0.45s ease-out both; }
+#start-screen h1 { margin: 18px 0 4px; font-size: 54px; font-weight: bold; letter-spacing: 0.14em; text-transform: uppercase; }
+.menu-subtitle { margin: 0 0 14px; color: #6b6457; font: bold 14px/1.4 var(--typewriter); letter-spacing: 0.22em; text-transform: uppercase; }
+.menu-credits { margin: 16px 0 0; color: #6b6457; font-size: 12px; letter-spacing: 0.04em; }
+/* The menus: one main action in the booth's blue, the rest outlined in ink. */
+.border-form button { transition: transform 0.12s ease, background-color 0.12s ease, color 0.12s ease, box-shadow 0.12s ease; }
+.border-form button:hover { transform: translateY(-1px); box-shadow: 0 3px 0 #1f212633; }
+.border-form button:active { transform: translateY(1px); box-shadow: none; }
+#start:hover, #resume:hover { background: #35607b; }
+.border-form .menu-secondary { color: var(--form-ink); background: transparent; border: 2px solid var(--form-ink); }
+.border-form .menu-secondary:hover { color: #f4efe2; background: var(--form-ink); }
+#show-how-to { display: block; width: 100%; margin-top: 10px; text-transform: uppercase; letter-spacing: 0.06em; }
+#how-to { animation: menu-fade 0.25s ease-out both; }
+/* The shade dims the booth behind a menu and keeps clicks off the desk. */
+#menu-shade { position: fixed; inset: 0; z-index: 3; background: #1b2430b3; animation: menu-fade 0.2s ease-out both; }
+#pause-menu { text-align: center; animation: menu-pop 0.2s ease-out both; }
+#pause-menu h2 { margin-top: 20px; text-transform: uppercase; letter-spacing: 0.08em; }
+.menu-buttons { display: grid; gap: 10px; }
+.menu-buttons button { width: 100%; min-height: 50px; font-size: 18px; text-transform: uppercase; letter-spacing: 0.08em; }
+#resume { color: #ffffff; background: #3f6e8c; border: 3px solid var(--ink); }
+.report-buttons { display: flex; flex-wrap: wrap; gap: 10px; }
+#pause { color: var(--muted); font: 13px/1.4 system-ui, sans-serif; min-height: 0; }
+#pause:hover { color: var(--ink); }
+#report { animation: menu-fade 0.3s ease-out both; }
+/* The menus never start invisible: if a slow machine stalls an animation, they still read. */
+@keyframes menu-rise { from { transform: translate(-50%, 16px); } to { transform: translate(-50%, 0); } }
+@keyframes menu-pop { from { transform: translate(-50%, -50%) scale(0.96); } to { transform: translate(-50%, -50%) scale(1); } }
+@keyframes menu-fade { from { opacity: 0.55; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) {
+  #start-screen, #pause-menu, #menu-shade, #how-to, #report { animation: none; }
+  .border-form button { transition: none; }
+}
 .form-lead { margin: 0 auto 18px; max-width: 40ch; font-size: 19px; line-height: 1.5; }
 .procedure { margin: 0 0 22px; padding: 10px 0; list-style: none; border-top: 1px solid #c9bfa8; border-bottom: 1px solid #c9bfa8; }
 .procedure li { padding: 5px 0; font-size: 17px; line-height: 1.4; }

@@ -227,3 +227,33 @@ test('Play again starts with a clean record and a fresh offer from everyone', ()
   assert.equal(R.shiftReport(fresh).record, 'clean');
   assert.deepEqual(reachForAway(fresh).offer, offerOf('max'));
 });
+
+// The pause menu
+test('both clocks stand still while the game is paused, and run again on resume', () => {
+  const paused = R.setPaused(R.newShift(), true);
+  const waited = R.tick(paused, 30_000);
+  assert.equal(R.timeLeftMs(waited), R.timeLeftMs(R.newShift()));
+  assert.equal(R.travellerTimeLeftMs(waited), R.TRAVELLER_MS);
+  assert.equal(R.travellerTimeLeftMs(R.tick(R.setPaused(waited, false), 1000)), R.TRAVELLER_MS - 1000);
+});
+
+test('Restart shift from the pause menu is a fresh, running shift with nothing carried over', () => {
+  let shift = askAndAnswer(R.newShift());
+  shift = R.tick(R.stamp(shift, 'through').shift, 5000);
+  const fresh = R.restartShift(R.setPaused(shift, true));
+  assert.equal(fresh.paused, false);
+  assert.equal(fresh.current, 0);
+  assert.equal(fresh.usedMs, 0);
+  for (const id of fresh.queue) assert.deepEqual(fresh.cases[id], { history: [], notes: [], lookups: [], stamp: null, bribe: null });
+  // A reply still in flight from the old shift can't land in the new one.
+  assert.ok(fresh.nextRequestId >= shift.nextRequestId);
+});
+
+test('a finished shift cannot be paused', () => {
+  let shift = R.newShift();
+  while (shift.phase === 'playing') {
+    const next = R.stamp(shift, 'through');
+    shift = next.shift;
+  }
+  assert.equal(R.setPaused(shift, true), shift);
+});

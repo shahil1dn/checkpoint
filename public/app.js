@@ -80,7 +80,7 @@ function renderLook(view) {
 // Which cue shows for what's happening now: the mic's light and ring while
 // recording, a thought bubble while the traveller thinks, and the hint's style.
 function renderActivity() {
-  const mode = !started || shift.phase !== 'playing' ? ''
+  const mode = !started || shift.paused || shift.phase !== 'playing' ? ''
     : recording() ? 'listening'
     : shift.hearing ? 'transcribing'
     : shift.pending ? 'thinking' : '';
@@ -202,12 +202,14 @@ function playVoice(base64Mp3, speechMs, onDone = () => {}) {
   }
   for (const stopped of ['ended', 'error']) clip.addEventListener(stopped, () => { if (voice === clip) setSpeaking(false); });
   for (const stopped of ['ended', 'pause', 'error']) clip.addEventListener(stopped, onDone);
-  setSpeaking(true);
-  clip.play().catch(() => {
+  clip.whenBlocked = () => {
     setSpeaking(false);
     hint(HINTS.blocked);
     onDone();
-  });
+  };
+  setSpeaking(true);
+  // A reply that lands while the game is paused waits for Resume.
+  if (!shift.paused) clip.play().catch(clip.whenBlocked);
 }
 
 function stopVoice() {
@@ -226,6 +228,7 @@ function setSpeaking(speaking) {
 
 // Typed and spoken questions both end up here.
 async function askQuestion(text, { typed = false } = {}) {
+  if (shift.paused) return;
   const asked = R.startQuestion(shift, text);
   if (asked.error) return hint(HINTS[asked.error]);
   shift = asked.shift;
@@ -253,6 +256,7 @@ async function askQuestion(text, { typed = false } = {}) {
 // Clicking a line on a lifted paper looks it up. The inspector can keep
 // questioning while it searches; the steps show on the computer as they come.
 async function lookUp(line) {
+  if (shift.paused) return;
   if (!started) return;
   const asked = R.startLookup(shift, line);
   if (asked.error) return hint(HINTS[asked.error]);
@@ -287,7 +291,7 @@ async function lookUp(line) {
 // traveller reacts and walks off. The first TURNED AWAY on each traveller
 // doesn't come down: he makes his last-ditch offer instead (Shahil 14:34).
 async function stampTraveller(verdict) {
-  if (!started || stampingNow || shift.phase !== 'playing') return;
+  if (!started || stampingNow || shift.paused || shift.phase !== 'playing') return;
   if (R.pleadsFirst(shift, verdict)) return hearPlea();
   await bringStampDown(verdict, (s) => R.stamp(s, verdict));
 }
@@ -334,7 +338,7 @@ async function hearPlea() {
 // Pocketing it lets him through: the THROUGH stamp comes down, and it goes on your record.
 async function pocketBribe() {
   const offer = R.bribeOffer(shift);
-  if (!started || stampingNow || !offer) return;
+  if (!started || stampingNow || shift.paused || !offer) return;
   booth?.setBribe(null);
   if (await bringStampDown('through', R.takeBribe)) {
     hint(`You pocket the ${R.BRIBE_ITEMS[offer.item]} and stamp ${getTraveller(offer.travellerId).name} THROUGH. That goes on your record.`);
@@ -342,7 +346,7 @@ async function pocketBribe() {
 }
 
 function beginTalking() {
-  if (!started || shift.phase !== 'playing' || shift.pending || shift.hearing) return;
+  if (!started || shift.paused || shift.phase !== 'playing' || shift.pending || shift.hearing) return;
   if (R.bribeOffer(shift)) return hint(HINTS.bribeOnTable);
   if (R.travellerTimeLeftMs(shift) <= 0) return hint(HINTS.outOfTime);
   stopVoice();
@@ -394,14 +398,66 @@ async function startShift() {
   }
 }
 
+// A fresh shift from its first traveller: nothing of the old one carries over.
+// Request ids keep counting (rules.js), so a reply still on its way is dropped.
 function playAgain() {
+  if (recording()) endClip();
+  $('talk').textContent = 'Hold to talk';
   shift = R.restartShift(shift);
   screenLookup = null;
+  talkingTo = null;
   stopVoice();
+  booth?.putDown();
+  booth?.setBribe(null);
+  booth?.setMood('neutral');
   hint('');
+  $('question').value = '';
   $('last-stamp').textContent = '';
   lastFrame = performance.now();
   render();
+}
+
+// ---- The pause menu ----
+
+// Pausing stops the rules' clocks (R.tick), his voice and any recording, and
+// the shade keeps clicks off the desk. Not while a stamp is coming down.
+async function pauseGame() {
+  if (!started || stampingNow || shift.paused || shift.phase !== 'playing') return;
+  shift = R.setPaused(shift, true);
+  if (voice && !voice.paused && !voice.ended) holdVoice(voice);
+  if (recording()) {
+    $('talk').textContent = 'Hold to talk';
+    await endClip();
+    hint('');
+  }
+  render();
+  $('resume').focus();
+}
+
+function resumeGame() {
+  if (!shift.paused) return;
+  shift = R.setPaused(shift, false);
+  lastFrame = performance.now();
+  // He picks up where he stopped, or starts the line that landed while paused.
+  if (voice && voice.paused && !voice.ended) voice.play().catch(voice.whenBlocked);
+  render();
+}
+
+// Holding his clip mid-line must not count as his line ending: playVoice's
+// onDone listens for 'pause', so this one pause is kept from it.
+function holdVoice(clip) {
+  clip.addEventListener('pause', (event) => event.stopImmediatePropagation(), { capture: true, once: true });
+  clip.pause();
+}
+
+// Leaving for the main menu ends the shift: Play game starts a fresh one.
+function toMainMenu() {
+  playAgain();
+  started = false;
+  micSetup = false;
+  $('start-screen').hidden = false;
+  render();
+  $('start').focus();
 }
 
 // ---- Drawing ----
@@ -505,7 +561,7 @@ const minutes = (ms) => {
 // The shift's six minutes, and the two that belong to whoever is at the window.
 function renderClock() {
   const id = R.currentTravellerId(shift);
-  const paused = shift.pending || shift.hearing || shift.speaking || shift.pleading ? ' (paused)' : '';
+  const paused = shift.paused || shift.pending || shift.hearing || shift.speaking || shift.pleading ? ' (paused)' : '';
   const his = id ? ` · ${getTraveller(id).name.split(' ')[0]} ${minutes(R.travellerTimeLeftMs(shift))}${paused}` : '';
   $('clock').textContent = started ? `Shift ${minutes(R.timeLeftMs(shift))}${his}` : '';
 }
@@ -513,7 +569,12 @@ function renderClock() {
 function render() {
   const over = shift.phase === 'over';
   const playing = started && !over;
+  const paused = playing && Boolean(shift.paused);
   renderActivity();
+  $('pause-menu').hidden = !paused;
+  $('menu-shade').hidden = !paused;
+  $('pause').hidden = !playing || paused;
+  if (paused) $('pause-clock').textContent = `Shift clock stopped at ${minutes(R.timeLeftMs(shift))}.`;
   $('report').hidden = !started || !over;
   $('status').hidden = !started;   // the connection badge waits for the shift
   $('shift-info').hidden = !playing;
@@ -575,7 +636,12 @@ function frame(now) {
 const typingInBox = (event) => event.target instanceof HTMLInputElement;
 
 document.addEventListener('keydown', (event) => {
-  if (typingInBox(event) || !started) return;
+  // Esc puts a lifted paper down first; with nothing held, it pauses or resumes.
+  if (started && event.code === 'Escape' && !event.repeat && (shift.paused || !booth?.lifted())) {
+    event.preventDefault();
+    return shift.paused ? resumeGame() : pauseGame();
+  }
+  if (typingInBox(event) || !started || shift.paused) return;
   if (event.code === 'Space' && !event.repeat && micReady()) {
     event.preventDefault();
     beginTalking();
@@ -616,6 +682,16 @@ $('look-left').addEventListener('click', () => booth?.look(-1));
 $('look-right').addEventListener('click', () => booth?.look(1));
 $('start').addEventListener('click', startShift);
 $('again').addEventListener('click', playAgain);
+$('pause').addEventListener('click', pauseGame);
+$('resume').addEventListener('click', resumeGame);
+$('restart').addEventListener('click', playAgain);
+$('to-menu').addEventListener('click', toMainMenu);
+$('report-menu').addEventListener('click', toMainMenu);
+$('show-how-to').addEventListener('click', () => {
+  const open = $('how-to').hidden;
+  $('how-to').hidden = !open;
+  $('show-how-to').setAttribute('aria-expanded', String(open));
+});
 
 async function checkLive() {
   try {

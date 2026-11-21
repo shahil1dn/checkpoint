@@ -143,6 +143,7 @@ export function newShift(queue = DEMO_QUEUE, { firstRequestId = 1 } = {}) {
     hearing: false,
     speaking: false,
     pleading: false,
+    paused: false,
     nextRequestId: firstRequestId,
     // bribe: null until he makes his offer, then 'offered', 'taken' or 'refused'.
     cases: Object.fromEntries(queue.map((id) => [id, { history: [], notes: [], lookups: [], stamp: null, bribe: null }])),
@@ -317,11 +318,14 @@ export const setHearing = (shift, hearing) => ({ ...shift, hearing });
 // And for his answer being played aloud, so a long answer never costs time.
 export const setSpeaking = (shift, speaking) => ({ ...shift, speaking });
 
+// The pause menu: the player stopped the game, so both clocks stand still.
+export const setPaused = (shift, paused) => (shift.phase === 'playing' ? { ...shift, paused: Boolean(paused) } : shift);
+
 // The clock stands still while a question is out, so a slow connection
 // never costs the player time. When his two minutes are up the clock stops
 // and the shift waits for a stamp: the questions are over, not the shift.
 export function tick(shift, dtMs) {
-  if (shift.phase !== 'playing' || shift.pending || shift.hearing || shift.speaking || shift.pleading || !(dtMs > 0)) return shift;
+  if (shift.phase !== 'playing' || shift.paused || shift.pending || shift.hearing || shift.speaking || shift.pleading || !(dtMs > 0)) return shift;
   const usedMs = Math.min(sliceStart(shift) + TRAVELLER_MS, sliceUsedMs(shift) + dtMs);
   return { ...shift, usedMs };
 }

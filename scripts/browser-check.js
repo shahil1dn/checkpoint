@@ -265,6 +265,45 @@ async function main() {
     seen = await screen();
     check('Play again starts with no hint left over from the last shift', seen.hint === '' && seen.left.includes(' 5 of '), seen);
 
+    // The pause menu: Esc stops the clock and covers the desk; Resume carries on;
+    // Restart and Main menu both leave a fresh shift.
+    const menus = () => page.evaluate(`({
+      pause: !document.getElementById('pause-menu').hidden,
+      start: !document.getElementById('start-screen').hidden,
+      controls: !document.getElementById('controls').hidden,
+      clock: document.getElementById('clock').textContent,
+      left: document.getElementById('questions-left').textContent,
+      name: document.getElementById('traveller-name').textContent,
+    })`);
+    const esc = () => page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', bubbles: true })); true`);
+    await esc();
+    const pausedAt = await menus();
+    await sleep(1500);
+    const stillPaused = await menus();
+    check('Esc pauses: the menu shows and the shift clock stands still', pausedAt.pause && stillPaused.clock === pausedAt.clock && pausedAt.clock.includes('(paused)'), { pausedAt, stillPaused });
+    await page.evaluate(`document.getElementById('stamp-away').click(); document.getElementById('stamp-through').click(); true`);
+    await sleep(300);
+    const untouched = await menus();
+    check('nothing can be stamped while paused', untouched.name === pausedAt.name, untouched);
+    await page.evaluate(`document.getElementById('resume').click(); true`);
+    await sleep(1500);
+    const resumed = await menus();
+    check('Resume closes the menu and the clock runs again', !resumed.pause && resumed.clock !== pausedAt.clock && !resumed.clock.includes('(paused)'), resumed);
+    await esc();
+    await page.evaluate(`document.getElementById('restart').click(); true`);
+    await sleep(200);
+    const restarted = await menus();
+    check('Restart shift starts over at the first traveller, unpaused', !restarted.pause && restarted.controls && restarted.name === pausedAt.name && restarted.left.includes(' 5 of '), restarted);
+    await esc();
+    await page.evaluate(`document.getElementById('to-menu').click(); true`);
+    await sleep(200);
+    const atMenu = await menus();
+    check('Main menu leaves the shift for the title screen', atMenu.start && !atMenu.pause && !atMenu.controls, atMenu);
+    await page.evaluate(`document.getElementById('start').click(); true`);
+    await waitFor(`!document.getElementById('controls').hidden`, 5000);
+    const afresh = await menus();
+    check('Play game from the menu starts a fresh shift', !afresh.start && afresh.controls && afresh.left.includes(' 5 of '), afresh);
+
     // SPEC item 8: stamping is allowed at any time, even before the first question.
     const first = await page.evaluate(`document.getElementById('traveller-name').textContent`);
     // Shahil 13:40: one message at a time. The hover label sits by the pointer,
