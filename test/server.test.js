@@ -64,7 +64,7 @@ test('a good question reaches Mistral and the checked, spoken reply comes back',
   nextRaw = GOOD_RAW;
   const res = await post(valid);
   assert.equal(res.status, 200);
-  assert.deepEqual(await res.json(), { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false, audio: 'QUJD', notes: [NOTE] });
+  assert.deepEqual(await res.json(), { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false, bribe: false, audio: 'QUJD', notes: [NOTE] });
   assert.equal(calls.length, 1);
   assert.equal(calls[0].traveller.id, 'max');
   assert.equal(calls[0].question, 'Why are you here?');

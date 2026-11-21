@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { describeError, makeMistralAsker, makeMistralHearer, makeMistralNoteTaker, makeMistralSpeaker } from '../server/mistral.js';
-import { buildMessages } from '../server/prompt.js';
+import { REPLY_FORMAT, buildMessages } from '../server/prompt.js';
 import { getTraveller } from '../src/travellers/index.js';
 
 const FAKE_KEY = 'test-key-must-not-leak';
@@ -154,4 +154,24 @@ test('each call states the question number and whether he has confessed', () => 
 test('a retry after an early confession carries the nudge', () => {
   const [system] = buildMessages(max, [], 'Spy?', { nudge: 'It is too early to confess. Keep your cover for now.' });
   assert.match(system.content, /too early to confess/);
+});
+
+// Bribes: the traveller's schema asks for the flag and past answers replay it;
+// the note-taker (ADR-8) is still sent only papers and the conversation.
+test('the reply schema requires bribe, and a past answer is replayed with its bribe flag', () => {
+  assert.ok(REPLY_FORMAT.json_schema.schema.required.includes('bribe'));
+  assert.deepEqual(REPLY_FORMAT.json_schema.schema.properties.bribe, { type: 'boolean' });
+  const messages = buildMessages(max, [{ question: 'a', reply: 'A croissant?', mood: 'happy', cracked: false, bribe: true }, { question: 'b', reply: 'c', mood: 'sad', cracked: false }], 'And?');
+  assert.equal(JSON.parse(messages[2].content).bribe, true);
+  assert.equal(JSON.parse(messages[4].content).bribe, false);
+  assert.match(messages[0].content, /bribe is true only when/);
+});
+
+test('the note-taker is not told about the bribe flag or whether a bribe was taken', async () => {
+  const { impl, sent } = fakeFetch(200, { choices: [{ message: { content: '{"notes":[]}' } }] });
+  const exchanges = [{ question: 'Anything to declare?', reply: 'A croissant for you, inspector?', mood: 'happy', bribe: true, bribeTaken: true }];
+  await makeMistralNoteTaker({ fetchImpl: impl })({ papers: max.papers, exchanges });
+  const said = JSON.parse(sent[0].init.body).messages.map((m) => m.content).join(' ');
+  assert.ok(said.includes('A croissant for you, inspector?'));
+  assert.doesNotMatch(said, /bribe/i);
 });
