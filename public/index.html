@@ -23,11 +23,18 @@
     <span id="status">Connecting…</span>
   </header>
 
-  <section id="start-screen" class="card">
+  <section id="start-screen" class="card border-form">
+    <div class="form-masthead"><span>Antarctic border post</span><span>Inspector's copy · CP-01</span></div>
+    <p class="form-kicker">Shift brief / Jetty 2</p>
     <h1>Checkpoint</h1>
-    <p>You're the inspector. Question each traveller out loud, read their papers, then stamp them through or turn them away.</p>
-    <p class="small">Hold the microphone on the desk (or Space) to ask. Click the papers and the scratchpad to read them.</p>
-    <button id="start" type="button">Start shift</button>
+    <p class="form-lead">Two travellers are due at your window. Inspect their papers, question their stories, and decide who enters Antarctica.</p>
+    <ol class="procedure">
+      <li>Read the papers on your desk.</li>
+      <li>Ask questions out loud or type them.</li>
+      <li>Stamp each traveller through or turned away.</li>
+    </ol>
+    <p class="small">Hold the desk microphone or Space to speak. Open the scratchpad to review your notes.</p>
+    <div class="form-footer"><span>Duty begins on your signal</span><button id="start" type="button">Start shift</button></div>
   </section>
 
   <section id="fallback" class="card" hidden>
@@ -59,15 +66,18 @@
     </nav>
   </div>
 
-  <section id="report" class="card" hidden>
+  <section id="report" class="card border-form" hidden>
+    <div class="form-masthead"><span>Antarctic border post</span><span>Filed report · CP-02</span></div>
+    <p class="form-kicker">Inspection record / Jetty 2</p>
     <h2>End of shift</h2>
     <p id="end-reason"></p>
-    <table>
-      <thead><tr><th>Traveller</th><th>Your stamp</th><th>The truth</th><th>Result</th></tr></thead>
-      <tbody id="report-rows"></tbody>
-    </table>
-    <p id="score"></p>
-    <button id="again" type="button">Play again</button>
+    <div class="report-table-wrap">
+      <table>
+        <thead><tr><th>Traveller</th><th>Your stamp</th><th>The truth</th><th>Result</th></tr></thead>
+        <tbody id="report-rows"></tbody>
+      </table>
+    </div>
+    <div class="form-footer"><p id="score"></p><button id="again" type="button">Play again</button></div>
   </section>
 
   <script type="module" src="/app.js"></script>

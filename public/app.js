@@ -248,6 +248,7 @@ function renderReport() {
   $('end-reason').textContent = END_REASONS[shift.endReason] ?? '';
   $('report-rows').replaceChildren(...report.rows.map((row) => {
     const tr = document.createElement('tr');
+    tr.dataset.result = row.correct ? 'right' : 'wrong';
     const cells = [
       row.name,
       row.stamp ? STAMP_WORDS[row.stamp] : 'Not stamped',

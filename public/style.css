@@ -1,5 +1,4 @@
-/* Plain on purpose until S7 sets the look. The 3D booth fills the window;
-   everything else sits over it and lets clicks through to the desk. */
+/* The 3D booth fills the window; overlays sit above it and keep the desk clickable. */
 :root { --ink: #1f2126; --muted: #555b66; --paper: #ffffff; --accent: #e8743b; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #3e4b5e; }
 body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
@@ -25,6 +24,67 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
 .card .small { color: var(--muted); font-size: 14px; }
 .card table { width: 100%; border-collapse: collapse; margin: 8px 0; }
 .card th, .card td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid #e3e5e8; }
+.border-form {
+  width: min(590px, calc(100% - 32px));
+  padding: 28px 36px 30px 50px;
+  border: 2px solid #9c907b;
+  border-radius: 2px;
+  background:
+    linear-gradient(90deg, transparent 31px, #cda39a 32px, transparent 33px),
+    linear-gradient(135deg, #fbf8ef, #eee6d4);
+  box-shadow: 0 13px 0 -7px #d3c7b0, 0 22px 42px #1f212655;
+}
+.border-form::before {
+  content: ''; position: absolute; left: 11px; top: 78px;
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #9c907b; box-shadow: 0 112px #9c907b, 0 224px #9c907b;
+}
+.form-masthead {
+  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px;
+  padding-bottom: 9px; border-bottom: 2px solid var(--ink);
+  font: bold 11px/1.3 "Courier New", monospace;
+  letter-spacing: 0.09em; text-transform: uppercase;
+}
+.form-kicker { margin: 20px 0 5px; color: #8a4633; font: bold 13px/1.3 "Courier New", monospace; letter-spacing: 0.11em; text-transform: uppercase; }
+.border-form h1, .border-form h2 { margin: 0 0 12px; font-family: "Courier New", monospace; letter-spacing: -0.04em; }
+.border-form h1 { font-size: clamp(30px, 5vw, 42px); }
+.border-form h2 { font-size: clamp(26px, 4vw, 36px); }
+.form-lead { max-width: 47ch; margin: 0 0 18px; font: 18px/1.45 Georgia, serif; }
+.procedure { margin: 0 0 15px; padding: 10px 0; list-style: none; counter-reset: step; border-top: 1px solid #a99f8c; border-bottom: 1px solid #a99f8c; }
+.procedure li { display: flex; gap: 12px; align-items: baseline; padding: 5px 0; }
+.procedure li::before { counter-increment: step; content: counter(step, decimal-leading-zero); color: #8a4633; font: bold 13px "Courier New", monospace; }
+.border-form .small { margin: 0 0 22px; color: #4d4b47; }
+.form-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding-top: 15px; border-top: 2px solid var(--ink); }
+.form-footer > span { color: #645d52; font: bold 11px "Courier New", monospace; letter-spacing: 0.08em; text-transform: uppercase; }
+.border-form button { background: #293c4b; border-bottom: 3px solid #15232b; }
+#report { width: min(820px, calc(100% - 32px)); }
+#end-reason { margin: 0 0 18px; color: #4d4b47; }
+.report-table-wrap { background: #fbf8ef; border: 1px solid #b9ac96; }
+#report table { margin: 0; table-layout: fixed; }
+#report th { color: #5f594f; font: bold 12px/1.3 "Courier New", monospace; text-transform: uppercase; letter-spacing: 0.04em; border-bottom: 2px solid var(--ink); }
+#report td { padding: 11px 8px; border-bottom: 1px solid #cfc5b3; overflow-wrap: anywhere; }
+#report th:nth-child(1), #report td:nth-child(1) { width: 16%; font-weight: 700; }
+#report th:nth-child(2), #report td:nth-child(2) { width: 16%; }
+#report th:nth-child(3), #report td:nth-child(3) { width: 56%; }
+#report th:nth-child(4), #report td:nth-child(4) { width: 12%; }
+#report tr:last-child td { border-bottom: 0; }
+#report tr[data-result="right"] td:last-child { color: #276d42; font-weight: 800; }
+#report tr[data-result="wrong"] td:last-child { color: #9a332c; font-weight: 800; }
+#score { margin: 0; font: bold 16px/1.3 "Courier New", monospace; }
+@media (max-width: 640px) {
+  .border-form { padding: 22px 20px 24px 38px; }
+  .border-form::before { left: 8px; }
+  #report thead { display: none; }
+  #report table, #report tbody, #report tr, #report td { display: block; width: auto; }
+  #report tr { padding: 12px; border-bottom: 1px solid #b9ac96; }
+  #report tr:last-child { border-bottom: 0; }
+  #report td { display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 8px; padding: 5px 0; border: 0; }
+  #report td::before { color: #686154; font: bold 11px/1.4 "Courier New", monospace; text-transform: uppercase; }
+  #report td:nth-child(1)::before { content: 'Traveller'; }
+  #report td:nth-child(2)::before { content: 'Your stamp'; }
+  #report td:nth-child(3)::before { content: 'The truth'; }
+  #report td:nth-child(4)::before { content: 'Result'; }
+}
 #fallback { top: 80px; left: 12px; transform: none; width: min(380px, 100% - 24px); }
 #fallback dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 10px; margin: 0 0 12px; }
 #fallback dt { color: var(--muted); }
