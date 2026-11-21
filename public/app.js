@@ -182,6 +182,7 @@ async function startShift() {
 function playAgain() {
   shift = R.restartShift(shift);
   stopVoice();
+  hint('');
   $('last-stamp').textContent = '';
   lastFrame = performance.now();
   render();
