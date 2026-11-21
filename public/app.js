@@ -333,7 +333,8 @@ function renderTranscript(traveller) {
     { who: 'You', text: turn.question },
     { who: traveller.name, text: `${turn.reply}${turn.cracked ? ' [He cracked!]' : ''}` },
   ]);
-  if (shift.pending) lines.push({ who: 'You', text: shift.pending.question }, { who: traveller.name, text: '…' });
+  // While he thinks, only your question is printed: the printer never overprints a line.
+  if (shift.pending) lines.push({ who: 'You', text: shift.pending.question });
   const offer = R.bribeOffer(shift);
   if (offer) lines.push({ who: traveller.name, text: offer.line });
   booth?.setTranscript(traveller.name, lines);
