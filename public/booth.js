@@ -269,12 +269,20 @@ function buildNotebook(group) {
   return item;
 }
 
-// ---------- the transcript (Shahil 13:40) ----------
-// The conversation prints onto a slip rising out of a little printer at the
-// front of the desk: newest line at the bottom by the printer, older lines
-// pushed up and off the top. The slip leans back only part way, so its newest
-// lines read from the chair; clicking lifts a full page of the conversation.
-const SLIP = { width: 0.86, height: 0.22, tilt: -0.9, front: 1.4 };
+// ---------- the transcript (Shahil 13:40, 15:00) ----------
+// The conversation prints like a till receipt: a printer at the front left of
+// the desk feeds the paper up one notch per printed line, newest line by the
+// printer. The paper grows to five lines and no further, so it stays below the
+// scratchpad and papers and never reaches anything; older lines roll over the
+// top. It leans back only part way and faces straight ahead (turned, its lines
+// slant), so the newest lines read from the chair. Clicking lifts a full page of the conversation.
+const SLIP = {
+  width: 0.54, row: 0.03, rows: 5, pad: 0.014, tilt: -0.7,
+  bottom: new THREE.Vector3(-0.36, SILL + 0.03, 1.32),
+};
+const SLIP_PX = 2000;      // canvas pixels per metre of paper
+const ROLL_ROWS = 48;      // printed rows the canvas keeps; only the last few show
+const NOTCH_SECONDS = 0.16;
 const SAID_BY_YOU = '#6b6457';
 
 // Every line of the conversation as printed rows: [text, colour, bold].
@@ -295,18 +303,12 @@ function printRow(g, [text, colour, bold], x, y, size) {
   g.fillText(text, x, y);
 }
 
-function drawSlip(g, w, h, name, lines = []) {
+// The roll: every printed row top to bottom, one row per SLIP.row of paper.
+function drawRoll(g, w, h, rows) {
   g.fillStyle = COLORS.paper; g.fillRect(0, 0, w, h);
-  const size = h * 0.11;
-  const step = size * 1.28;
   g.textAlign = 'left'; g.textBaseline = 'alphabetic';
-  const rows = transcriptRows(g, name, lines, w * 0.92, size);
-  let y = h - step * 0.75;   // clear of the printer's lip
-  for (const row of rows.reverse()) {
-    if (y < size) break;
-    printRow(g, row, w * 0.04, y, size);
-    y -= step;
-  }
+  const rowPx = SLIP.row * SLIP_PX;
+  rows.forEach((row, i) => printRow(g, row, w * 0.04, SLIP.pad * SLIP_PX + (i + 0.8) * rowPx, rowPx * 0.78));
 }
 
 // Lifted: the whole conversation on a page, oldest at the top. If a long
@@ -324,22 +326,59 @@ function drawTranscriptPage(g, w, h, name, lines = []) {
 }
 
 function buildTranscript(group) {
-  const bottom = new THREE.Vector3(0, SILL + 0.03, SLIP.front);
-  const up = new THREE.Vector3(0, Math.cos(SLIP.tilt), Math.sin(SLIP.tilt));
-  const item = liftable(group, 'transcript', bottom.clone().addScaledVector(up, SLIP.height / 2), 0, 1, SLIP.tilt);
-  const slip = textPlane(SLIP.width, SLIP.height, drawSlip, 2400);
-  item.holder.add(slip.mesh);
+  const item = liftable(group, 'transcript', SLIP.bottom, 0, 1, SLIP.tilt);
+  // The paper's bottom edge sits in the printer; it grows upwards as it feeds.
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.round(SLIP.width * SLIP_PX);
+  canvas.height = Math.round((ROLL_ROWS * SLIP.row + SLIP.pad * 2) * SLIP_PX);
+  const roll = new THREE.CanvasTexture(canvas);
+  roll.colorSpace = THREE.SRGBColorSpace;
+  const geometry = new THREE.PlaneGeometry(SLIP.width, 1);
+  geometry.translate(0, 0.5, 0);
+  const slip = new THREE.Mesh(geometry, new THREE.MeshBasicMaterial({ map: roll }));
+  slip.userData.isScreen = true;   // flat print: no crease lines inside it
+  item.holder.add(slip);
   const page = textPlane(0.42, 0.56, drawTranscriptPage, 2048);
   page.mesh.visible = false;
   item.holder.add(page.mesh);
-  Object.assign(item, { slip: slip.mesh, page: page.mesh, redraw: (name, lines) => { slip.redraw(name, lines); page.redraw(name, lines); } });
+
+  let traveller = null;
+  let firstRow = 0;   // the roll keeps the last ROLL_ROWS rows; this is the first one's number
+  let printed = 0;    // rows the conversation has
+  let fed = 0;        // rows fed out so far: eases up one notch at a time towards printed
+  function redraw(name, lines) {
+    const g = canvas.getContext('2d');
+    const rows = transcriptRows(g, name, lines, canvas.width * 0.92, SLIP.row * SLIP_PX * 0.78);
+    if (name !== traveller) fed = 0;   // a fresh roll for each traveller
+    else fed = Math.min(fed, rows.length);   // an uncounted question drops its line
+    traveller = name;
+    printed = rows.length;
+    firstRow = Math.max(0, rows.length - ROLL_ROWS);
+    drawRoll(g, canvas.width, canvas.height, rows.slice(firstRow));
+    roll.needsUpdate = true;
+    page.redraw(name, lines);
+  }
+  // Every frame: feed towards the printed rows, then show the paper from the
+  // roll's top (or, once it's full, from a line SLIP.rows back) down to just
+  // past the last row fed, as a strip growing out of the printer.
+  function feed(dt) {
+    fed = Math.min(printed, fed + dt / NOTCH_SECONDS);
+    const shown = Math.floor(fed) + ease(fed % 1) - firstRow;
+    const height = Math.min(SLIP.pad + shown * SLIP.row, SLIP.rows * SLIP.row) + SLIP.pad;
+    slip.scale.y = height;
+    const bottomPx = (SLIP.pad * 2 + shown * SLIP.row) * SLIP_PX;
+    roll.repeat.y = (height * SLIP_PX) / canvas.height;
+    roll.offset.y = 1 - bottomPx / canvas.height;
+  }
+  Object.assign(item, { slip, page: page.mesh, redraw, feed });
   item.redraw('', []);
-  // The printer it feeds out of; clicking the printer lifts the slip too.
+  // The printer it feeds out of; clicking the printer lifts the paper too.
   const printer = new THREE.Group();
   printer.userData.tool = 'transcript';
+  printer.position.copy(SLIP.bottom);
   group.add(printer);
-  // A thin part (ART-DIRECTION section 1): no ink hull, which drew a line across the slip.
-  part(box(SLIP.width + 0.03, 0.03, 0.05, 0.01), mat(COLORS.micBody), printer, [0, SILL + 0.015, SLIP.front + 0.02], undefined, undefined, false);
+  // A thin part (ART-DIRECTION section 1): no ink hull, which drew a line across the paper.
+  part(box(SLIP.width + 0.04, 0.03, 0.07, 0.01), mat(COLORS.micBody), printer, [0, -0.015, 0.015], undefined, undefined, false);
   return { item, printer };
 }
 
@@ -356,7 +395,9 @@ function buildBribe(group) {
   const croissant = new THREE.Group();
   part(new THREE.TorusGeometry(0.06, 0.028, 10, 18, Math.PI * 1.25), mat('#d9a04a'), croissant, [0, 0.03, 0], [-Math.PI / 2, 0, 0.6]);
   const cheese = new THREE.Group();
-  part(new THREE.CylinderGeometry(0.1, 0.1, 0.07, 10, 1, false, 0, Math.PI / 3), mat('#e8c95a'), cheese, [0, 0.035, 0], [0, 2.2, 0]);
+  // Stood on its long edge with its cut face to the inspector: lying flat, it was
+  // a thin yellow sliver from the chair.
+  part(new THREE.CylinderGeometry(0.1, 0.1, 0.07, 10, 1, false, Math.PI / 2, Math.PI / 3), mat('#e8c95a'), cheese, [-0.05, 0.002, 0], [Math.PI / 2, 0, 0]);
   const sticker = textPlane(0.11, 0.11, (g, w, h) => {
     g.fillStyle = '#e8743b'; g.beginPath(); g.arc(w / 2, h / 2, w * 0.48, 0, Math.PI * 2); g.fill();
     g.fillStyle = '#fbf8ef'; g.beginPath();
@@ -873,6 +914,7 @@ export function createBooth(container, handlers = {}) {
     }
     notebook.cover.visible = notebook.t < 0.5;
     notebook.page.visible = notebook.t >= 0.5;
+    transcript.feed(dt);
     transcript.slip.visible = transcript.t < 0.5;
     transcript.page.visible = transcript.t >= 0.5;
     for (const [verdict, s] of Object.entries(stamps)) {

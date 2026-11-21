@@ -22,8 +22,9 @@ A new browser game in this repo, built on the shape of `~/Documents/projects/fan
 
 You're the inspector at a checkpoint. Travellers step up one at a time with papers on your desk.
 You question them **out loud**; they answer **out loud**, each in their own voice, and they
-flatter you, offer bribes and dodge. When you're sure, you stamp them **through** or **turned
-away**. At the end of the shift the game reveals who was lying and scores you. The first
+flatter you and dodge. When you're sure, you stamp them **through** or **turned
+away**; reach for turned away and they try one last bribe first (ADR-13). At the end of the
+shift the game reveals who was lying and scores you. The first
 traveller is a Mistral superfan, so a room of Mistral judges can catch him out with what they know.
 
 ## In scope
@@ -140,8 +141,15 @@ but only the player hears the lie.
   files, not the traveller files). A liar's records have gaps his story has to cover. An honest
   traveller's records are messy but consistent, so a typo never proves anything. Plus a few
   hundred background entries, so the search is real.
-- **Harder papers:** each traveller gets a second document (a ship ticket) with details to
-  check against the records.
+- ~~Harder papers: a second document, a ship ticket.~~ **The case folder (Shahil, 15:40):** each
+  traveller hands over one folder, which replaces the single papers sheet on the desk. Clicking
+  it opens the whole case at once, spread out together: a **passport** (name, from, date of
+  birth, photo, occupation), an **entry visa** (purpose of visit, sponsor, valid dates, issuing
+  stamp) and a **ship ticket** (ship, date, departure port, seat). It's a case to investigate,
+  not one document at a time. The clashes between documents are the core puzzle, and every
+  line on them is clickable to look it up on the terminal. Clicking outside, or the folder
+  again, closes it. P still opens it. The documents live in the traveller's records file
+  (ADR-12).
 - **On screen:** the terminal shows its steps as it works ("searching passenger lists… 3 near
   matches… reading rulebook §4"), then the answer quoting the records. This is the place for
   Large 4: a pause is fine at a terminal, and it shows the judges Mistral's tool use.

@@ -201,6 +201,24 @@ export async function createApp({ ask, hear, speak, takeNotes, lookup, liveAvail
     return { reply: FALLBACK_LINE, mood: 'neutral', cracked: false, fallback: true };
   }
 
+  // The last-ditch bribe (Shahil 14:34). Its words come from the traveller's
+  // file, never the request, so this can't be used to make anyone say
+  // anything. The voice is made once per traveller and kept; a failed one is
+  // not kept, so the next plea tries again.
+  const pleas = new Map();
+  async function handlePlea(url, res) {
+    const traveller = getTraveller(url.searchParams.get('travellerId') ?? '');
+    if (!traveller) return send(res, 400, { error: 'unknownTraveller' });
+    if (!liveAvailable) return send(res, 503, { error: 'noKey' });
+    if (!pleas.has(traveller.id)) {
+      const { line, mood } = traveller.bribe;
+      pleas.set(traveller.id, timed(() => speakOrNull(traveller, { reply: line, mood })));
+    }
+    const { value: audio, ms: speechMs } = await pleas.get(traveller.id);
+    if (!audio) pleas.delete(traveller.id);
+    return send(res, 200, { audio, speechMs });
+  }
+
   // A reply that can't be voiced is still shown, so speech failing never
   // costs the player the answer.
   async function speakOrNull(traveller, reply) {
@@ -225,6 +243,10 @@ export async function createApp({ ask, hear, speak, takeNotes, lookup, liveAvail
     if (url.pathname === '/api/lookup') {
       if (req.method !== 'POST') return send(res, 405, { error: 'method' });
       return handleLookup(req, res);
+    }
+    if (url.pathname === '/api/plea') {
+      if (req.method !== 'GET') return send(res, 405, { error: 'method' });
+      return handlePlea(url, res);
     }
     if (url.pathname === '/api/hear') {
       if (req.method !== 'POST') return send(res, 405, { error: 'method' });
