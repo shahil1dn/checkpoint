@@ -147,7 +147,10 @@ function liftable(group, name, at, yaw, deskScale) {
 
 function buildPapers(group) {
   const item = liftable(group, 'papers', new THREE.Vector3(-0.28, SILL + 0.012, 0.5), -0.06, 0.7);
-  part(box(0.42, 0.56, 0.008, 0.004), mat(COLORS.paper), item.holder);
+  // A sheet is a thin part (ART-DIRECTION section 1): no ink hull, which framed
+  // it in thick black when held up, and no shadow, which left a dark patch on the desk.
+  const sheet = part(box(0.42, 0.56, 0.008, 0.004), mat(COLORS.paper), item.holder, undefined, undefined, undefined, false);
+  sheet.castShadow = sheet.receiveShadow = false;
   const print = textPlane(0.42, 0.56, drawPapers, 2048);
   print.mesh.position.z = 0.006;
   item.holder.add(print.mesh);
