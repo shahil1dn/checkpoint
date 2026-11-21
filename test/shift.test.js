@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as R from '../src/rules.js';
 import { mockReply } from '../src/mockBrain.js';
+import { getTraveller } from '../src/travellers/index.js';
 
 // Asks one question and answers it with the mock brain, the way the page does.
 function askAndAnswer(shift, text = 'Why are you here?') {
@@ -75,7 +76,8 @@ test('the shift ends when the clock runs out, and nothing more can happen', () =
 });
 
 test('stamping is allowed before the first question, and the queue moves on', () => {
-  const { shift, error } = R.stamp(R.newShift(), 'away');
+  // The first TURNED AWAY brings out his bribe; the second one lands.
+  const { shift, error } = R.stamp(R.stamp(R.newShift(), 'away').shift, 'away');
   assert.equal(error, undefined);
   assert.equal(R.currentTravellerId(shift), 'colin');
   const done = R.stamp(shift, 'through').shift;
@@ -122,75 +124,113 @@ test('a restarted shift never accepts a reply from the old one', () => {
 test('the request sent to the server carries past exchanges with their real cracked flag', () => {
   const shift = askAndAnswer(R.newShift());
   const { request } = R.startQuestion(shift, 'And?');
-  assert.deepEqual(Object.keys(request.history[0]).sort(), ['bribe', 'cracked', 'mood', 'question', 'reply']);
+  assert.deepEqual(Object.keys(request.history[0]).sort(), ['cracked', 'mood', 'question', 'reply']);
   assert.equal(R.validateAskRequest({ travellerId: request.travellerId, question: request.question, history: request.history }).ok, true);
 });
 
-// ---- Bribes ----
-// Offline, Max's 2nd canned line offers a sticker or a croissant.
-function toMaxsBribe() {
-  return askAndAnswer(askAndAnswer(R.newShift()));
-}
+// ---- Bribes (Shahil 14:34) ----
+// A bribe is a last-ditch offer, never part of the questioning: the first
+// TURNED AWAY on a traveller doesn't land, and he offers what his own file
+// in src/travellers/ says. The game decides when; the model never does.
+// A fixed queue, so changing the demo queue in src/travellers/index.js never breaks these.
+const PAIR = ['max', 'colin'];
+const reachForAway = (shift) => R.stamp(shift, 'away');
+const offerOf = (id) => ({ travellerId: id, ...getTraveller(id).bribe });
 
-test('the mock brain offers a bribe, so the offer can be played offline', () => {
-  const shift = toMaxsBribe();
-  assert.deepEqual(shift.cases.max.history.map((e) => e.bribe), [false, true]);
-  assert.deepEqual(R.bribeOffer(shift), { travellerId: 'max', reply: shift.cases.max.history[1].reply });
+test('no bribe is on offer before the inspector reaches for TURNED AWAY', () => {
+  let shift = R.newShift(PAIR);
+  for (let i = 0; i < 5; i += 1) shift = askAndAnswer(shift);
+  assert.equal(R.bribeOffer(shift), null);
+  assert.equal(R.takeBribe(shift).error, 'noBribe');
+  // A THROUGH stamp never brings one out either.
+  shift = R.stamp(shift, 'through').shift;
+  assert.equal(shift.cases.max.bribe, null);
+  assert.equal(R.bribeOffer(shift), null);
 });
 
-test('there is no offer before one is made, or while a question is out', () => {
-  assert.equal(R.bribeOffer(R.newShift()), null);
-  assert.equal(R.answerBribe(R.newShift(), true).error, 'noBribe');
-  assert.equal(R.bribeOffer(askAndAnswer(R.newShift())), null);
-  assert.equal(R.bribeOffer(R.startQuestion(toMaxsBribe(), 'And?').shift), null);
-});
-
-test('taking a bribe is recorded by the rules and closes the offer', () => {
-  const { shift, error } = R.answerBribe(toMaxsBribe(), true);
+test('the first TURNED AWAY does not land: he makes his offer instead', () => {
+  const asked = R.startQuestion(R.newShift(PAIR), 'Why?');
+  const { shift, offer, error } = reachForAway(asked.shift);
   assert.equal(error, undefined);
-  assert.equal(shift.cases.max.bribeTaken, true);
-  assert.equal(shift.cases.colin.bribeTaken, false);
+  assert.deepEqual(offer, offerOf('max'));
+  assert.deepEqual(R.bribeOffer(shift), offer);
+  assert.deepEqual([shift.current, shift.cases.max.stamp, shift.phase], [0, null, 'playing']);
+  // The question that was out is dropped, as a stamp drops it.
+  assert.equal(shift.pending, null);
+  assert.equal(R.finishQuestion(shift, asked.request.id, { reply: 'x', mood: 'sad', cracked: false }), shift);
+});
+
+test('one offer per traveller: TURNED AWAY again refuses it, and the stamp lands', () => {
+  const offered = reachForAway(R.newShift(PAIR)).shift;
+  assert.equal(R.pleadsFirst(offered, 'away'), false);
+  const refused = R.stamp(offered, 'away');
+  assert.equal(refused.offer, undefined);
+  assert.deepEqual([refused.shift.cases.max.stamp, refused.shift.cases.max.bribe, refused.shift.current], ['away', 'refused', 1]);
+  assert.equal(R.bribeOffer(refused.shift), null);
+  assert.equal(R.shiftReport(refused.shift).record, 'clean');
+});
+
+test('every traveller makes his own offer, the honest one too, so a bribe is never a tell', () => {
+  const pastMax = R.stamp(reachForAway(R.newShift(PAIR)).shift, 'away').shift;
+  assert.equal(getTraveller('colin').truth.honest, true);
+  assert.deepEqual(reachForAway(pastMax).offer, offerOf('colin'));
+});
+
+test('taking the bribe lets him THROUGH and makes the record CORRUPT', () => {
+  const { shift, error } = R.takeBribe(reachForAway(R.newShift(PAIR)).shift);
+  assert.equal(error, undefined);
+  assert.deepEqual([shift.cases.max.stamp, shift.cases.max.bribe, shift.current], ['through', 'taken', 1]);
   assert.equal(R.bribeOffer(shift), null);
-  assert.equal(R.answerBribe(shift, true).error, 'noBribe');
+  assert.equal(R.takeBribe(shift).error, 'noBribe');
+  const report = R.shiftReport(shift);
+  assert.deepEqual([report.bribesTaken, report.record], [1, 'corrupt']);
+  assert.deepEqual(report.rows.map((r) => [r.id, r.bribeTaken]), [['max', true], ['colin', false]]);
 });
 
-test('an ignored bribe is not on the record, and a later offer can still be taken', () => {
-  let shift = R.answerBribe(toMaxsBribe(), false).shift;
-  assert.equal(shift.cases.max.bribeTaken, false);
+test('THROUGH while the offer is out lets him through without taking it', () => {
+  const { shift } = R.stamp(reachForAway(R.newShift(PAIR)).shift, 'through');
+  assert.deepEqual([shift.cases.max.stamp, shift.cases.max.bribe], ['through', 'refused']);
+  assert.equal(R.shiftReport(shift).record, 'clean');
+});
+
+test('while the offer is on the ledge there are no more questions: take it or stamp', () => {
+  const offered = reachForAway(R.newShift(PAIR)).shift;
+  assert.equal(R.startQuestion(offered, 'Is that a bribe?').error, 'bribeOnTable');
+});
+
+test('the clock stands still while he pleads, and runs again once he has said it', () => {
+  const offered = reachForAway(R.newShift(PAIR)).shift;
+  assert.equal(R.tick(offered, 1000).usedMs, 0);
+  assert.equal(R.tick(R.setPleading(offered, false), 1000).usedMs, 1000);
+  // Answering the offer, either way, starts the clock again too.
+  assert.equal(R.tick(R.takeBribe(offered).shift, 1000).usedMs, 1000);
+  assert.equal(R.tick(R.stamp(offered, 'away').shift, 1000).usedMs, 1000);
+});
+
+test('the score comes only from the stored truth: a bribe never changes right or wrong', () => {
+  const takeBoth = (shift) => R.takeBribe(reachForAway(R.takeBribe(reachForAway(shift).shift).shift).shift).shift;
+  const bought = R.shiftReport(takeBoth(R.newShift(PAIR)));
+  // The liar let through for a croissant is wrong; the honest one is right, and the record is corrupt.
+  assert.deepEqual(bought.rows.map((r) => [r.id, r.stamp, r.correct]), [['max', 'through', false], ['colin', 'through', true]]);
+  assert.deepEqual([bought.correct, bought.bribesTaken, bought.record], [1, 2, 'corrupt']);
+  // Refusing both: turning the liar away is right, turning the honest one away is wrong.
+  const refuseBoth = (shift) => R.stamp(reachForAway(R.stamp(reachForAway(shift).shift, 'away').shift).shift, 'away').shift;
+  const refused = R.shiftReport(refuseBoth(R.newShift(PAIR)));
+  assert.deepEqual(refused.rows.map((r) => [r.id, r.stamp, r.correct]), [['max', 'away', true], ['colin', 'away', false]]);
+  assert.deepEqual([refused.correct, refused.record], [1, 'clean']);
+});
+
+test('a reply cannot make or take an offer', () => {
+  const asked = R.startQuestion(R.newShift(PAIR), 'Well?');
+  const shift = R.finishQuestion(asked.shift, asked.request.id, { reply: 'A croissant?', mood: 'happy', cracked: false, bribe: true, bribeTaken: true });
+  assert.equal(shift.cases.max.bribe, null);
+  assert.equal('bribe' in shift.cases.max.history[0], false);
   assert.equal(R.bribeOffer(shift), null);
-  const asked = R.startQuestion(shift, 'Anything else?');
-  shift = R.finishQuestion(asked.shift, asked.request.id, { reply: 'Fifty fish, then?', mood: 'excited', cracked: false, bribe: true });
-  assert.equal(R.bribeOffer(shift).reply, 'Fifty fish, then?');
-  assert.equal(R.answerBribe(shift, true).shift.cases.max.bribeTaken, true);
 });
 
-test('asking the next question leaves the old offer behind', () => {
-  const shift = askAndAnswer(toMaxsBribe());
-  assert.equal(shift.cases.max.history[2].bribe, false);
-  assert.equal(R.bribeOffer(shift), null);
-  assert.equal(shift.cases.max.bribeTaken, false);
-});
-
-test('only the game can record a bribe: a reply cannot mark one as taken', () => {
-  const asked = R.startQuestion(R.newShift(), 'Well?');
-  const shift = R.finishQuestion(asked.shift, asked.request.id, { reply: 'You took my fish!', mood: 'happy', cracked: false, bribe: true, bribeTaken: true });
-  assert.equal(shift.cases.max.bribeTaken, false);
-  assert.equal(R.shiftReport(shift).bribesTaken, 0);
-});
-
-test('the report names bribes taken and marks the record, without changing right or wrong', () => {
-  const stampBoth = (shift) => R.stamp(R.stamp(shift, 'away').shift, 'through').shift;
-  const clean = R.shiftReport(stampBoth(toMaxsBribe()));
-  const bought = R.shiftReport(stampBoth(R.answerBribe(toMaxsBribe(), true).shift));
-  assert.deepEqual([clean.bribesTaken, clean.record], [0, 'clean']);
-  assert.deepEqual([bought.bribesTaken, bought.record], [1, 'corrupt']);
-  assert.deepEqual(bought.rows.map((r) => [r.id, r.bribeTaken]), [['max', true], ['colin', false]]);
-  assert.deepEqual(bought.rows.map((r) => r.correct), clean.rows.map((r) => r.correct));
-  assert.equal(bought.correct, 2);
-});
-
-test('Play again starts with a clean record', () => {
-  const fresh = R.restartShift(R.answerBribe(toMaxsBribe(), true).shift);
-  assert.equal(fresh.cases.max.bribeTaken, false);
+test('Play again starts with a clean record and a fresh offer from everyone', () => {
+  const fresh = R.restartShift(R.takeBribe(reachForAway(R.newShift(PAIR)).shift).shift);
+  assert.equal(fresh.cases.max.bribe, null);
   assert.equal(R.shiftReport(fresh).record, 'clean');
+  assert.deepEqual(reachForAway(fresh).offer, offerOf('max'));
 });

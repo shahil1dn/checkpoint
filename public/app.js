@@ -33,12 +33,13 @@ const HINTS = {
   noMic: 'No microphone, so type your questions.',
   blocked: 'Click the page once so the browser lets them speak.',
   noBribe: 'Nothing is on offer.',
+  bribeOnTable: 'Take what he offered, or stamp the papers.',
 };
 const TOOL_TIPS = {
   papers: 'Papers: click to read',
   notebook: 'Scratchpad: click to open',
   transcript: 'Transcript: click to read it all',
-  bribe: 'A bribe: click to pocket it',
+  bribe: 'A bribe: click (or B) to pocket it',
   mic: 'Microphone: hold to ask (or hold Space)',
   'stamp-through': 'Stamp: let them through',
   'stamp-away': 'Stamp: turn them away',
@@ -111,6 +112,17 @@ async function fetchTranscript(clip) {
   }
 }
 
+// His last-ditch bribe, in his own voice. The server makes it once per
+// traveller, so asking early (at the start of the shift) makes it instant later.
+async function fetchPlea(travellerId) {
+  try {
+    const res = await fetch(`/api/plea?travellerId=${encodeURIComponent(travellerId)}`);
+    return res.ok ? await res.json() : null;
+  } catch {
+    return null;
+  }
+}
+
 // ---- Voice out ----
 
 // The inspector's computer shows each real Mistral call as it happens.
@@ -120,7 +132,8 @@ function logCall(...lines) {
   booth?.setComputer(callLog);
 }
 
-function playVoice(base64Mp3, speechMs) {
+// onDone runs once the voice stops for any reason: it ends, is cut off, or can't play.
+function playVoice(base64Mp3, speechMs, onDone = () => {}) {
   stopVoice();
   const clip = new Audio(`data:audio/mpeg;base64,${base64Mp3}`);
   voice = clip;
@@ -128,10 +141,12 @@ function playVoice(base64Mp3, speechMs) {
     clip.addEventListener('loadedmetadata', () => logCall(lineForSpeech(clip.duration, speechMs, models)), { once: true });
   }
   clip.addEventListener('ended', () => { if (voice === clip) booth?.setTalking(false); });
+  for (const stopped of ['ended', 'pause', 'error']) clip.addEventListener(stopped, onDone);
   booth?.setTalking(true);
   clip.play().catch(() => {
     booth?.setTalking(false);
     hint(HINTS.blocked);
+    onDone();
   });
 }
 
@@ -163,47 +178,73 @@ async function askQuestion(text, { typed = false } = {}) {
   else if (error && live) logCall({ who: modelName(models?.answer), what: 'call failed, so nothing was counted' });
   if (error) hint(HINTS[error]);
   else if (reply.fallback) hint(`${traveller.name}: "${reply.reply}" (that question wasn't counted)`);
-  else hint(bribeOnTheLedge() ? `${traveller.name} slides a ${bribeOnTheLedge()} onto the ledge.` : '');
+  else hint('');
   if (reply) booth?.setMood(reply.mood);
   if (reply?.audio) playVoice(reply.audio, reply.timings?.speechMs);
   render();
 }
 
 // The stamp comes down on the papers first, then the rules record it and the
-// traveller reacts and walks off.
+// traveller reacts and walks off. The first TURNED AWAY on each traveller
+// doesn't come down: he makes his last-ditch offer instead (Shahil 14:34).
 async function stampTraveller(verdict) {
   if (!started || stampingNow || shift.phase !== 'playing') return;
+  if (R.pleadsFirst(shift, verdict)) return hearPlea();
+  await bringStampDown(verdict, (s) => R.stamp(s, verdict));
+}
+
+// rule turns the shift into the stamped one; returns false if it refused.
+async function bringStampDown(verdict, rule) {
   stampingNow = true;
   const travellerId = R.currentTravellerId(shift);
   stopVoice();
   await booth?.stamp(verdict, getTraveller(travellerId).papers);
   stampingNow = false;
-  const result = R.stamp(shift, verdict);
-  if (result.error) return hint(HINTS[result.error]);
+  const result = rule(shift);
+  if (result.error) {
+    hint(HINTS[result.error]);
+    return false;
+  }
   shift = result.shift;
   booth?.show(R.currentTravellerId(shift), { reaction: verdict });
   $('last-stamp').textContent = `${getTraveller(travellerId).name}: stamped ${STAMP_WORDS[verdict].toUpperCase()}`;
   hint('');
   render();
+  return true;
 }
 
-// A bribe sits on the window ledge until you pocket it (click it) or move on
-// (ask again or stamp). The rules record a pocketed one; the report shows it.
-function bribeOnTheLedge() {
-  const offer = R.bribeOffer(shift);
-  return offer ? R.offeredItem(offer.reply) : null;
-}
-
-function pocketBribe() {
-  const result = R.answerBribe(shift, true);
-  if (result.error) return hint(HINTS[result.error]);
-  shift = result.shift;
-  hint('You pocket it. That goes on your record.');
+// "Wait, wait!": he says his line in his own voice, it prints on the
+// transcript, and his bribe sits on the window ledge. The clock waits while
+// he says it. Offline there is no voice, so it doesn't wait.
+async function hearPlea() {
+  stopVoice();
+  const { shift: offered, offer } = R.stamp(shift, 'away');
+  shift = offered;
+  const name = getTraveller(offer.travellerId).name;
+  hint(`${name} offers a ${R.BRIBE_ITEMS[offer.item]}. Take it (B), or stamp TURNED AWAY.`);
+  booth?.setMood(offer.mood);
   render();
+  const endPlea = () => { shift = R.setPleading(shift, false); };
+  const plea = live ? await fetchPlea(offer.travellerId) : null;
+  // Stamped or paid while his voice was being made: he says nothing.
+  if (!R.bribeOffer(shift)) return endPlea();
+  if (plea?.audio) playVoice(plea.audio, plea.speechMs, endPlea);
+  else endPlea();
+}
+
+// Pocketing it lets him through: the THROUGH stamp comes down, and it goes on your record.
+async function pocketBribe() {
+  const offer = R.bribeOffer(shift);
+  if (!started || stampingNow || !offer) return;
+  booth?.setBribe(null);
+  if (await bringStampDown('through', R.takeBribe)) {
+    hint(`You pocket the ${R.BRIBE_ITEMS[offer.item]} and stamp ${getTraveller(offer.travellerId).name} THROUGH. That goes on your record.`);
+  }
 }
 
 function beginTalking() {
   if (!started || shift.phase !== 'playing' || shift.pending || shift.hearing) return;
+  if (R.bribeOffer(shift)) return hint(HINTS.bribeOnTable);
   stopVoice();
   if (!startClip()) return;
   talkingTo = R.currentTravellerId(shift);
@@ -236,6 +277,7 @@ async function startShift() {
   $('start-screen').hidden = true;
   micSetup = live;
   if (live) hint('Allow the microphone, or type a question.');
+  if (live) for (const id of shift.queue) fetchPlea(id);
   lastFrame = performance.now();
   render();
   if (live) {
@@ -290,14 +332,21 @@ function renderTranscript(traveller) {
     { who: 'You', text: turn.question },
     { who: traveller.name, text: `${turn.reply}${turn.cracked ? ' [He cracked!]' : ''}` },
   ]);
-  if (shift.pending) lines.push({ who: 'You', text: shift.pending.question }, { who: traveller.name, text: '…' });
+  // While he thinks, only your question is printed: the printer never overprints a line.
+  if (shift.pending) lines.push({ who: 'You', text: shift.pending.question });
+  const offer = R.bribeOffer(shift);
+  if (offer) lines.push({ who: traveller.name, text: offer.line });
   booth?.setTranscript(traveller.name, lines);
 }
 
 function renderCaptions(traveller) {
   const { history } = shift.cases[traveller.id];
   const last = history.at(-1);
-  if (shift.pending) {
+  const offer = R.bribeOffer(shift);
+  if (offer) {
+    $('you-said').textContent = last ? `You: ${last.question}` : '';
+    $('subtitle').textContent = `${traveller.name}: ${offer.line}`;
+  } else if (shift.pending) {
     $('you-said').textContent = `You: ${shift.pending.question}`;
     $('subtitle').textContent = '';
   } else if (last) {
@@ -307,7 +356,7 @@ function renderCaptions(traveller) {
     $('you-said').textContent = '';
     $('subtitle').textContent = '';
   }
-  $('captions').hidden = !$('you-said').textContent;
+  $('captions').hidden = !$('you-said').textContent && !$('subtitle').textContent;
   $('captions').classList.toggle('screen-reader-only', Boolean(booth));
 }
 
@@ -341,7 +390,7 @@ function renderReport() {
 function renderClock() {
   const secondsLeft = Math.ceil(R.timeLeftMs(shift) / 1000);
   const clock = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
-  const paused = shift.pending || shift.hearing ? ' (paused)' : '';
+  const paused = shift.pending || shift.hearing || shift.pleading ? ' (paused)' : '';
   $('clock').textContent = started ? `Clock ${clock}${paused}` : '';
 }
 
@@ -375,7 +424,9 @@ function render() {
   if (!booth) renderFallbackPanel(traveller);
   renderCaptions(traveller);
   renderTranscript(traveller);
-  booth?.setBribe(bribeOnTheLedge());
+  const offer = R.bribeOffer(shift);
+  if (!stampingNow) booth?.setBribe(offer?.item ?? null);
+  $('take-bribe').hidden = !offer;
   $('talk').disabled = Boolean(shift.pending || shift.hearing) || left === 0 || !micReady();
 }
 
@@ -405,6 +456,7 @@ document.addEventListener('keydown', (event) => {
     beginTalking();
   } else if (event.code === 'KeyP') booth?.toggle('papers');
   else if (event.code === 'KeyN') booth?.toggle('notebook');
+  else if (event.code === 'KeyB' && !event.repeat) pocketBribe();
   else if (event.code === 'Escape') booth?.putDown();
   else if (event.code === 'ArrowLeft') booth?.look(-1);
   else if (event.code === 'ArrowRight') booth?.look(1);
@@ -434,6 +486,7 @@ $('show-papers').addEventListener('click', () => booth?.toggle('papers'));
 $('show-notes').addEventListener('click', () => booth?.toggle('notebook'));
 $('stamp-through').addEventListener('click', () => stampTraveller('through'));
 $('stamp-away').addEventListener('click', () => stampTraveller('away'));
+$('take-bribe').addEventListener('click', pocketBribe);
 $('look-left').addEventListener('click', () => booth?.look(-1));
 $('look-right').addEventListener('click', () => booth?.look(1));
 $('start').addEventListener('click', startShift);

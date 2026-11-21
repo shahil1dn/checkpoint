@@ -115,3 +115,33 @@ or logos.
 never committed.
 **Knock-on:** the travellers' stories now end at the Antarctic border post. They arrive by ship,
 and the Mistral hackathon is down there.
+
+## ADR-12: The records terminal checks only what the player gathered, and never sees the truth (21 Nov 15:05)
+
+**Decided:** the left computer is a records terminal powered by Mistral. The player sends it a
+line they've gathered, from the papers or the transcript, by clicking it. No free typing. It
+searches the game's records with tools and reports what they say. It gets the records and that
+line only: no traveller prompt, truth or secret, and no verdict words. 3 lookups per traveller.
+**Why:** Shahil: "it can only help you from what you gathered, it's up to player to ask right
+questions". The justification for an AI is scale and mess: records too big and too messy to read
+during an interview, near-matching misspelled names, and quoting a long rulebook. The judgement
+stays human, because only the player hears the story and can set it against the records. Clicking
+gathered lines instead of typing removes off-topic and trick prompts, which matters live on stage.
+**Turned down:** free-typed questions (too many failure modes in a live demo); a terminal that
+listens to the whole interview (it would become a lie detector and decide the game).
+
+## ADR-13: A bribe comes only when you reach for TURNED AWAY (21 Nov 14:34)
+
+**Decided:** Shahil's call: a bribe offered mid-questioning made no sense, so it is now a
+last-ditch offer. The first TURNED AWAY on each traveller doesn't land: he says "Wait, wait! I
+have something for you…" in his own voice, the line prints on the transcript, and his item sits
+on the window ledge. Click the item to take it (he goes THROUGH, the record says CORRUPT), or
+stamp TURNED AWAY again to refuse (the stamp lands, the police take him). One offer each.
+**Why the code decides, not the model:** like the truth (ADR-2), when a bribe happens is a game
+fact. The model's reply no longer has a `bribe` field, and no traveller is told to offer one
+while questioned. Each traveller's line and item live in his own file in `src/travellers/`.
+**Defaults chosen for Shahil** (his to change): honest travellers bribe too, so a bribe is never
+a tell; no more questions while an offer is on the ledge, so the model never has to know about
+it; THROUGH while an offer is out lets him through without taking it; the shift clock waits
+while the line is spoken, not while you decide.
+**Supersedes:** the model-flagged bribe from PR #3.

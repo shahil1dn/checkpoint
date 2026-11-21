@@ -22,11 +22,11 @@ export function checkQuestion(text) {
 
 function checkPastExchange(item) {
   if (!isPlainObject(item)) return null;
-  const { question, reply, mood = 'neutral', cracked = false, bribe = false } = item;
+  const { question, reply, mood = 'neutral', cracked = false } = item;
   if (!checkQuestion(question).ok) return null;
   if (typeof reply !== 'string' || reply.length === 0 || charCount(reply) > MAX_REPLY_CHARS) return null;
-  if (!MOODS.includes(mood) || typeof cracked !== 'boolean' || typeof bribe !== 'boolean') return null;
-  return { question, reply, mood, cracked, bribe };
+  if (!MOODS.includes(mood) || typeof cracked !== 'boolean') return null;
+  return { question, reply, mood, cracked };
 }
 
 // ---- Confessions belong to the code (C3) ----
@@ -135,8 +135,10 @@ export function newShift(queue = DEMO_QUEUE, { firstRequestId = 1 } = {}) {
     usedMs: 0,
     pending: null,
     hearing: false,
+    pleading: false,
     nextRequestId: firstRequestId,
-    cases: Object.fromEntries(queue.map((id) => [id, { history: [], notes: [], stamp: null, bribeTaken: false, bribeAnsweredAt: 0 }])),
+    // bribe: null until he makes his offer, then 'offered', 'taken' or 'refused'.
+    cases: Object.fromEntries(queue.map((id) => [id, { history: [], notes: [], stamp: null, bribe: null }])),
   };
 }
 
@@ -152,13 +154,14 @@ export const timeLeftMs = (shift) => SHIFT_MS - shift.usedMs;
 export function startQuestion(shift, text) {
   if (shift.phase !== 'playing') return { shift, error: 'shiftOver' };
   if (shift.pending) return { shift, error: 'pending' };
+  if (bribeOffer(shift)) return { shift, error: 'bribeOnTable' };
   const checked = checkQuestion(text);
   if (!checked.ok) return { shift, error: checked.reason };
   const travellerId = currentTravellerId(shift);
   if (questionsLeft(shift, travellerId) <= 0) return { shift, error: 'outOfQuestions' };
   const pending = { id: shift.nextRequestId, travellerId, question: checked.question };
   const record = shift.cases[travellerId];
-  const request = { ...pending, history: record.history.map(({ question, reply, mood, cracked, bribe }) => ({ question, reply, mood, cracked, bribe })), notes: record.notes };
+  const request = { ...pending, history: record.history.map(({ question, reply, mood, cracked }) => ({ question, reply, mood, cracked })), notes: record.notes };
   return { shift: { ...shift, pending, nextRequestId: shift.nextRequestId + 1 }, request };
 }
 
@@ -168,7 +171,7 @@ export function finishQuestion(shift, requestId, reply) {
   if (!shift.pending || shift.pending.id !== requestId) return shift;
   const { travellerId, question } = shift.pending;
   if (!reply) return { ...shift, pending: null };
-  const exchange = { question, reply: reply.reply, mood: reply.mood, cracked: reply.cracked, bribe: reply.bribe === true };
+  const exchange = { question, reply: reply.reply, mood: reply.mood, cracked: reply.cracked };
   const record = shift.cases[travellerId];
   const notes = [...record.notes, ...(reply.notes ?? []).slice(0, MAX_NOTES_PER_ANSWER)];
   return {
@@ -178,36 +181,46 @@ export function finishQuestion(shift, requestId, reply) {
   };
 }
 
-// ---- Bribes ----
-// The model only says that a reply offers one. Whether the inspector took it
-// is the game's fact, kept here like the truth (ADR-2), and it never changes
-// whether a stamp was right.
+// ---- Bribes (Shahil 14:34) ----
+// A bribe is a last-ditch offer, never part of the questioning: the first
+// TURNED AWAY on a traveller doesn't land, and he offers what his own file
+// says instead. The game decides when, not the model. Whether the inspector
+// took it is the game's fact too, kept like the truth (ADR-2), and it never
+// changes whether a stamp was right.
 
-// The offer on the table: the current traveller's latest answer, until the
-// inspector takes it, ignores it or asks something else. One bribe a traveller.
+// What can sit on the window ledge, and the words the hints use for it.
+// public/booth.js draws each one: a new item needs a drawing there too.
+export const BRIBE_ITEMS = { croissant: 'croissant', cheese: 'wedge of cheese', sticker: 'sticker' };
+
+// The offer on the ledge, until the inspector takes it or stamps.
 export function bribeOffer(shift) {
   const travellerId = currentTravellerId(shift);
-  if (!travellerId || shift.pending) return null;
-  const { history, bribeTaken, bribeAnsweredAt } = shift.cases[travellerId];
-  if (bribeTaken || bribeAnsweredAt === history.length || !history.at(-1)?.bribe) return null;
-  return { travellerId, reply: history.at(-1).reply };
+  if (!travellerId || shift.cases[travellerId].bribe !== 'offered') return null;
+  return { travellerId, ...getTraveller(travellerId).bribe };
 }
 
-// What the bribe looks like on the window ledge, from the words of the offer.
-// Flavour only: it never changes the record or the score.
-export function offeredItem(reply) {
-  if (/croissant|pastry/i.test(reply)) return 'croissant';
-  if (/cheese|stilton|taste/i.test(reply)) return 'cheese';
-  return 'sticker';
+// True when this stamp would bring out his offer instead of landing.
+export function pleadsFirst(shift, verdict) {
+  const travellerId = currentTravellerId(shift);
+  return verdict === 'away' && travellerId !== null && shift.cases[travellerId].bribe === null;
 }
 
-export function answerBribe(shift, take) {
-  const offer = bribeOffer(shift);
-  if (!offer) return { shift, error: 'noBribe' };
-  const record = shift.cases[offer.travellerId];
-  const answered = { ...record, bribeTaken: take === true, bribeAnsweredAt: record.history.length };
-  return { shift: { ...shift, cases: { ...shift.cases, [offer.travellerId]: answered } } };
+// Like a stamp, the offer drops a question still out. The clock waits while
+// he says it, until the page calls setPleading(shift, false).
+function makeOffer(shift) {
+  const travellerId = currentTravellerId(shift);
+  const cases = { ...shift.cases, [travellerId]: { ...shift.cases[travellerId], bribe: 'offered' } };
+  const offered = { ...shift, cases, pending: null, pleading: true };
+  return { shift: offered, offer: bribeOffer(offered) };
 }
+
+// Pocketing it lets him through: the stamp is THROUGH, and the record shows it.
+export function takeBribe(shift) {
+  if (!bribeOffer(shift)) return { shift, error: 'noBribe' };
+  return landStamp(shift, 'through', 'taken');
+}
+
+export const setPleading = (shift, pleading) => ({ ...shift, pleading });
 
 // Speech-to-text is a Mistral call too, so the clock waits for it as well.
 export const setHearing = (shift, hearing) => ({ ...shift, hearing });
@@ -215,22 +228,30 @@ export const setHearing = (shift, hearing) => ({ ...shift, hearing });
 // The clock stands still while a question is out, so a slow connection
 // never costs the player time.
 export function tick(shift, dtMs) {
-  if (shift.phase !== 'playing' || shift.pending || shift.hearing || !(dtMs > 0)) return shift;
+  if (shift.phase !== 'playing' || shift.pending || shift.hearing || shift.pleading || !(dtMs > 0)) return shift;
   const usedMs = Math.min(SHIFT_MS, shift.usedMs + dtMs);
   if (usedMs < SHIFT_MS) return { ...shift, usedMs };
   return { ...shift, usedMs, phase: 'over', endReason: 'time' };
 }
 
 // Allowed at any time, even mid-question: the pending reply is dropped.
+// The first TURNED AWAY on each traveller returns { shift, offer } instead:
+// he pleads, and the stamp hasn't landed.
 export function stamp(shift, verdict) {
   if (shift.phase !== 'playing') return { shift, error: 'shiftOver' };
   if (!VERDICTS.includes(verdict)) return { shift, error: 'badVerdict' };
+  if (pleadsFirst(shift, verdict)) return makeOffer(shift);
+  const { bribe } = shift.cases[currentTravellerId(shift)];
+  return landStamp(shift, verdict, bribe === 'offered' ? 'refused' : bribe);
+}
+
+function landStamp(shift, verdict, bribe) {
   const travellerId = currentTravellerId(shift);
-  const cases = { ...shift.cases, [travellerId]: { ...shift.cases[travellerId], stamp: verdict } };
+  const cases = { ...shift.cases, [travellerId]: { ...shift.cases[travellerId], stamp: verdict, bribe } };
   const current = shift.current + 1;
   const over = current >= shift.queue.length;
   return {
-    shift: { ...shift, cases, current, pending: null, phase: over ? 'over' : 'playing', endReason: over ? 'queueEmpty' : null },
+    shift: { ...shift, cases, current, pending: null, pleading: false, phase: over ? 'over' : 'playing', endReason: over ? 'queueEmpty' : null },
   };
 }
 
@@ -239,9 +260,9 @@ export function stamp(shift, verdict) {
 export function shiftReport(shift) {
   const rows = shift.queue.map((id) => {
     const traveller = getTraveller(id);
-    const { stamp: verdict, bribeTaken } = shift.cases[id];
+    const { stamp: verdict, bribe } = shift.cases[id];
     const honest = traveller.truth.honest;
-    return { id, name: traveller.name, stamp: verdict, honest, secret: traveller.truth.secret, correct: verdict !== null && (verdict === 'through') === honest, bribeTaken };
+    return { id, name: traveller.name, stamp: verdict, honest, secret: traveller.truth.secret, correct: verdict !== null && (verdict === 'through') === honest, bribeTaken: bribe === 'taken' };
   });
   const bribesTaken = rows.filter((r) => r.bribeTaken).length;
   return { rows, correct: rows.filter((r) => r.correct).length, total: rows.length, bribesTaken, record: bribesTaken > 0 ? 'corrupt' : 'clean' };
@@ -269,6 +290,5 @@ export function parseReply(raw) {
     reply,
     mood: MOODS.includes(data.mood) ? data.mood : 'neutral',
     cracked: data.cracked === true,
-    bribe: data.bribe === true,
   };
 }
