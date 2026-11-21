@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { part, box, mat, textPlane } from '/penguins/engine.js';
 import { makePenguin } from '/penguins/penguin.js';
+import { DECK_Y, GANGWAY_X, WALK_Z, makeCrowd, pointAt } from '/arrivals.js';
 
 const COLORS = {
   snow: '#e4e8ea', iceCliff: '#b9c6cc', drift: '#d6dde0', sea: '#35505f', berg: '#eef2f3',
@@ -19,11 +20,7 @@ const BOARD_FONT = 'Menlo, "Courier New", monospace';
 // smaller than him and doesn't hide the ship.
 const ICE_EDGE_Z = -4.4;
 const HULL_FRONT_Z = -4.55;
-const DECK_Y = 0.6;
-const GANGWAY_X = -2.2;
-const WALK_Z = -3.95;
 const SIGNS_Z = -2.4;
-const EXIT_X = 4.2;
 
 // Flat things on a surface (art direction, section 1): no ink hull, no shadow.
 function flat(geo, colour, parent, pos, rot) {
@@ -135,46 +132,30 @@ function dressForTheIce(penguin) {
 }
 
 // Penguins come down the gangway onto the ice, then waddle off towards the
-// other booths. A small pool is reused, so it never grows.
-function makeArrivals(group, count = 3) {
-  const walkers = Array.from({ length: count }, (_, i) => {
+// other booths. When each sets off and where he is: arrivals.js.
+function makeArrivals(group) {
+  const crowd = makeCrowd();
+  const penguins = crowd.walkers.map(() => {
     const penguin = makePenguin();
     penguin.showHearts = false;
     penguin.root.visible = false;
     group.add(penguin.root);
-    return { penguin, wait: 1 + i * 3.2, stage: 'waiting' };
+    return penguin;
   });
-  const SPEED = 0.8;
-  const top = HULL_FRONT_Z - 0.2;
   return {
     update(t, dt) {
-      for (const w of walkers) {
-        const { penguin } = w;
-        const at = penguin.root.position;
-        if (w.stage === 'waiting') {
-          w.wait -= dt;
-          if (w.wait > 0) continue;
-          dressForTheIce(penguin);
-          at.set(GANGWAY_X, DECK_Y, top);
-          penguin.root.rotation.y = 0;
-          penguin.walking = true;
-          penguin.root.visible = true;
-          w.stage = 'coming ashore';
-        } else if (w.stage === 'coming ashore') {
-          at.z += SPEED * dt;
-          at.y = DECK_Y * Math.max(0, (WALK_Z - at.z) / (WALK_Z - top));
-          if (at.z >= WALK_Z) { at.set(at.x, 0, WALK_Z); penguin.root.rotation.y = Math.PI / 2; w.stage = 'walking on'; }
-        } else if (w.stage === 'walking on') {
-          at.x += SPEED * dt;
-          if (at.x >= EXIT_X) {
-            penguin.root.visible = false;
-            penguin.walking = false;
-            w.wait = 2 + Math.random() * 4;
-            w.stage = 'waiting';
-          }
-        }
+      crowd.step(dt);
+      crowd.walkers.forEach((w, i) => {
+        const penguin = penguins[i];
+        if (w.justArrived) dressForTheIce(penguin);
+        penguin.root.visible = w.visible;
+        penguin.walking = w.visible;
+        if (!w.visible) return;
+        const at = pointAt(w.distance);
+        penguin.root.position.set(at.x, at.y, at.z);
+        penguin.root.rotation.y = at.facing;
         penguin.update(t, dt);
-      }
+      });
     },
   };
 }
