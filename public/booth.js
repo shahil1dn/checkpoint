@@ -246,6 +246,23 @@ function deskWood() {
   return mapMat(texture);
 }
 
+function buildWindowSign(group) {
+  const [x, y, z] = [-0.82, 1.91, 0.17];
+  const sign = textPlane(0.5, 0.14, (g, w, h) => {
+    g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#f4efe2'; g.font = `600 ${h * 0.38}px system-ui, sans-serif`;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('WELCOME TO ANTARCTICA', w / 2, h * 0.54, w * 0.94);
+  }, 1024);
+  sign.redraw();
+  part(box(0.54, 0.18, 0.035, 0.008), mat('#5f6b73'), group, [x, y, z]);
+  sign.mesh.position.set(x, y, z + 0.022);
+  group.add(sign.mesh);
+  for (const dx of [-0.19, 0.19]) {
+    part(box(0.012, 0.30, 0.012), mat('#5f6b73'), group, [x + dx, 2.15, z]);
+  }
+}
+
 function buildRoom(group, wood) {
   const wall = mat(COLORS.booth);
   const [top, half] = [2.3, 1.15];
@@ -256,6 +273,7 @@ function buildRoom(group, wood) {
   part(box(half * 2 + 0.16, 0.08, 0.24), frame, group, [0, SILL, 0]);
   part(box(half * 2 + 0.16, 0.08, 0.24), frame, group, [0, top, 0]);
   for (const s of [-1, 1]) part(box(0.08, top - SILL, 0.24), frame, group, [s * half, (SILL + top) / 2, 0]);
+  buildWindowSign(group);
   part(box(3.4, 0.1, 1.4, 0.04), wood, group, [0, SILL - 0.05, 0.75]);
   part(box(3.3, SILL - 0.1, 1.3, 0.04), mat(COLORS.desk), group, [0, (SILL - 0.1) / 2, 0.75]);
   // Fine inlay and a dark lower edge give the broad desk a readable silhouette.
@@ -1070,6 +1088,7 @@ export function createBooth(container, handlers = {}) {
   let lifted = null;
   let traveller = null;
   let travellerId = null;
+  const waiting = new Map();
   let leaving = null;
   let officer = null;
   let face = FACES.neutral;
@@ -1228,6 +1247,7 @@ export function createBooth(container, handlers = {}) {
     }
     if (leaving) leaving.update(t, dt);
     if (officer) officer.update(t, dt);
+    for (const penguin of waiting.values()) penguin.update(t, dt);
     arrivals.update(t, dt);
     engine.render();
     requestAnimationFrame(frame);
@@ -1279,21 +1299,39 @@ export function createBooth(container, handlers = {}) {
   }
 
   async function walkOn(penguin) {
-    const from = new THREE.Vector3(INSPECTION_DOOR.x, TRAVELLER_AT.y, INSPECTION_DOOR.z + 0.12);
-    const approachAngle = Math.atan2(TRAVELLER_AT.x - from.x, TRAVELLER_AT.z - from.z);
-    penguin.root.position.copy(from);
-    penguin.root.rotation.y = approachAngle;
+    const inside = new THREE.Vector3(INSPECTION_DOOR.x, TRAVELLER_AT.y, INSPECTION_DOOR.z - 0.45);
+    const threshold = new THREE.Vector3(INSPECTION_DOOR.x, TRAVELLER_AT.y, INSPECTION_DOOR.z + 0.24);
+    const approachAngle = Math.atan2(TRAVELLER_AT.x - threshold.x, TRAVELLER_AT.z - threshold.z);
+    penguin.root.position.copy(inside);
+    penguin.root.rotation.y = 0;
     penguin.walking = true;
     group.add(penguin.root);
-    await tween(1.6, (p) => {
-      penguin.root.position.lerpVectors(from, TRAVELLER_AT, p);
-      penguin.root.rotation.y = approachAngle * (1 - p);
+    await tween(2.0, (p) => {
+      if (p < 0.35) {
+        const throughDoor = p / 0.35;
+        penguin.root.position.lerpVectors(inside, threshold, throughDoor);
+        penguin.root.rotation.y = approachAngle * throughDoor;
+      } else {
+        const toCounter = (p - 0.35) / 0.65;
+        penguin.root.position.lerpVectors(threshold, TRAVELLER_AT, toCounter);
+        penguin.root.rotation.y = approachAngle * (1 - toCounter);
+      }
     });
     penguin.root.rotation.y = 0;
     penguin.walking = false;
   }
 
   const booth = {
+    setQueue(ids) {
+      for (const penguin of waiting.values()) group.remove(penguin.root);
+      waiting.clear();
+      ids.forEach((id, i) => {
+        const penguin = makeTraveller(id);
+        penguin.root.position.set(INSPECTION_DOOR.x + (i % 2 ? -0.12 : 0.08), TRAVELLER_AT.y, INSPECTION_DOOR.z - 0.85 - i * 0.35);
+        group.add(penguin.root);
+        waiting.set(id, penguin);
+      });
+    },
     // Swapping travellers walks the old one off and the new one on.
     show(id, { reaction } = {}) {
       if (id === travellerId) return;
@@ -1306,6 +1344,15 @@ export function createBooth(container, handlers = {}) {
       if (old && reaction === 'away') snatch(old);
       else if (old) walkOff(old, reaction === 'through' ? 'happy' : 'neutral');
       if (!traveller) return;
+      const next = waiting.get(id);
+      if (next) { group.remove(next.root); waiting.delete(id); }
+      let index = 0;
+      for (const queued of waiting.values()) {
+        const from = queued.root.position.clone();
+        const to = new THREE.Vector3(INSPECTION_DOOR.x + (index % 2 ? -0.12 : 0.08), TRAVELLER_AT.y, INSPECTION_DOOR.z - 0.85 - index * 0.35);
+        tween(0.65, (p) => queued.root.position.lerpVectors(from, to, p));
+        index += 1;
+      }
       walkOn(traveller);
     },
     setMood(mood) {
