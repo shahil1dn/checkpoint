@@ -23,7 +23,7 @@ elif compgen -G "tests/test_*.py" >/dev/null || compgen -G "app/test_*.py" >/dev
   else echo "   FAIL: pytest is missing. Install it with: python -m pip install pytest"; failed=1; fi
 else echo "   no tests yet"; fi
 
-echo "4. The page in a real browser (offline, about 5 s)"
+echo "4. The page in a real browser (offline, about 10 s)"
 if [ -f scripts/browser-check.js ]; then node scripts/browser-check.js || failed=1; else echo "   none yet"; fi
 
 if [ "$failed" -eq 0 ]; then echo "ALL CHECKS PASSED"; else echo "CHECKS FAILED"; exit 1; fi

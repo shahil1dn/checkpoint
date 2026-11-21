@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import { TRAVELLERS, TRAVELLER_IDS } from '../src/travellers/index.js';
-import { MOODS } from '../src/rules.js';
+import { BRIBE_ITEMS, MOODS } from '../src/rules.js';
 
 const folder = new URL('../src/travellers/', import.meta.url);
 const nonEmpty = (value) => typeof value === 'string' && value.trim().length > 0;
@@ -28,11 +28,20 @@ for (const t of TRAVELLERS) {
     assert.ok(nonEmpty(t.voice) || nonEmpty(t.voices?.neutral), 'a voice: voice, or voices with a neutral one');
   });
 
+  // Everyone bribes when you reach for TURNED AWAY, so a bribe is never a tell.
+  test(`${t.id}: has a last-ditch bribe: what he says and what he puts on the ledge`, () => {
+    assert.ok(t.bribe, 'bribe is missing: everyone offers one when you reach for TURNED AWAY');
+    assert.ok(nonEmpty(t.bribe.line), 'bribe.line: what he says');
+    assert.ok(BRIBE_ITEMS.includes(t.bribe.item), `bribe.item: one of ${BRIBE_ITEMS.join(', ')}`);
+    assert.ok(MOODS.includes(t.bribe.mood), `bribe.mood: one of ${MOODS.join(', ')}`);
+  });
+
   test(`${t.id}: optional parts are well formed`, () => {
     for (const word of t.hearingHints ?? []) assert.match(word, /^\S+$/, `hearingHints: "${word}" must be one word`);
     for (const line of t.offlineLines ?? []) {
       assert.ok(nonEmpty(line.reply), 'offlineLines: reply');
       assert.ok(MOODS.includes(line.mood), `offlineLines: mood "${line.mood}" is not one of ${MOODS.join(', ')}`);
+      assert.equal('bribe' in line, false, 'offlineLines: bribes come only when you reach for TURNED AWAY');
     }
     if (t.look !== undefined) assert.equal(typeof t.look, 'object', 'look');
   });

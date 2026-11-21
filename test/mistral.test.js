@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { describeError, makeMistralAsker, makeMistralHearer, makeMistralNoteTaker, makeMistralSpeaker } from '../server/mistral.js';
 import { REPLY_FORMAT, buildMessages } from '../server/prompt.js';
-import { getTraveller } from '../src/travellers/index.js';
+import { TRAVELLERS, getTraveller } from '../src/travellers/index.js';
 
 const FAKE_KEY = 'test-key-must-not-leak';
 const max = getTraveller('max');
@@ -156,15 +156,22 @@ test('a retry after an early confession carries the nudge', () => {
   assert.match(system.content, /too early to confess/);
 });
 
-// Bribes: the traveller's schema asks for the flag and past answers replay it;
-// the note-taker (ADR-8) is still sent only papers and the conversation.
-test('the reply schema requires bribe, and a past answer is replayed with its bribe flag', () => {
-  assert.ok(REPLY_FORMAT.json_schema.schema.required.includes('bribe'));
-  assert.deepEqual(REPLY_FORMAT.json_schema.schema.properties.bribe, { type: 'boolean' });
-  const messages = buildMessages(max, [{ question: 'a', reply: 'A croissant?', mood: 'happy', cracked: false, bribe: true }, { question: 'b', reply: 'c', mood: 'sad', cracked: false }], 'And?');
-  assert.equal(JSON.parse(messages[2].content).bribe, true);
-  assert.equal(JSON.parse(messages[4].content).bribe, false);
-  assert.match(messages[0].content, /bribe is true only when/);
+// Bribes belong to the game (Shahil 14:34): the model is never asked whether
+// a reply offers one, and no traveller is told to offer one while questioned.
+// The note-taker (ADR-8) is still sent only papers and the conversation.
+test('the reply schema has no bribe, and past answers are replayed without one', () => {
+  assert.deepEqual(REPLY_FORMAT.json_schema.schema.required, ['reply', 'mood', 'cracked']);
+  assert.equal('bribe' in REPLY_FORMAT.json_schema.schema.properties, false);
+  const messages = buildMessages(max, [{ question: 'a', reply: 'A croissant?', mood: 'happy', cracked: false, bribe: true }], 'And?');
+  assert.deepEqual(JSON.parse(messages[2].content), { reply: 'A croissant?', mood: 'happy', cracked: false });
+});
+
+test('no traveller is told to offer a bribe while he is questioned', () => {
+  for (const traveller of TRAVELLERS) {
+    const [system] = buildMessages(traveller, [], 'Hello?');
+    assert.doesNotMatch(system.content, /bribe|offer a taste|stickers or a croissant/i, traveller.id);
+    assert.match(system.content, /Never offer the inspector a gift/, traveller.id);
+  }
 });
 
 test('the note-taker is not told about the bribe flag or whether a bribe was taken', async () => {

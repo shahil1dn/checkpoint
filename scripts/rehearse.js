@@ -13,7 +13,6 @@ import path from 'node:path';
 import { browserOnThisMachine } from './find-browser.js';
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
-const PORT = 9333;
 const LIMIT_S = 120;
 const OUT = 'docs/proof/s6-rehearsal';
 
@@ -43,11 +42,24 @@ async function speakToMp3(dir, text, i) {
   return (await readFile(mp3)).toString('base64');
 }
 
-// Minimal Chrome DevTools Protocol client over Node's built-in WebSocket.
-async function connect() {
+// Chrome picks a free debugging port and writes it into its profile, so a
+// rehearsal never drives another session's browser check, as a fixed port could.
+async function debugPort(profile) {
   for (let i = 0; i < 50; i += 1) {
     try {
-      const targets = await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json();
+      const [port] = (await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')).split('\n');
+      if (Number(port) > 0) return Number(port);
+    } catch { /* Chrome still starting */ }
+    await sleep(200);
+  }
+  throw new Error('Chrome did not start');
+}
+
+// Minimal Chrome DevTools Protocol client over Node's built-in WebSocket.
+async function connect(port) {
+  for (let i = 0; i < 50; i += 1) {
+    try {
+      const targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
       const page = targets.find((t) => t.type === 'page');
       if (page) return openSocket(page.webSocketDebuggerUrl);
     } catch { /* Chrome still starting */ }
@@ -87,7 +99,7 @@ async function main() {
   const browser = browserOnThisMachine();
   const work = await mkdtemp(path.join(tmpdir(), 'checkpoint-rehearsal-'));
   const chrome = spawn(browser, [
-    '--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${path.join(work, 'profile')}`,
+    '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${path.join(work, 'profile')}`,
     '--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream',
     '--window-size=1280,900', 'about:blank',
   ], { stdio: 'ignore' });
@@ -97,7 +109,7 @@ async function main() {
     let n = 0;
     for (const step of DEMO) for (const q of step.questions) clips.push(await speakToMp3(work, q, n++));
 
-    const cdp = await connect();
+    const cdp = await connect(await debugPort(path.join(work, 'profile')));
     const evaluate = async (expression) => {
       const { result, exceptionDetails } = await cdp.send('Runtime.evaluate', { expression, awaitPromise: true, returnByValue: true });
       if (exceptionDetails) throw new Error(exceptionDetails.exception?.description ?? exceptionDetails.text);
@@ -234,8 +246,22 @@ async function main() {
         note('voice finished');
       }
       await sleep(800);
+      const voicesBefore = await evaluate('window.__voices.length');
       await click(step.stamp);
       note(`brought the ${step.stamp} stamp down on ${step.traveller}'s papers`);
+      // Shahil 14:34: the first TURNED AWAY brings out his last-ditch bribe.
+      // The demo refuses it with a second TURNED AWAY, so the police still come.
+      if (step.stamp === 'away') {
+        if (!(await waitFor(`!document.getElementById('take-bribe').hidden`))) throw new Error(`${step.traveller} made no offer`);
+        note(`he pleads: ${await evaluate(`document.getElementById('subtitle').textContent`)}`);
+        if (await waitFor(`window.__voices.length > ${voicesBefore}`)) {
+          await evaluate(`new Promise((r) => { const v = window.__voices.at(-1); if (v.ended || v.paused) return r(true); v.addEventListener('ended', () => r(true)); setTimeout(() => r(false), 20000); })`);
+          note(`plea finished (${(await evaluate('window.__voices.at(-1).duration')).toFixed(1)} s of voice)`);
+        } else note('the plea had no voice');
+        await sleep(800);
+        await click('away');
+        note('refused the bribe: brought the away stamp down again');
+      }
       // The stamp lands first; then the rules move on to the next traveller.
       const movedOn = await waitFor(`!document.getElementById('report').hidden || document.getElementById('traveller-name').textContent !== ${JSON.stringify(step.traveller)}`);
       if (!movedOn) throw new Error(`stamping ${step.traveller} did not move the queue on`);

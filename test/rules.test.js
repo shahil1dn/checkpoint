@@ -15,7 +15,7 @@ test('an ask request keeps only the known fields of past exchanges', () => {
     travellerId: 'max', question: 'Why?', history: [{ question: 'a', reply: 'b', extra: 'x' }],
   });
   assert.equal(checked.ok, true);
-  assert.deepEqual(checked.value.history, [{ question: 'a', reply: 'b', mood: 'neutral', cracked: false, bribe: false }]);
+  assert.deepEqual(checked.value.history, [{ question: 'a', reply: 'b', mood: 'neutral', cracked: false }]);
 });
 
 test('confessions: honest ignored, liar refused before question 3, accepted from 3', () => {
@@ -103,22 +103,14 @@ test('a reply that is not JSON, or has no reply text, is unusable', () => {
   assert.equal(R.parseReply('{"reply":"  ** "}'), null);
 });
 
-// Bribes: the model's flag is untrusted, like mood and cracked.
-test('a reply offers a bribe only when bribe is exactly true', () => {
+// Bribes are the game's to offer (Shahil 14:34), so the model's reply has no
+// say in them: a bribe field from the model or an old page is simply dropped.
+test('a reply never carries a bribe flag, whatever the model sends', () => {
   const raw = (bribe) => JSON.stringify({ reply: 'A croissant, inspector?', mood: 'happy', cracked: false, bribe });
-  assert.equal(R.parseReply(raw(true)).bribe, true);
-  for (const junk of [false, 'yes', 1, null, { fish: 3 }]) assert.equal(R.parseReply(raw(junk)).bribe, false, JSON.stringify(junk));
-  assert.equal(R.parseReply('{"reply":"Hello.","mood":"happy","cracked":false}').bribe, false);
+  for (const flag of [true, false, 'yes']) assert.deepEqual(R.parseReply(raw(flag)), { reply: 'A croissant, inspector?', mood: 'happy', cracked: false }, JSON.stringify(flag));
 });
 
-test('a past exchange with a bribe flag that is not true or false is refused', () => {
+test('a past exchange is replayed without any bribe flag', () => {
   const ask = (bribe) => R.validateAskRequest({ travellerId: 'max', question: 'Why?', history: [{ question: 'a', reply: 'b', bribe }] });
-  assert.equal(ask('yes').reason, 'badHistory');
-  assert.equal(ask(true).value.history[0].bribe, true);
-});
-
-test('the bribe on the ledge matches what was offered, and is a sticker otherwise', () => {
-  assert.equal(R.offeredItem('Would you like a sticker? Or a croissant?'), 'croissant');
-  assert.equal(R.offeredItem('Yes, I am from Stilton. Taste?'), 'cheese');
-  assert.equal(R.offeredItem('A little something for your trouble.'), 'sticker');
+  for (const flag of [true, 'yes']) assert.deepEqual(ask(flag).value.history, [{ question: 'a', reply: 'b', mood: 'neutral', cracked: false }]);
 });

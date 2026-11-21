@@ -5,14 +5,13 @@
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createApp } from '../server/app.js';
 import { browserOnThisMachine } from './find-browser.js';
 
-const PORT = 9336;
-const SPEED = 30;   // a 2-minute shift ends in 4 seconds (2 was a race on a busy machine)
+const SPEED = 20;   // a 2-minute shift ends in 6 seconds: 4 was a race once the bribe steps were added
 const OUT_OF_QUESTIONS = 'No questions left. Stamp the papers.';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -42,10 +41,24 @@ const DESK_SPOT = (label, { left = 0, right = 1, top = 0.35, bottom = 0.95 } = {
   return hits[Math.floor(hits.length / 2)];
 })()`;
 
-async function openPage(url) {
+// Chrome picks a free debugging port and writes it into its profile, so two
+// checks running at once (two sessions, two terminals) never drive each
+// other's page, as a fixed port did on 21 Nov.
+async function debugPort(profile) {
   for (let i = 0; i < 50; i += 1) {
     try {
-      const page = (await (await fetch(`http://127.0.0.1:${PORT}/json/list`)).json()).find((t) => t.type === 'page');
+      const [port] = (await readFile(path.join(profile, 'DevToolsActivePort'), 'utf8')).split('\n');
+      if (Number(port) > 0) return Number(port);
+    } catch { /* Chrome still starting */ }
+    await sleep(200);
+  }
+  throw new Error('Chrome did not start');
+}
+
+async function openPage(url, port) {
+  for (let i = 0; i < 50; i += 1) {
+    try {
+      const page = (await (await fetch(`http://127.0.0.1:${port}/json/list`)).json()).find((t) => t.type === 'page');
       if (page) {
         const ws = new WebSocket(page.webSocketDebuggerUrl);
         await once(ws, 'open');
@@ -91,10 +104,10 @@ async function main() {
   const server = http.createServer(handle);
   await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
   const work = await mkdtemp(path.join(tmpdir(), 'checkpoint-browser-check-'));
-  const chrome = spawn(browser, ['--headless=new', `--remote-debugging-port=${PORT}`, `--user-data-dir=${work}`, '--window-size=1280,800', 'about:blank'], { stdio: 'ignore' });
+  const chrome = spawn(browser, ['--headless=new', '--remote-debugging-port=0', `--user-data-dir=${work}`, '--window-size=1280,800', 'about:blank'], { stdio: 'ignore' });
   const failures = [];
   try {
-    const page = await openPage(`http://127.0.0.1:${server.address().port}/`);
+    const page = await openPage(`http://127.0.0.1:${server.address().port}/`, await debugPort(work));
     const screen = () => page.evaluate(`({
       hint: document.getElementById('hint').textContent,
       left: document.getElementById('questions-left').textContent,
@@ -110,6 +123,25 @@ async function main() {
     // Found before the shift starts: the scan is slow, and the sped-up clock would run out meanwhile.
     const stampAt = await page.evaluate(DESK_SPOT('Stamp: let them through'));
     if (!stampAt) throw new Error('could not find the THROUGH stamp on the desk');
+    const awayAt = await page.evaluate(DESK_SPOT('Stamp: turn them away'));
+    if (!awayAt) throw new Error('could not find the TURNED AWAY stamp on the desk');
+    const press = async ([x, y]) => {
+      for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+        await page.send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
+      }
+    };
+    const desk = () => page.evaluate(`({
+      name: document.getElementById('traveller-name').textContent,
+      hint: document.getElementById('hint').textContent,
+      said: document.getElementById('subtitle').textContent,
+      offer: !document.getElementById('take-bribe').hidden,
+      over: !document.getElementById('report').hidden,
+    })`);
+    const waitUntil = async (done) => {
+      let now = await desk();
+      for (let i = 0; i < 50 && !done(now); i += 1) { await sleep(50); now = await desk(); }
+      return now;
+    };
     await page.evaluate(`document.getElementById('start').click(); true`);
     await sleep(300);
     // Shahil 13:40: no button row in the booth; you click the desk, and a typed question goes with Enter.
@@ -125,33 +157,32 @@ async function main() {
       await ask(`Question ${i}?`);
       // Offline answers land at once; a short wait keeps the whole run well inside the 2 s shift.
       await sleep(40);
-      // Offline, Max's 2nd answer offers a bribe (src/travellers/max.js): it
-      // sits on the window ledge, and clicking it pockets it. One round trip,
-      // because the sped-up clock leaves little time to spare.
-      if (i === 2) {
-        const offered = await page.evaluate(`document.getElementById('hint').textContent`);
-        // Only the ledge's left half is scanned: the whole desk takes too long for the sped-up shift.
-        const bribeAt = (await page.evaluate(DESK_SPOT('A bribe', { left: 0.15, right: 0.5, top: 0.45, bottom: 0.7 }))) ?? [0, 0];
-        const bribe = await page.evaluate(`(() => {
-          const canvas = document.querySelector('#booth canvas');
-          const at = { clientX: ${bribeAt[0]}, clientY: ${bribeAt[1]}, bubbles: true, pointerId: 1 };
-          canvas.dispatchEvent(new PointerEvent('pointermove', at));
-          canvas.dispatchEvent(new PointerEvent('pointerdown', at));
-          canvas.dispatchEvent(new PointerEvent('pointerup', at));
-          return { hint: document.getElementById('hint').textContent };
-        })()`);
-        check('a bribe slides onto the ledge, and clicking it pockets it', offered.includes('onto the ledge') && bribe.hint.includes('record'), { offered, bribeAt, ...bribe });
-      }
     }
+    // Shahil 14:34: nobody bribes while he's being questioned.
+    seen = await desk();
+    check('no bribe is offered during the questions', !seen.offer && !seen.hint.includes('ledge'), seen);
     // A 6th question can still be typed; it must be refused with a hint.
     await ask('One more?');
     await sleep(150);
     seen = await screen();
     check('a 6th question shows the out-of-questions hint', seen.hint === OUT_OF_QUESTIONS && seen.left.includes(' 0 of '), seen);
 
+    // The take run: TURNED AWAY brings out his bribe instead of landing, and
+    // clicking it on the ledge lets him through.
+    await press(awayAt);
+    seen = await waitUntil((d) => d.offer);
+    check('TURNED AWAY does not land: Max says "wait" and a croissant comes out', seen.name === 'Max Tokens' && seen.offer && seen.said.includes('Wait, wait!') && seen.hint.includes('croissant onto the ledge'), seen);
+    // Only the ledge's left half is scanned: the whole desk takes too long for the sped-up shift.
+    const bribeAt = (await page.evaluate(DESK_SPOT('A bribe', { left: 0.15, right: 0.5, top: 0.45, bottom: 0.7 }))) ?? [0, 0];
+    await press(bribeAt);
+    seen = await waitUntil((d) => d.name !== 'Max Tokens' || d.over);
+    check('clicking the croissant pockets it and lets Max through', seen.name === 'Colin Stilton' && seen.hint.includes('THROUGH') && seen.hint.includes('record'), { bribeAt, ...seen });
+
     for (let i = 0; i < 100 && !(await screen()).over; i += 1) await sleep(100);
     seen = await screen();
     check('the shift clock runs out to the report', seen.over, seen);
+    const maxRow = await page.evaluate(`document.querySelector('#report-rows tr')?.textContent ?? ''`);
+    check('the bribed liar counts as let through, and wrong', maxRow.includes('Through (took a bribe)') && maxRow.endsWith('Wrong'), maxRow);
     const bribes = await page.evaluate(`document.getElementById('bribes').textContent`);
     check('the report names the bribe taken and marks the record', bribes.includes('Max Tokens') && bribes.includes('CORRUPT'), bribes);
 
@@ -175,15 +206,18 @@ async function main() {
         hintCentre: Math.round(hint.left + hint.width / 2 - innerWidth / 2), hintFromBottom: Math.round(innerHeight - hint.bottom), overlap };
     })()`);
     check('the hover label sits by the pointer, apart from the status line', placed.tipFromPointer <= 24 && Math.abs(placed.hintCentre) <= 1 && placed.hintFromBottom <= 16 && !placed.overlap, placed);
-    for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
-      await page.send('Input.dispatchMouseEvent', { type, x: stampAt[0], y: stampAt[1], button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
-    }
-    let next = first;
-    for (let i = 0; i < 50 && next === first; i += 1) {
-      await sleep(100);
-      next = await page.evaluate(`document.getElementById('traveller-name').textContent`);
-    }
-    check('stamping before any question moves the queue on', next !== first, { first, next, ...(await screen()) });
+    await press(stampAt);
+    seen = await waitUntil((d) => d.name !== first);
+    check('stamping THROUGH before any question moves the queue on, with no bribe', seen.name !== first && !seen.offer, { first, ...seen });
+
+    // The refuse run: TURNED AWAY brings out Colin's cheese; TURNED AWAY again lands.
+    await press(awayAt);
+    seen = await waitUntil((d) => d.offer);
+    check('the honest one bribes too: TURNED AWAY brings out the cheese', seen.name === 'Colin Stilton' && seen.offer && seen.hint.includes('wedge of cheese'), seen);
+    await press(awayAt);
+    seen = await waitUntil((d) => d.over);
+    const refused = await page.evaluate(`({ row: document.querySelectorAll('#report-rows tr')[1]?.textContent ?? '', record: document.getElementById('bribes').textContent })`);
+    check('TURNED AWAY again refuses it: the stamp lands and the record stays clean', seen.over && refused.row.includes('Turned away') && !refused.row.includes('bribe') && refused.record.includes('clean'), refused);
 
     // Sounds: headless Chrome may have no audio device; the page must not mind.
     const sound = await page.evaluate(`(() => {
