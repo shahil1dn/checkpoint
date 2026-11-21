@@ -6,25 +6,44 @@
   <title>Checkpoint</title>
 </head>
 <body>
-  <h1>Checkpoint</h1>
-  <p id="status">Connecting…</p>
+  <header>
+    <h1>Checkpoint</h1>
+    <p id="status">Connecting…</p>
+    <p><span id="clock"></span> <span id="queue-position"></span></p>
+  </header>
 
-  <section>
-    <h2 id="traveller-name"></h2>
-    <dl id="papers"></dl>
+  <section id="start-screen">
+    <p>You're the inspector. Question each traveller out loud, then stamp them through or turn them away.</p>
+    <button id="start" type="button">Start shift</button>
   </section>
 
-  <section>
+  <section id="desk" hidden>
+    <p id="last-stamp"></p>
+    <h2 id="traveller-name"></h2>
+    <dl id="papers"></dl>
+    <p id="questions-left"></p>
     <ol id="conversation"></ol>
-    <p>
-      <button id="mic-on" type="button">Turn on microphone</button>
-      <button id="talk" type="button" hidden>Hold to talk (or hold Space)</button>
-    </p>
+    <p><button id="talk" type="button" hidden>Hold to talk (or hold Space)</button></p>
     <form id="ask-form">
       <input id="question" type="text" maxlength="300" autocomplete="off" placeholder="Or type a question">
       <button id="ask" type="submit">Ask</button>
     </form>
+    <p>
+      <button id="stamp-through" type="button">Stamp: through</button>
+      <button id="stamp-away" type="button">Stamp: turned away</button>
+    </p>
     <p id="hint" role="status"></p>
+  </section>
+
+  <section id="report" hidden>
+    <h2>End of shift</h2>
+    <p id="end-reason"></p>
+    <table>
+      <thead><tr><th>Traveller</th><th>Your stamp</th><th>The truth</th><th>Result</th></tr></thead>
+      <tbody id="report-rows"></tbody>
+    </table>
+    <p id="score"></p>
+    <button id="again" type="button">Play again</button>
   </section>
 
   <script type="module" src="/app.js"></script>

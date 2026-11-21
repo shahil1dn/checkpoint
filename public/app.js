@@ -1,24 +1,161 @@
-// Screen code only. Limits and reply checks live in /src/rules.js.
-import { checkQuestion } from '/src/rules.js';
+// Screen code only. Every rule (limits, clock, stamps, score) is decided by
+// /src/rules.js; this file shows the shift and talks to our server.
+import * as R from '/src/rules.js';
 import { getTraveller } from '/src/travellers.js';
+import { mockReply } from '/src/mockBrain.js';
 import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
 
 const $ = (id) => document.getElementById(id);
-const traveller = getTraveller('max');
-const history = [];
-let waiting = false;
+
+let shift = R.newShift();
+let started = false;
+let live = false;
+let lastStamp = null;
+let voice = null;
+let lastFrame = performance.now();
 
 const HINTS = {
   empty: 'Ask something first.',
   tooLong: 'Keep it under 300 characters.',
-  noKey: 'No Mistral key on the server.',
-  unclear: 'He mumbles something unclear.',
+  pending: 'Wait for the answer.',
+  outOfQuestions: 'No questions left. Stamp them.',
+  shiftOver: 'The shift is over.',
+  unclear: 'They mumble something unclear. Ask again.',
   tap: 'Hold Space while you talk, then let go.',
   notHeard: "Didn't catch that. Try again.",
-  noMic: 'No microphone. Type your question instead.',
+  noMic: 'No microphone, so type your questions.',
+  blocked: 'Click the page once so the browser lets them speak.',
 };
+const STAMP_WORDS = { through: 'Through', away: 'Turned away' };
+const END_REASONS = { queueEmpty: 'Queue cleared.', time: "Time's up. Anyone not stamped counts as wrong." };
 
-function renderPapers() {
+const hint = (text) => { $('hint').textContent = text; };
+
+// ---- Server calls. Each returns a value or an error name, never throws. ----
+
+async function fetchReply(request) {
+  if (!live) return { reply: R.parseReply(mockReply(request)) };
+  try {
+    const res = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ travellerId: request.travellerId, question: request.question, history: request.history }),
+    });
+    return res.ok ? { reply: await res.json() } : { error: 'unclear' };
+  } catch {
+    return { error: 'unclear' };
+  }
+}
+
+async function fetchTranscript(clip) {
+  try {
+    const res = await fetch('/api/hear', { method: 'POST', headers: { 'content-type': clip.type }, body: clip });
+    const body = await res.json();
+    return res.ok && body.text ? { text: body.text } : { error: 'notHeard' };
+  } catch {
+    return { error: 'notHeard' };
+  }
+}
+
+// ---- Voice out ----
+
+function playVoice(base64Mp3) {
+  stopVoice();
+  voice = new Audio(`data:audio/mpeg;base64,${base64Mp3}`);
+  voice.play().catch(() => hint(HINTS.blocked));
+}
+
+function stopVoice() {
+  voice?.pause();
+  voice = null;
+}
+
+// ---- Actions ----
+
+// Typed and spoken questions both end up here.
+async function askQuestion(text) {
+  const asked = R.startQuestion(shift, text);
+  if (asked.error) return hint(HINTS[asked.error]);
+  shift = asked.shift;
+  const traveller = getTraveller(asked.request.travellerId);
+  hint(`${traveller.name} is thinking…`);
+  render();
+
+  const { reply, error } = await fetchReply(asked.request);
+  const before = shift;
+  shift = R.finishQuestion(shift, asked.request.id, reply ?? null);
+  // Unchanged means the traveller was stamped while we waited: stay quiet.
+  if (shift === before) return;
+  hint(error ? HINTS[error] : '');
+  if (reply?.audio) playVoice(reply.audio);
+  render();
+}
+
+function onStamp(verdict) {
+  const travellerId = R.currentTravellerId(shift);
+  const result = R.stamp(shift, verdict);
+  if (result.error) return hint(HINTS[result.error]);
+  shift = result.shift;
+  stopVoice();
+  lastStamp = { name: getTraveller(travellerId).name, verdict };
+  hint('');
+  render();
+}
+
+let talkingTo = null;
+
+function beginTalking() {
+  if (!started || shift.phase !== 'playing' || shift.pending || shift.hearing) return;
+  stopVoice();
+  if (!startClip()) return;
+  talkingTo = R.currentTravellerId(shift);
+  $('talk').textContent = 'Listening… let go to ask';
+  hint('');
+}
+
+async function finishTalking() {
+  if (!recording()) return;
+  $('talk').textContent = 'Hold to talk (or hold Space)';
+  const clip = await endClip();
+  if (!clip) return hint(HINTS.tap);
+  shift = R.setHearing(shift, true);
+  hint('Listening back…');
+  render();
+  const { text, error } = await fetchTranscript(clip);
+  shift = R.setHearing(shift, false);
+  render();
+  if (error) return hint(HINTS[error]);
+  // A question meant for someone already stamped is not passed to the next one.
+  if (R.currentTravellerId(shift) !== talkingTo) return hint('');
+  await askQuestion(text);
+}
+
+async function startShift() {
+  started = true;
+  $('start-screen').hidden = true;
+  if (live) {
+    try {
+      await prepareMic();
+      $('talk').hidden = false;
+    } catch {
+      hint(HINTS.noMic);
+    }
+  }
+  lastFrame = performance.now();
+  render();
+}
+
+function playAgain() {
+  shift = R.restartShift(shift);
+  lastStamp = null;
+  stopVoice();
+  lastFrame = performance.now();
+  render();
+}
+
+// ---- Drawing ----
+
+function renderPapers(traveller) {
   $('traveller-name').textContent = traveller.name;
   $('papers').replaceChildren(...Object.entries(traveller.papers).flatMap(([label, value]) => {
     const dt = document.createElement('dt');
@@ -29,112 +166,87 @@ function renderPapers() {
   }));
 }
 
-function addLine(speaker, text) {
-  const li = document.createElement('li');
-  li.textContent = `${speaker}: ${text}`;
-  $('conversation').append(li);
-}
-
-const hint = (text) => { $('hint').textContent = text; };
-
-async function postJson(url, body) {
-  const res = await fetch(url, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  return { res, body: await res.json() };
-}
-
-async function askServer(question) {
-  try {
-    const { res, body } = await postJson('/api/ask', { travellerId: traveller.id, question, history });
-    if (res.status === 503) return { error: 'noKey' };
-    return res.ok ? { reply: body } : { error: 'unclear' };
-  } catch {
-    return { error: 'unclear' };
+function renderConversation(traveller) {
+  const lines = [];
+  for (const exchange of shift.cases[traveller.id].history) {
+    lines.push(`You: ${exchange.question}`);
+    // A traveller with mood voices shows his mood by voice alone: that's the tell.
+    const mood = traveller.voices ? '' : ` (${exchange.mood})`;
+    const cracked = exchange.cracked ? ' [He cracked!]' : '';
+    lines.push(`${traveller.name}${mood}: ${exchange.reply}${cracked}`);
   }
+  if (shift.pending) lines.push(`You: ${shift.pending.question}`, `${traveller.name}: …`);
+  $('conversation').replaceChildren(...lines.map((text) => {
+    const li = document.createElement('li');
+    li.textContent = text;
+    return li;
+  }));
 }
 
-async function hearServer(clip) {
-  try {
-    const res = await fetch('/api/hear', { method: 'POST', headers: { 'content-type': clip.type }, body: clip });
-    const body = await res.json();
-    if (res.status === 503) return { error: 'noKey' };
-    return res.ok && body.text ? { text: body.text } : { error: 'notHeard' };
-  } catch {
-    return { error: 'notHeard' };
+function renderReport() {
+  const report = R.shiftReport(shift);
+  $('end-reason').textContent = END_REASONS[shift.endReason] ?? '';
+  $('report-rows').replaceChildren(...report.rows.map((row) => {
+    const tr = document.createElement('tr');
+    const cells = [
+      row.name,
+      row.stamp ? STAMP_WORDS[row.stamp] : 'Not stamped',
+      row.honest ? `Honest. ${row.secret}` : `Lying. ${row.secret}`,
+      row.correct ? 'Right' : 'Wrong',
+    ];
+    tr.replaceChildren(...cells.map((text) => {
+      const td = document.createElement('td');
+      td.textContent = text;
+      return td;
+    }));
+    return tr;
+  }));
+  $('score').textContent = `You got ${report.correct} of ${report.total} right.`;
+}
+
+function renderClock() {
+  const secondsLeft = Math.ceil(R.timeLeftMs(shift) / 1000);
+  const clock = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
+  const paused = shift.pending || shift.hearing ? ' (paused while they think)' : '';
+  $('clock').textContent = started ? `Shift clock ${clock}${paused}` : '';
+}
+
+function render() {
+  const over = shift.phase === 'over';
+  $('desk').hidden = !started || over;
+  $('report').hidden = !started || !over;
+  $('last-stamp').textContent = lastStamp ? `${lastStamp.name}: stamped ${STAMP_WORDS[lastStamp.verdict].toUpperCase()}` : '';
+  renderClock();
+  if (over) {
+    $('queue-position').textContent = '';
+    return renderReport();
   }
+  const traveller = getTraveller(R.currentTravellerId(shift));
+  $('queue-position').textContent = started ? `Traveller ${shift.current + 1} of ${shift.queue.length}` : '';
+  renderPapers(traveller);
+  renderConversation(traveller);
+  const left = R.questionsLeft(shift, traveller.id);
+  $('questions-left').textContent = `Questions left: ${left} of ${R.MAX_QUESTIONS}`;
+  const busy = Boolean(shift.pending || shift.hearing);
+  $('ask').disabled = busy || left === 0;
+  $('talk').disabled = busy || left === 0;
 }
 
-function setWaiting(on, message = '') {
-  waiting = on;
-  $('ask').disabled = on;
-  $('talk').disabled = on;
-  hint(message);
-}
-
-// Typed and spoken questions both end up here.
-async function askQuestion(text) {
-  const checked = checkQuestion(text);
-  if (!checked.ok) return hint(HINTS[checked.reason]);
-  setWaiting(true, `${traveller.name} is thinking…`);
-  addLine('You', checked.question);
-  const { reply, error } = await askServer(checked.question);
-  if (reply) {
-    history.push({ question: checked.question, reply: reply.reply, mood: reply.mood });
-    addLine(traveller.name, `${reply.reply} [${reply.mood}]`);
-    if (reply.audio) playVoice(reply.audio);
+function frame(now) {
+  if (started && shift.phase === 'playing') {
+    shift = R.tick(shift, now - lastFrame);
+    if (shift.phase === 'over') {
+      stopVoice();
+      render();
+    } else {
+      renderClock();
+    }
   }
-  setWaiting(false, error ? HINTS[error] : '');
+  lastFrame = now;
+  requestAnimationFrame(frame);
 }
 
-let voice = null;
-
-function playVoice(base64Mp3) {
-  stopVoice();
-  voice = new Audio(`data:audio/mpeg;base64,${base64Mp3}`);
-  voice.play().catch(() => hint('Click the page once so the browser lets him speak.'));
-}
-
-function stopVoice() {
-  voice?.pause();
-  voice = null;
-}
-
-function onTypedAsk(event) {
-  event.preventDefault();
-  if (waiting) return;
-  const text = $('question').value;
-  $('question').value = '';
-  askQuestion(text);
-}
-
-function beginTalking() {
-  if (waiting) return;
-  stopVoice();
-  if (!startClip()) return;
-  $('talk').textContent = 'Listening… let go to ask';
-  hint('');
-}
-
-async function finishTalking() {
-  if (!recording()) return;
-  $('talk').textContent = 'Hold to talk (or hold Space)';
-  const clip = await endClip();
-  if (!clip) return hint(HINTS.tap);
-  setWaiting(true, 'Listening back…');
-  const { text, error } = await hearServer(clip);
-  setWaiting(false, error ? HINTS[error] : '');
-  if (text) await askQuestion(text);
-}
-
-async function turnOnMic() {
-  try {
-    await prepareMic();
-    $('mic-on').hidden = true;
-    $('talk').hidden = false;
-    hint('Microphone on. Hold Space or the button and ask your question.');
-  } catch {
-    hint(HINTS.noMic);
-  }
-}
+// ---- Wiring ----
 
 const typingInBox = (event) => event.target instanceof HTMLInputElement;
 
@@ -151,17 +263,26 @@ document.addEventListener('keyup', (event) => {
 $('talk').addEventListener('pointerdown', beginTalking);
 $('talk').addEventListener('pointerup', finishTalking);
 $('talk').addEventListener('pointerleave', finishTalking);
-$('mic-on').addEventListener('click', turnOnMic);
-$('ask-form').addEventListener('submit', onTypedAsk);
+$('ask-form').addEventListener('submit', (event) => {
+  event.preventDefault();
+  const text = $('question').value;
+  $('question').value = '';
+  askQuestion(text);
+});
+$('stamp-through').addEventListener('click', () => onStamp('through'));
+$('stamp-away').addEventListener('click', () => onStamp('away'));
+$('start').addEventListener('click', startShift);
+$('again').addEventListener('click', playAgain);
 
-async function showStatus() {
+async function checkLive() {
   try {
-    const { live } = await (await fetch('/api/health')).json();
-    $('status').textContent = live ? 'Live: Mistral connected.' : 'Offline: no Mistral key on the server.';
+    ({ live } = await (await fetch('/api/health')).json());
   } catch {
-    $('status').textContent = 'Server not reachable.';
+    live = false;
   }
+  $('status').textContent = live ? 'Live: Mistral connected.' : 'Offline: canned replies, no voices.';
 }
 
-renderPapers();
-showStatus();
+render();
+checkLive();
+requestAnimationFrame(frame);

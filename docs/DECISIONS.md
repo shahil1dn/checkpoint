@@ -39,8 +39,32 @@ player a clear "I'm asking now" moment.
 back and forth. It's kept for work where a pause is fine (stretch item 12).
 **Turned down:** Large 4 for replies; Ministral, which was slower here, not faster.
 
+## ADR-6: The travellers are the Fang Street penguin cast (21 Nov 10:42)
+
+**Decided:** reuse the code-drawn Three.js penguins from `fang-street-mvp/src/penguins/` and
+`src/cast.js` (about 1,500 lines: faces with expressions, outfits, speech bubbles). This brings
+in the game's first dependencies, `three` and `vite`, the versions fang-street-mvp already uses.
+**Why:** Shahil's call. A face that reacts to `mood` makes the tell visible, and the cast is
+already built and art-directed. Moving the page onto Vite early (before S4 builds more page
+code) avoids a rewrite at S7.
+**Turned down:** drawing new characters, or keeping the page dependency-free.
+
 ## ADR-5: No SDK, plain `fetch` (21 Nov)
 
 **Decided:** `server/mistral.js` calls the REST endpoints directly.
 **Why:** Node 25 has `fetch` built in, and we need four endpoints, all already tried with curl
 this morning. An SDK would be the project's first dependency, for no gain.
+
+## ADR-7: Load `three` with an import map, not Vite (21 Nov 10:47)
+
+**Decided:** keep the page as plain ES modules served by our own server. When the penguins arrive
+(S7), add `three@0.186.1` (the version fang-street-mvp uses) and one `<script type="importmap">`
+mapping `three` and `three/addons/` to files our server serves from `node_modules/three`.
+Amends ADR-6, which planned a move to Vite before S4.
+**Why:** the penguin code (`cast.js`, `penguins/*.js`, 1,611 lines) imports only `three` and
+`three/addons/...`, and an import map with exactly those two entries is three.js's own documented
+no-build setup (checked in the r186 docs). So S7 needs no rewrite of the page, while moving to
+Vite now would add a build step, a second server path, and re-proving the static-file whitelist
+and the key test (A6) on top of it.
+**Turned down:** Vite (ADR-6's plan); loading three from a CDN, which the demo can't rely on if
+the venue wifi drops.
