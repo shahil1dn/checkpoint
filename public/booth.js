@@ -362,7 +362,11 @@ function buildBribe(group) {
 function buildMic(group) {
   const holder = new THREE.Group();
   holder.userData.tool = 'mic';
-  holder.position.set(0.28, SILL, 0.32);
+  // The inspector's own mic, near the front edge, right of the transcript and clear of
+  // the papers and stamps, with its head turned towards the inspector.
+  holder.position.set(0.3, SILL, 1.0);
+  holder.rotation.y = Math.PI;
+  holder.scale.setScalar(0.75);
   group.add(holder);
   part(new THREE.CylinderGeometry(0.09, 0.11, 0.03, 20), mat(COLORS.micBody), holder, [0, 0.015, 0]);
   part(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 8), mat(COLORS.micGrille), holder, [0, 0.13, 0], [0.35, 0, 0]);
