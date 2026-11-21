@@ -719,6 +719,61 @@ function buildSideDesk(group, x, inward, wood) {
   part(box(0.025, 0.035, 2.28, 0.005), mat('#533322'), group, [x + inward * 0.3, 0.92, 2.72], undefined, undefined, false);
 }
 
+function buildKeyboard(group, at) {
+  const keyboard = new THREE.Group();
+  keyboard.position.set(...at);
+  keyboard.rotation.y = Math.PI / 2;
+  group.add(keyboard);
+  part(box(0.64, 0.028, 0.25, 0.016), mat('#29323d'), keyboard, [0, 0.014, 0], undefined, undefined, false);
+  part(box(0.605, 0.004, 0.214, 0.002), mat('#71828d'), keyboard, [0, 0.03, 0], undefined, undefined, false);
+
+  const positions = [];
+  for (const [row, z] of [-0.075, -0.025, 0.025].entries()) {
+    for (let col = 0; col < 12; col += 1) {
+      if ((row === 0 && col === 0) || (row === 2 && col === 11)) continue;
+      positions.push([-0.253 + col * 0.046, z, 1]);
+    }
+  }
+  positions.push([-0.253, 0.075, 1], [-0.207, 0.075, 1], [-0.015, 0.075, 6], [0.207, 0.075, 1], [0.253, 0.075, 1]);
+  const keys = new THREE.InstancedMesh(box(0.039, 0.011, 0.034, 0.004), mat('#d8ddd9'), positions.length);
+  const key = new THREE.Object3D();
+  positions.forEach(([x, z, stretch], i) => {
+    key.position.set(x, 0.041, z);
+    key.scale.set(stretch, 1, 1);
+    key.updateMatrix();
+    keys.setMatrixAt(i, key.matrix);
+  });
+  keys.instanceMatrix.needsUpdate = true;
+  keys.castShadow = false;
+  keyboard.add(keys);
+  for (const [x, z, colour] of [[-0.253, -0.075, '#e5a76b'], [0.253, 0.025, '#9dc6c1']]) {
+    part(box(0.039, 0.011, 0.034, 0.004), mat(colour), keyboard, [x, 0.041, z], undefined, undefined, false);
+  }
+}
+
+function buildMouse(group, at) {
+  const mouse = new THREE.Group();
+  mouse.position.set(...at);
+  mouse.rotation.y = -0.08;
+  group.add(mouse);
+  part(box(0.15, 0.012, 0.1, 0.035), mat('#252d37'), mouse, [0, 0.008, 0], undefined, undefined, false);
+  part(ball(1, 24, 16), mat('#657683'), mouse, [0, 0.027, 0], undefined, [0.08, 0.031, 0.052], false);
+  for (const z of [-0.02, 0.02]) {
+    part(box(0.058, 0.005, 0.035, 0.012), mat('#91a1aa'), mouse, [0.028, 0.055, z], undefined, undefined, false);
+  }
+  part(box(0.055, 0.002, 0.003, 0.001), mat('#28333d'), mouse, [0.026, 0.059, 0], undefined, undefined, false);
+  part(new THREE.CylinderGeometry(0.007, 0.007, 0.014, 12), mat('#26313b'), mouse, [0.043, 0.064, 0], [Math.PI / 2, 0, 0], undefined, false);
+  for (const z of [-0.05, 0.05]) {
+    part(box(0.04, 0.009, 0.004, 0.002), mat('#303b46'), mouse, [-0.015, 0.027, z], undefined, undefined, false);
+  }
+  const cord = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.078, 0.026, 0),
+    new THREE.Vector3(-0.12, 0.014, 0.015),
+    new THREE.Vector3(-0.19, 0.014, -0.04),
+  ]);
+  part(new THREE.TubeGeometry(cord, 12, 0.003, 6, false), mat('#303a46'), mouse, undefined, undefined, undefined, false);
+}
+
 function buildComputer(group, wood) {
   const z = 2.25;   // straight ahead when the inspector turns left
   const wallX = -SIDE_WALL_X + 0.08;
@@ -730,8 +785,8 @@ function buildComputer(group, wood) {
   screen.mesh.position.set(wallX + 0.23, 1.4, z);
   screen.mesh.rotation.y = Math.PI / 2;
   group.add(screen.mesh);
-  part(box(0.18, 0.025, 0.5, 0.01), mat(COLORS.micGrille), group, [wallX + 0.42, 1.005, z]);
-  part(ball(0.035, 12, 8), mat(COLORS.micGrille), group, [wallX + 0.42, 1.0, z + 0.4], [0, 0, 0], [1, 0.5, 1.4]);
+  buildKeyboard(group, [wallX + 0.48, 0.995, z]);
+  buildMouse(group, [wallX + 0.49, 0.995, z - 0.48]);
   const note = textPlane(0.13, 0.13, (g, w, h) => {
     g.fillStyle = '#f2d96b'; g.fillRect(0, 0, w, h);
     g.fillStyle = INK; g.font = `${h * 0.17}px ${HANDWRITING}`; g.textAlign = 'center'; g.textBaseline = 'middle';
