@@ -83,6 +83,7 @@ export const MAX_NOTES_PER_ANSWER = 2;
 export const MAX_NOTE_CHARS = 120;
 // The spec's list, plus the forms of those words a note would actually use.
 const VERDICT = /\b(lie|lies|lied|liar|liars|lying|truth\w*|untruth\w*|honest\w*|dishonest\w*|suspicious\w*|suspicion\w*|suspect\w*|guilt\w*|innocen\w*)\b|[✓✔✗✘]/i;
+export const hasVerdictWord = (text) => VERDICT.test(text);
 
 // A "Says X; papers say Y" note would mislead the player if it isn't a real
 // clash. Measured live, the model writes two kinds even when told not to:
@@ -134,9 +135,10 @@ export function newShift(queue = DEMO_QUEUE, { firstRequestId = 1 } = {}) {
     current: 0,
     usedMs: 0,
     pending: null,
+    lookup: null,
     hearing: false,
     nextRequestId: firstRequestId,
-    cases: Object.fromEntries(queue.map((id) => [id, { history: [], notes: [], stamp: null, bribeTaken: false, bribeAnsweredAt: 0 }])),
+    cases: Object.fromEntries(queue.map((id) => [id, { history: [], notes: [], lookups: [], stamp: null, bribeTaken: false, bribeAnsweredAt: 0 }])),
   };
 }
 
@@ -176,6 +178,80 @@ export function finishQuestion(shift, requestId, reply) {
     pending: null,
     cases: { ...shift.cases, [travellerId]: { ...record, history: [...record.history, exchange], notes } },
   };
+}
+
+// ---- The records terminal (ADR-12) ----
+// The inspector clicks a line he has gathered and the terminal looks it up.
+// No free typing, and 3 lookups a traveller: spending them is his strategy.
+
+export const MAX_LOOKUPS = 3;
+export const MAX_REPORT_LINES = 4;
+export const MAX_REPORT_LINE_CHARS = 200;
+const sameLine = (s) => (typeof s === 'string' ? s.replace(/\s+/g, ' ').trim() : '');
+
+export const lookupsLeft = (shift, id) => MAX_LOOKUPS - shift.cases[id].lookups.length;
+
+// Returns { shift, request } to send to the server, or { shift, error }.
+export function startLookup(shift, text) {
+  if (shift.phase !== 'playing') return { shift, error: 'shiftOver' };
+  if (shift.lookup) return { shift, error: 'lookupPending' };
+  const line = sameLine(text);
+  if (!line) return { shift, error: 'empty' };
+  const travellerId = currentTravellerId(shift);
+  const done = shift.cases[travellerId].lookups.map((l) => l.line);
+  if (done.length >= MAX_LOOKUPS) return { shift, error: 'outOfLookups' };
+  if (done.includes(line)) return { shift, error: 'alreadyLookedUp' };
+  const lookup = { id: shift.nextRequestId, travellerId, line };
+  return { shift: { ...shift, lookup, nextRequestId: shift.nextRequestId + 1 }, request: { ...lookup, earlier: done } };
+}
+
+// result is { steps, answer } or null when the lookup failed. A failed lookup
+// isn't counted. A result that lands after a stamp still goes on the case it
+// was asked about.
+export function finishLookup(shift, requestId, result) {
+  if (!shift.lookup || shift.lookup.id !== requestId) return shift;
+  const { travellerId, line } = shift.lookup;
+  if (!result) return { ...shift, lookup: null };
+  const record = shift.cases[travellerId];
+  const done = { line, steps: result.steps ?? [], answer: result.answer ?? [] };
+  return { ...shift, lookup: null, cases: { ...shift.cases, [travellerId]: { ...record, lookups: [...record.lookups, done] } } };
+}
+
+// The server runs this on every /api/lookup body before anything else.
+export function validateLookupRequest(body) {
+  if (!isPlainObject(body)) return { ok: false, reason: 'badBody' };
+  if (typeof body.travellerId !== 'string' || !getTraveller(body.travellerId)) return { ok: false, reason: 'unknownTraveller' };
+  const line = sameLine(body.line);
+  if (!line) return { ok: false, reason: 'empty' };
+  if (charCount(line) > MAX_QUESTION_CHARS) return { ok: false, reason: 'tooLong' };
+  const earlier = body.earlier ?? [];
+  if (!Array.isArray(earlier) || !earlier.every((l) => typeof l === 'string')) return { ok: false, reason: 'badEarlier' };
+  if (earlier.length >= MAX_LOOKUPS) return { ok: false, reason: 'outOfLookups' };
+  if (earlier.map(sameLine).includes(line)) return { ok: false, reason: 'alreadyLookedUp' };
+  return { ok: true, value: { travellerId: body.travellerId, line, earlier } };
+}
+
+// Where a line came from: 'papers', 'ticket' or 'said' (his own answers), or
+// null when the inspector never gathered it. His own questions don't count,
+// or a typed question would be free typing by the back door.
+export function gatheredFrom(text, { papers, ticket, said = [] }) {
+  const line = sameLine(text);
+  const lines = (fields) => Object.entries(fields ?? {}).map(([label, value]) => sameLine(`${label}: ${value}`));
+  if (lines(papers).includes(line)) return 'papers';
+  if (lines(ticket).includes(line)) return 'ticket';
+  if (said.map(sameLine).includes(line)) return 'said';
+  return null;
+}
+
+// The terminal's report is untrusted: markdown and list marks go, and any
+// line with a verdict word is refused, because the inspector decides.
+export function checkLookupAnswer(raw) {
+  const candidates = String(raw ?? '').split('\n')
+    .map((line) => line.replace(/[*_`#~]/g, '').replace(/^\s*(?:[-•]|\d+[.)])\s*/, '').replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+  const allowed = candidates.filter((line) => !hasVerdictWord(line));
+  const lines = allowed.slice(0, MAX_REPORT_LINES).map((line) => [...line].slice(0, MAX_REPORT_LINE_CHARS).join(''));
+  return { lines, refused: candidates.length - allowed.length };
 }
 
 // ---- Bribes ----
