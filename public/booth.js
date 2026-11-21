@@ -323,16 +323,30 @@ function buildBribe(group) {
   // Stood on its long edge with its cut face to the inspector: lying flat, it was
   // a thin yellow sliver from the chair.
   part(new THREE.CylinderGeometry(0.1, 0.1, 0.07, 10, 1, false, Math.PI / 2, Math.PI / 3), mat('#e8c95a'), cheese, [-0.05, 0.002, 0], [Math.PI / 2, 0, 0]);
+  // The Mistral mark (mistral.ai/brand, 21 Nov): a pixel "M" cat, 7 cells wide and
+  // 5 tall, its bands running yellow, orange, red-orange, red, crimson from the
+  // ears down. Die-cut: a white border and an ink edge both follow the mark.
+  const MISTRAL_M = [
+    ['#ffaf01', '.#...#.'],
+    ['#ff8204', '.##.##.'],
+    ['#fa500f', '.#####.'],
+    ['#e51300', '.#.#.#.'],
+    ['#c4001d', '###.###'],
+  ];
   const sticker = textPlane(0.11, 0.11, (g, w, h) => {
-    g.fillStyle = '#e8743b'; g.beginPath(); g.arc(w / 2, h / 2, w * 0.48, 0, Math.PI * 2); g.fill();
-    g.fillStyle = '#fbf8ef'; g.beginPath();
-    for (let i = 0; i < 10; i++) {
-      const r = (i % 2 ? 0.17 : 0.38) * w;
-      const a = -Math.PI / 2 + (i * Math.PI) / 5;
-      g.lineTo(w / 2 + r * Math.cos(a), h / 2 + r * Math.sin(a));
+    const cell = w * 0.1;
+    const left = (w - cell * 7) / 2;
+    const top = h * 0.98 - cell * 6.25;   // the ink edge rests on the canvas bottom, as the old circle did
+    const cells = MISTRAL_M.flatMap(([colour, row], y) => [...row].flatMap((mark, x) => (mark === '#' ? [{ colour, x: left + x * cell, y: top + y * cell }] : [])));
+    g.clearRect(0, 0, w, h);
+    g.lineJoin = 'round';
+    for (const [pad, colour] of [[cell * 1.25, INK], [cell * 0.7, '#fbf8ef']]) {
+      g.fillStyle = g.strokeStyle = colour;
+      g.lineWidth = pad * 2;
+      for (const c of cells) { g.fillRect(c.x, c.y, cell, cell); g.strokeRect(c.x, c.y, cell, cell); }
     }
-    g.fill();
-  }, 512);
+    for (const c of cells) { g.fillStyle = c.colour; g.fillRect(c.x, c.y, cell, cell); }
+  }, 2048);   // px per world unit: 512 was a 56 px canvas, too small for a crisp mark
   sticker.redraw();
   sticker.mesh.position.set(0, 0.06, -0.05);
   sticker.mesh.rotation.x = -0.35;   // propped against the glass, facing the inspector
