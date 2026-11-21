@@ -267,15 +267,20 @@ async function main() {
     // Only the ledge's left half is scanned, to keep the check quick.
     const bribeAt = (await page.evaluate(DESK_SPOT('A bribe', { left: 0.15, right: 0.5, top: 0.45, bottom: 0.7 }))) ?? [0, 0];
     const deskSpot = await folderAt();
+    // The next folder isn't anywhere in sight until he's at the window to hand it over.
+    // Looked for the moment his name changes, so a slow machine can't make it late.
+    await page.evaluate(`new MutationObserver((changes, watcher) => {
+      watcher.disconnect();
+      window.folderWhileArriving = ${DESK_SPOT('Case folder', { top: 0.3, bottom: 0.99 })};
+    }).observe(document.getElementById('traveller-name'), { childList: true, characterData: true, subtree: true }); true`);
     await press(bribeAt);
     await waitFor(`document.getElementById('traveller-name').textContent !== ${JSON.stringify(FIRST.name)}`, 10000);
-    // The next folder isn't on the desk until he's at the window to hand it over.
-    const whileArriving = await folderAt();
+    const whileArriving = await page.evaluate('window.folderWhileArriving');
     seen = await desk();
     check(`clicking the ${itemOf(FIRST)} pockets it and lets ${FIRST.name} through`, seen.name === SECOND.name && seen.hint.includes('THROUGH') && seen.hint.includes('record'), { bribeAt, ...seen });
     await sleep(2500);
     const handedOver = await folderAt();
-    check('hand-over: the next folder comes across to the desk once he arrives', Boolean(deskSpot) && !near(whileArriving, deskSpot) && near(handedOver, deskSpot), { deskSpot, whileArriving, handedOver });
+    check('hand-over: the next folder comes across to the desk once he arrives', Boolean(deskSpot) && whileArriving === null && near(handedOver, deskSpot), { deskSpot, whileArriving, handedOver });
     const afterBribe = { tray: await countOf('Confiscated'), spike: await countOf('Finished transcripts') };
     check('a taken bribe lets him through with his papers, and his transcript is torn off onto the spike', afterBribe.tray === 0 && afterBribe.spike === 1, afterBribe);
 
