@@ -92,6 +92,21 @@ and there's no walking.
 - Everything that already works must keep working: the shift clock, question limit, scoring,
   scratchpad, `npm test` and A6, and the demo still under 2 minutes.
 
+**Looking around the booth (Shahil, 13:28).**
+- **Better framing at the window.** The camera sits at the traveller's eye level, so it feels
+  face to face. His whole head and upper body are in view with a little room above; the desk
+  tools are still easy to see and click.
+- **Three views you turn between:** left, window (where you start) and right. Arrows at the
+  screen edges, or the ← and → keys, turn the camera smoothly. Questions, subtitles and the
+  shift clock keep working in every view, and stamping happens at the window.
+- **Left: the inspector's computer**, with a live screen of the real Mistral models at work, fed
+  by the game's actual calls: Voxtral heard "…", Medium 3.5 answered in 0.5 s, the note-taker
+  added a note, Voxtral spoke 4.1 s of audio. Model names in plain text; no copied logos.
+  It's for flavour, and it shows the judges what Mistral is doing.
+- **Right: funny stuff and paperwork:** in-world joke props and a pile of forms (a staff notice
+  board, a "rival lab" bulletin, a sardine-tin pen pot, a mug). Flavour only: nothing on it
+  gives away who's lying. Stretch item 11's rule card would be pinned here.
+
 **Stretch, only once 1 to 10 work end to end:**
 
 11. **Today's rule card.** Before the shift, a judge handwrites a rule on paper ("nobody
