@@ -890,8 +890,9 @@ function drawNotice(g, w, h, { style, title, lines, picture, compact }, [x, y, n
 }
 
 // The rule card's place (SPEC stretch 11): a pinned label over an empty patch.
+// It ends above the JOKE note (NOTE_SPOTS, top at 0.68), which covered its foot.
 function drawRuleSpot(g, w, h) {
-  const [x, y, width, height] = [w * 0.75, h * 0.08, w * 0.22, h * 0.6];
+  const [x, y, width, height] = [w * 0.75, h * 0.08, w * 0.22, h * 0.54];
   g.strokeStyle = '#6b4f33'; g.lineWidth = h * 0.006; g.setLineDash([h * 0.03, h * 0.02]);
   g.strokeRect(x, y, width, height);
   g.setLineDash([]);
