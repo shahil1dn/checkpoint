@@ -141,7 +141,9 @@ const normalShader = (mask) => new THREE.ShaderMaterial({
 
 export function createEngine(container) {
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  // 1.5, not 2: on a Retina Mac that draws 44% fewer pixels for the same crisp ink
+  // lines (the line pass reads this ratio), and a frame costs about a third less.
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
   renderer.setSize(innerWidth, innerHeight);
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFShadowMap;
