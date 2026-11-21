@@ -163,15 +163,27 @@ async function main() {
     const near = (a, b) => Boolean(a && b) && Math.hypot(a[0] - b[0], a[1] - b[1]) <= 100;
     const ask = (text) => page.evaluate(`document.getElementById('question').value = ${JSON.stringify(text)}; document.getElementById('ask-form').requestSubmit(); true`);
 
-    const stampAt = await page.evaluate(DESK_SPOT('Stamp: let them through'));
-    if (!stampAt) throw new Error('could not find the THROUGH stamp on the desk');
-    const awayAt = await page.evaluate(DESK_SPOT('Stamp: turn them away'));
-    if (!awayAt) throw new Error('could not find the TURNED AWAY stamp on the desk');
+    // The main menu is on the terminal: START SHIFT is clicked on the screen, the
+    // view turns back to the window, and only then does the shift begin.
     const press = async ([x, y]) => {
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
         await page.send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
       }
     };
+    const menuAt = await page.evaluate(DESK_SPOT('Start shift', { top: 0.05, bottom: 0.95 }));
+    const before = await page.evaluate(`({ controls: !document.getElementById('controls').hidden, card: !document.getElementById('start-screen').hidden, clock: document.getElementById('clock').textContent })`);
+    check('the main menu is on the terminal: START SHIFT can be found there, the HTML card is hidden and no shift is running', Boolean(menuAt) && !before.controls && !before.card && before.clock === '', { menuAt, ...before });
+    if (!menuAt) throw new Error('could not find START SHIFT on the terminal');
+    await press(menuAt);
+    const shiftStarted = await waitFor(`!document.getElementById('controls').hidden && document.getElementById('clock').textContent.startsWith('Shift')`, 5000);
+    check('clicking START SHIFT on the terminal starts the shift', shiftStarted, await page.evaluate(`document.getElementById('clock').textContent`));
+    if (!shiftStarted) throw new Error('the shift did not start from the terminal menu');
+    await new Promise((resolve) => setTimeout(resolve, 1500));   // the camera settles on the window
+
+    const stampAt = await page.evaluate(DESK_SPOT('Stamp: let them through'));
+    if (!stampAt) throw new Error('could not find the THROUGH stamp on the desk');
+    const awayAt = await page.evaluate(DESK_SPOT('Stamp: turn them away'));
+    if (!awayAt) throw new Error('could not find the TURNED AWAY stamp on the desk');
     const OFFER_OUT = `!document.getElementById('take-bribe').hidden`;
     const desk = () => page.evaluate(`({
       name: document.getElementById('traveller-name').textContent,
@@ -194,8 +206,6 @@ async function main() {
       return caught;
     })()`);
     check('hidden parts of the desk never catch the pointer', aboveSlip === 0, { transcriptAboveTheSlip: aboveSlip });
-    await page.evaluate(`document.getElementById('start').click(); true`);
-    await waitFor(`!document.getElementById('controls').hidden`);
 
     // ADR-12: open the case folder, click a line, and the records terminal looks it
     // up (offline, by the code's own search). Facing the window, a hint says
