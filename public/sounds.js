@@ -171,7 +171,9 @@ export function createSounds({
     button = doc.createElement('button');
     button.id = 'mute';
     button.type = 'button';
-    button.style.cssText = 'background: var(--ink); color: #ffffff; margin-left: auto;';
+    // Drawn as a status chip like its neighbour, not a button: the booth has no
+    // button row (Shahil 13:40). M does the same from the keyboard.
+    button.style.cssText = 'margin-left: auto; min-height: 0; color: var(--muted); font: 13px/1.4 system-ui, sans-serif;';
     button.addEventListener('click', () => setMuted(!muted));
     bar.append(button);
     drawButton();
