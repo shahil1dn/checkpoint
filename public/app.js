@@ -399,6 +399,7 @@ function render() {
   const playing = started && !over;
   renderActivity();
   $('report').hidden = !started || !over;
+  $('status').hidden = !started;   // the connection badge waits for the shift
   $('shift-info').hidden = !playing;
   $('controls').hidden = !playing;
   $('look').hidden = !playing || !booth;
@@ -504,5 +505,7 @@ async function checkLive() {
 createSounds().follow(booth);
 if (booth) renderLook(booth.view());
 render();
+// Enter (or Space) on the focused button starts the shift.
+$('start').focus();
 checkLive();
 requestAnimationFrame(frame);

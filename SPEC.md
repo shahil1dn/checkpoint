@@ -23,7 +23,7 @@ A new browser game in this repo, built on the shape of `~/Documents/projects/fan
 You're the inspector at a checkpoint. Travellers step up one at a time with papers on your desk.
 You question them **out loud**; they answer **out loud**, each in their own voice, and they
 flatter you and dodge. When you're sure, you stamp them **through** or **turned
-away**; reach for turned away and they try one last bribe first (ADR-12). At the end of the
+away**; reach for turned away and they try one last bribe first (ADR-13). At the end of the
 shift the game reveals who was lying and scores you. The first
 traveller is a Mistral superfan, so a room of Mistral judges can catch him out with what they know.
 
@@ -117,6 +117,35 @@ and there's no walking.
 - **Right: funny stuff and paperwork:** in-world joke props and a pile of forms (a staff notice
   board, a "rival lab" bulletin, a sardine-tin pen pot, a mug). Flavour only: nothing on it
   gives away who's lying. Stretch item 11's rule card would be pinned here.
+
+**The records terminal (Shahil, 15:05).** The left computer becomes a working records terminal.
+The demo is now 5 minutes, and this is what makes it intriguing: the AI reads at machine speed,
+but only the player hears the lie.
+- **Why an AI and not checking by hand:** the border's records are far too big and messy to
+  read during a 5-question interview. That means ship passenger lists for today's arrivals, a
+  penguin registry, a company register and a long rulebook, with misspelled names ("M.
+  Tokkens"), mixed date formats and gaps. The terminal finds near matches, follows them across
+  lists, and quotes the rulebook.
+- **It can only check what the player has gathered.** No free typing. The player clicks a line
+  on the papers ("Ticket sponsored by: Frontier Horizon Labs") or on the transcript ("I came on
+  the 10:16 from Cape Town") to look it up. The server refuses any lookup that isn't a real
+  line from that traveller's papers or conversation. Asking the traveller the right questions is
+  how the player gets more worth checking.
+- **3 lookups per traveller**, counted by the code. Spending them is the player's strategy.
+- **It reports records, never a verdict.** It gets the records and the line, and never the
+  traveller's prompt, truth or secret (ADR-12). It never hears the interview unless the player
+  sends a line, and it doesn't say who's lying; the same verdict-word filter as the scratchpad
+  applies. Things only the player can catch: what was said against what the records show, the
+  voice and face, whether the story makes sense, and anything never looked up.
+- **The records are written in the code, per traveller,** before the shift (in their own
+  files, not the traveller files). A liar's records have gaps his story has to cover. An honest
+  traveller's records are messy but consistent, so a typo never proves anything. Plus a few
+  hundred background entries, so the search is real.
+- **Harder papers:** each traveller gets a second document (a ship ticket) with details to
+  check against the records.
+- **On screen:** the terminal shows its steps as it works ("searching passenger lists… 3 near
+  matches… reading rulebook §4"), then the answer quoting the records. This is the place for
+  Large 4: a pause is fine at a terminal, and it shows the judges Mistral's tool use.
 
 **Stretch, only once 1 to 10 work end to end:**
 

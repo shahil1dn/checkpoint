@@ -264,7 +264,7 @@ async function notes() {
 }
 
 // ---- Section: bribes, pass rules first ----
-// Since Shahil's 14:34 call (ADR-12) the game makes the only bribe offer, when
+// Since Shahil's 14:34 call (ADR-13) the game makes the only bribe offer, when
 // the inspector reaches for TURNED AWAY; while questioned, nobody offers one.
 // B1: no reply from the model carries a bribe field (the schema no longer has one).
 // B2: a judge reads each reply with its question and says whether it offers the

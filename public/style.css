@@ -1,7 +1,7 @@
 /* The 3D booth fills the window; overlays sit above it and keep the desk clickable. */
 :root { --ink: #1f2126; --muted: #555b66; --paper: #ffffff; --accent: #e8743b; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #3e4b5e; }
-body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
+body { font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink); }
 #booth canvas { position: fixed; inset: 0; z-index: 0; display: block; }
 [hidden] { display: none !important; }
 
@@ -24,45 +24,47 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
 .card .small { color: var(--muted); font-size: 14px; }
 .card table { width: 100%; border-collapse: collapse; margin: 8px 0; }
 .card th, .card td { text-align: left; vertical-align: top; padding: 6px 8px; border-bottom: 1px solid #e3e5e8; }
+/* The start card and the end report are paper like the travel papers on the
+   desk (booth.js drawPapers): flat #f4efe2, one inset #c9bfa8 rule, typewriter
+   type. They grow with the screen so they read on a projector. */
 .border-form {
-  --form-ink: #293c4b;
-  width: min(590px, calc(100% - 32px));
-  padding: 28px 36px 30px 50px;
-  border: 2px solid #9c907b;
+  --form-ink: #1f2126;
+  --typewriter: "American Typewriter", "Courier New", monospace;
+  /* 1 at 1280 to 1440 wide, about 1.33 on a 1920 x 1080 projector; the height
+     limit keeps the traveller's face clear of the start card on shorter screens. */
+  zoom: clamp(1, min(100vw / 1440px, 100vh / 810px), 1.6);
+  width: min(560px, calc(100% - 32px));
+  padding: 34px 40px 30px;
   border-radius: 2px;
-  background:
-    linear-gradient(90deg, transparent 31px, #cda39a 32px, transparent 33px),
-    linear-gradient(135deg, #fbf8ef, #eee6d4);
-  box-shadow: 0 13px 0 -7px #d3c7b0, 0 22px 42px #1f212655;
+  background: #f4efe2;
+  box-shadow: 0 14px 36px #1f212666;
+  font-family: var(--typewriter);
+  color: var(--form-ink);
 }
-.border-form::before {
-  content: ''; position: absolute; left: 11px; top: 78px;
-  width: 12px; height: 12px; border-radius: 50%;
-  background: #9c907b; box-shadow: 0 112px #9c907b, 0 224px #9c907b;
-}
+.border-form::before { content: ''; position: absolute; inset: 12px 14px; border: 2px solid #c9bfa8; pointer-events: none; }
 .form-masthead {
-  display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 16px;
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 16px;
   padding-bottom: 10px; border-bottom: 2px solid var(--ink);
-  font: bold 12px/1.4 "Cascadia Mono", "Courier New", monospace;
-  letter-spacing: 0.04em; text-transform: uppercase;
+  font: bold 14px/1.4 var(--typewriter); letter-spacing: 0.04em; text-transform: uppercase;
 }
-.form-kicker { margin: 20px 0 5px; color: #8a4633; font: bold 14px/1.4 "Cascadia Mono", "Courier New", monospace; letter-spacing: 0.07em; text-transform: uppercase; }
-.border-form h1, .border-form h2 { margin: 0 0 14px; font-family: Georgia, "Palatino Linotype", serif; letter-spacing: -0.025em; line-height: 1.1; color: var(--form-ink); }
-.border-form h1 { font-size: clamp(36px, 5vw, 48px); }
+.form-kicker { margin: 20px 0 5px; color: #6b6457; font: bold 14px/1.4 var(--typewriter); letter-spacing: 0.06em; text-transform: uppercase; }
+.border-form h1, .border-form h2 { margin: 0 0 14px; font-family: var(--typewriter); line-height: 1.1; color: var(--form-ink); }
 .border-form h2 { font-size: clamp(30px, 4vw, 40px); }
-.form-lead { max-width: 47ch; margin: 0 0 18px; font: 18px/1.55 system-ui, sans-serif; }
-.procedure { margin: 0 0 15px; padding: 10px 0; list-style: none; counter-reset: step; border-top: 1px solid #a99f8c; border-bottom: 1px solid #a99f8c; }
-.procedure li { display: flex; gap: 12px; align-items: baseline; padding: 6px 0; font-size: 16px; }
-.procedure li::before { counter-increment: step; content: counter(step, decimal-leading-zero); color: #8a4633; font: bold 14px "Cascadia Mono", "Courier New", monospace; }
-.border-form .small { margin: 0 0 22px; color: #4d4b47; font-size: 15px; line-height: 1.5; }
 .form-footer { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; padding-top: 15px; border-top: 2px solid var(--ink); }
-.form-footer > span { color: #645d52; font: bold 12px/1.4 "Cascadia Mono", "Courier New", monospace; letter-spacing: 0.04em; text-transform: uppercase; }
-.border-form button { min-height: 44px; padding: 8px 12px; font-size: 15px; background: var(--form-ink); border-bottom: 3px solid #15232b; }
+.border-form button { min-height: 44px; padding: 8px 14px; font: bold 16px var(--typewriter); background: var(--form-ink); }
+
+/* The start card sits low, so the traveller's face shows above it. */
+#start-screen { top: auto; bottom: 28px; transform: translateX(-50%); text-align: center; }
+#start-screen h1 { margin: 0 0 12px; font-size: 46px; font-weight: bold; }
+.form-lead { margin: 0 auto 18px; max-width: 40ch; font-size: 19px; line-height: 1.5; }
+.procedure { margin: 0 0 22px; padding: 10px 0; list-style: none; border-top: 1px solid #c9bfa8; border-bottom: 1px solid #c9bfa8; }
+.procedure li { padding: 5px 0; font-size: 17px; line-height: 1.4; }
+#start { display: block; width: 100%; min-height: 56px; font-size: 21px; letter-spacing: 0.08em; text-transform: uppercase; color: #ffffff; background: #3f6e8c; border: 3px solid var(--ink); }
 #report { width: min(820px, calc(100% - 32px)); }
 #end-reason { margin: 0 0 18px; color: #4d4b47; font-size: 16px; }
 .report-table-wrap { background: #fbf8ef; border: 1px solid #b9ac96; }
 #report table { margin: 0; table-layout: fixed; }
-#report th { color: #5f594f; font: bold 13px/1.4 "Cascadia Mono", "Courier New", monospace; text-transform: uppercase; letter-spacing: 0.02em; border-bottom: 2px solid var(--ink); }
+#report th { color: #5f594f; font: bold 13px/1.4 var(--typewriter); text-transform: uppercase; letter-spacing: 0.02em; border-bottom: 2px solid var(--ink); }
 #report td { padding: 11px 8px; border-bottom: 1px solid #cfc5b3; overflow-wrap: anywhere; font-size: 15px; line-height: 1.5; }
 #report th:nth-child(1), #report td:nth-child(1) { width: 16%; font-weight: 700; }
 #report th:nth-child(2), #report td:nth-child(2) { width: 16%; }
@@ -71,17 +73,16 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
 #report tr:last-child td { border-bottom: 0; }
 #report tr[data-result="right"] td:last-child { color: #276d42; font-weight: 800; }
 #report tr[data-result="wrong"] td:last-child { color: #9a332c; font-weight: 800; }
-#score { margin: 0; font: bold 18px/1.3 Georgia, serif; color: var(--form-ink); }
+#score { margin: 0; font: bold 18px/1.3 var(--typewriter); color: var(--form-ink); }
 @media (max-width: 640px) {
-  .border-form { padding: 22px 20px 24px 38px; }
-  .border-form::before { left: 8px; }
+  .border-form { padding: 26px 22px 22px; }
   #report thead { display: none; }
   #report table, #report tbody, #report tr, #report td { display: block; width: auto; }
   #report td:nth-child(n) { width: auto; }
   #report tr { padding: 12px; border-bottom: 1px solid #b9ac96; }
   #report tr:last-child { border-bottom: 0; }
   #report td { display: grid; grid-template-columns: 105px minmax(0, 1fr); gap: 8px; padding: 5px 0; border: 0; }
-  #report td::before { color: #686154; font: bold 11px/1.4 "Courier New", monospace; text-transform: uppercase; }
+  #report td::before { color: #686154; font: bold 11px/1.4 var(--typewriter); text-transform: uppercase; }
   #report td:nth-child(1)::before { content: 'Traveller'; }
   #report td:nth-child(2)::before { content: 'Your stamp'; }
   #report td:nth-child(3)::before { content: 'The truth'; }
@@ -145,12 +146,12 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
 
 button {
   min-height: 36px; padding: 6px 14px;
-  font: 600 15px/1 system-ui, sans-serif;
+  font: 600 15px/1 system-ui, -apple-system, "Segoe UI", sans-serif;
   color: #ffffff; background: var(--ink); border: 0; border-radius: 4px; cursor: pointer;
 }
 button:disabled { background: #8a8f98; cursor: default; }
 button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
-#question { min-height: 36px; box-sizing: border-box; padding: 4px 10px; font: 15px system-ui, sans-serif; width: min(320px, 50vw); border: 1px solid #c4c8cf; border-radius: 4px; }
+#question { min-height: 36px; box-sizing: border-box; padding: 4px 10px; font: 15px system-ui, -apple-system, "Segoe UI", sans-serif; width: min(320px, 50vw); border: 1px solid #c4c8cf; border-radius: 4px; }
 
 /* The inspector's record on the filed report. */
 #bribes { margin: 12px 0 0; font-weight: 600; }
