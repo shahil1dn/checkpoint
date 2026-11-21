@@ -107,6 +107,9 @@ async function main() {
     let seen;
     const ask = (text) => page.evaluate(`document.getElementById('question').value = ${JSON.stringify(text)}; document.getElementById('ask-form').requestSubmit(); true`);
 
+    // Found before the shift starts: the scan is slow, and the sped-up clock would run out meanwhile.
+    const stampAt = await page.evaluate(DESK_SPOT('Stamp: let them through'));
+    if (!stampAt) throw new Error('could not find the THROUGH stamp on the desk');
     await page.evaluate(`document.getElementById('start').click(); true`);
     await sleep(300);
     // Shahil 13:40: no button row in the booth; you click the desk, and a typed question goes with Enter.
@@ -139,8 +142,6 @@ async function main() {
 
     // SPEC item 8: stamping is allowed at any time, even before the first question.
     const first = await page.evaluate(`document.getElementById('traveller-name').textContent`);
-    const stampAt = await page.evaluate(DESK_SPOT('Stamp: let them through'));
-    if (!stampAt) throw new Error('could not find the THROUGH stamp on the desk');
     // Shahil 13:40: one message at a time. The hover label sits by the pointer,
     // and the status line keeps its own fixed place at the bottom centre.
     const placed = await page.evaluate(`(() => {

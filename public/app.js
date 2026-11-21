@@ -34,6 +34,7 @@ const HINTS = {
 const TOOL_TIPS = {
   papers: 'Papers: click to read',
   notebook: 'Scratchpad: click to open',
+  transcript: 'Transcript: click to read it all',
   mic: 'Microphone: hold to ask (or hold Space)',
   'stamp-through': 'Stamp: let them through',
   'stamp-away': 'Stamp: turn them away',
@@ -239,8 +240,20 @@ function renderFallbackPanel(traveller) {
   }));
 }
 
-// Subtitles: the last question and the last answer. No mood label: mood
-// comes through the voice and the face, never as text.
+// The conversation prints on the transcript slip on the desk. The caption
+// lines keep the last question and answer as text: on screen only without
+// 3D, and always there for screen readers. No mood label: mood comes through
+// the voice and the face, never as text.
+function renderTranscript(traveller) {
+  const { history } = shift.cases[traveller.id];
+  const lines = history.flatMap((turn) => [
+    { who: 'You', text: turn.question },
+    { who: traveller.name, text: `${turn.reply}${turn.cracked ? ' [He cracked!]' : ''}` },
+  ]);
+  if (shift.pending) lines.push({ who: 'You', text: shift.pending.question }, { who: traveller.name, text: '…' });
+  booth?.setTranscript(traveller.name, lines);
+}
+
 function renderCaptions(traveller) {
   const { history } = shift.cases[traveller.id];
   const last = history.at(-1);
@@ -255,6 +268,7 @@ function renderCaptions(traveller) {
     $('subtitle').textContent = '';
   }
   $('captions').hidden = !$('you-said').textContent;
+  $('captions').classList.toggle('screen-reader-only', Boolean(booth));
 }
 
 function renderReport() {
@@ -312,6 +326,7 @@ function render() {
   booth?.setNotes(traveller.name, shift.cases[traveller.id].notes);
   if (!booth) renderFallbackPanel(traveller);
   renderCaptions(traveller);
+  renderTranscript(traveller);
   $('talk').disabled = Boolean(shift.pending || shift.hearing) || left === 0 || !micReady();
 }
 

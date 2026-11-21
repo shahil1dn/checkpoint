@@ -155,13 +155,13 @@ function buildRoom(group) {
   group.traverse((o) => { o.castShadow = false; });
 }
 
-// A flat thing that lies on the desk and can be lifted up to the eyes.
-// Its face is local +z, so lying down is a quarter turn about x.
-function liftable(group, name, at, yaw, deskScale) {
+// A flat thing on the desk that can be lifted up to the eyes. Its face is
+// local +z, so lying down is a quarter turn back about x (tilt -π/2).
+function liftable(group, name, at, yaw, deskScale, tilt = -Math.PI / 2) {
   const holder = new THREE.Group();
   holder.userData.tool = name;
   group.add(holder);
-  const desk = { position: at.clone(), quaternion: new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, yaw, 'XYZ')), scale: deskScale };
+  const desk = { position: at.clone(), quaternion: new THREE.Quaternion().setFromEuler(new THREE.Euler(tilt, 0, yaw, 'XYZ')), scale: deskScale };
   return { name, holder, desk, t: 0 };
 }
 
@@ -192,6 +192,80 @@ function buildNotebook(group) {
   item.page = page.mesh;
   item.redraw = page.redraw;
   return item;
+}
+
+// ---------- the transcript (Shahil 13:40) ----------
+// The conversation prints onto a slip rising out of a little printer at the
+// front of the desk: newest line at the bottom by the printer, older lines
+// pushed up and off the top. The slip leans back only part way, so its newest
+// lines read from the chair; clicking lifts a full page of the conversation.
+const SLIP = { width: 0.86, height: 0.22, tilt: -0.9, front: 1.4 };
+const SAID_BY_YOU = '#6b6457';
+
+// Every line of the conversation as printed rows: [text, colour, bold].
+function transcriptRows(g, name, lines, maxWidth, size) {
+  const rows = [];
+  g.font = `bold ${size}px ${TYPEWRITER}`;
+  rows.push([`TRANSCRIPT: ${name ?? ''}`, SAID_BY_YOU, true]);
+  g.font = `${size}px ${TYPEWRITER}`;
+  for (const { who, text } of lines) {
+    const colour = who === 'You' ? SAID_BY_YOU : INK;
+    wrap(g, `${who}: ${text}`, maxWidth).forEach((row, i) => rows.push([i ? `   ${row}` : row, colour, false]));
+  }
+  return rows;
+}
+
+function printRow(g, [text, colour, bold], x, y, size) {
+  g.fillStyle = colour; g.font = `${bold ? 'bold ' : ''}${size}px ${TYPEWRITER}`;
+  g.fillText(text, x, y);
+}
+
+function drawSlip(g, w, h, name, lines = []) {
+  g.fillStyle = COLORS.paper; g.fillRect(0, 0, w, h);
+  const size = h * 0.11;
+  const step = size * 1.28;
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  const rows = transcriptRows(g, name, lines, w * 0.92, size);
+  let y = h - step * 0.75;   // clear of the printer's lip
+  for (const row of rows.reverse()) {
+    if (y < size) break;
+    printRow(g, row, w * 0.04, y, size);
+    y -= step;
+  }
+}
+
+// Lifted: the whole conversation on a page, oldest at the top. If a long
+// shift overflows the page, the oldest lines give way.
+function drawTranscriptPage(g, w, h, name, lines = []) {
+  g.fillStyle = COLORS.paper; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#c9bfa8'; g.lineWidth = w * 0.006; g.strokeRect(w * 0.04, h * 0.03, w * 0.92, h * 0.94);
+  const size = w * 0.042;
+  const step = size * 1.3;
+  g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+  const rows = transcriptRows(g, name, lines, w * 0.82, size);
+  const fit = Math.floor((h * 0.9) / step);
+  const shown = rows.length > fit ? [rows[0], ['   …', SAID_BY_YOU, false], ...rows.slice(rows.length - fit + 2)] : rows;
+  shown.forEach((row, i) => printRow(g, row, w * 0.09, h * 0.09 + i * step, size));
+}
+
+function buildTranscript(group) {
+  const bottom = new THREE.Vector3(0, SILL + 0.03, SLIP.front);
+  const up = new THREE.Vector3(0, Math.cos(SLIP.tilt), Math.sin(SLIP.tilt));
+  const item = liftable(group, 'transcript', bottom.clone().addScaledVector(up, SLIP.height / 2), 0, 1, SLIP.tilt);
+  const slip = textPlane(SLIP.width, SLIP.height, drawSlip, 2400);
+  item.holder.add(slip.mesh);
+  const page = textPlane(0.42, 0.56, drawTranscriptPage, 2048);
+  page.mesh.visible = false;
+  item.holder.add(page.mesh);
+  Object.assign(item, { slip: slip.mesh, page: page.mesh, redraw: (name, lines) => { slip.redraw(name, lines); page.redraw(name, lines); } });
+  item.redraw('', []);
+  // The printer it feeds out of; clicking the printer lifts the slip too.
+  const printer = new THREE.Group();
+  printer.userData.tool = 'transcript';
+  group.add(printer);
+  // A thin part (ART-DIRECTION section 1): no ink hull, which drew a line across the slip.
+  part(box(SLIP.width + 0.03, 0.03, 0.05, 0.01), mat(COLORS.micBody), printer, [0, SILL + 0.015, SLIP.front + 0.02], undefined, undefined, false);
+  return { item, printer };
 }
 
 function buildMic(group) {
@@ -469,12 +543,13 @@ export function createBooth(container, handlers = {}) {
 
   const papers = buildPapers(group);
   const notebook = buildNotebook(group);
-  const liftables = [papers, notebook];
+  const { item: transcript, printer } = buildTranscript(group);
+  const liftables = [papers, notebook, transcript];
   const mic = buildMic(group);
   const computer = buildComputer(group);
   buildRightWall(group);
   const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };
-  const tools = [papers.holder, notebook.holder, mic.holder, stamps.through.holder, stamps.away.holder];
+  const tools = [papers.holder, notebook.holder, transcript.holder, printer, mic.holder, stamps.through.holder, stamps.away.holder];
 
   let lifted = null;
   let traveller = null;
@@ -526,7 +601,7 @@ export function createBooth(container, handlers = {}) {
       return;
     }
     const tool = toolAt(event);
-    if (tool === 'papers' || tool === 'notebook') booth.toggle(tool);
+    if (tool === 'papers' || tool === 'notebook' || tool === 'transcript') booth.toggle(tool);
     else if (tool?.startsWith('stamp-')) handlers.onStampClick?.(tool.slice(6));
     else if (lifted) booth.putDown();
   });
@@ -566,6 +641,8 @@ export function createBooth(container, handlers = {}) {
     }
     notebook.cover.visible = notebook.t < 0.5;
     notebook.page.visible = notebook.t >= 0.5;
+    transcript.slip.visible = transcript.t < 0.5;
+    transcript.page.visible = transcript.t >= 0.5;
     for (const [verdict, s] of Object.entries(stamps)) {
       if (!stamping) s.holder.position.y = s.home.y + (hovered === `stamp-${verdict}` ? 0.03 : 0);
     }
@@ -670,6 +747,8 @@ export function createBooth(container, handlers = {}) {
     setRecording(on) { mic.light.color.set(on ? COLORS.live : COLORS.off); },
     setPapers(paperFields, stamp = null) { papers.redraw(paperFields, stamp); },
     setNotes(name, notes) { notebook.redraw(name, notes); },
+    // lines: [{ who, text }], oldest first; 'You' marks the inspector's own words.
+    setTranscript(name, lines) { transcript.redraw(name, lines); },
     setComputer(lines) { computer.redraw(lines); },
     toggle(name) { lifted = lifted === name ? null : name; },
     // Turns one view left (-1) or right (+1); papers in hand go back on the desk.

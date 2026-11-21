@@ -37,6 +37,8 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
 #you-said { background: var(--paper); color: var(--muted); font-size: 16px; }
 #subtitle { background: var(--ink); color: #ffffff; font-size: 22px; line-height: 1.35; }
 #subtitle:empty { display: none; }
+/* In the 3D booth the conversation is on the paper transcript; the text stays for screen readers. */
+.screen-reader-only { position: fixed !important; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
 #controls {
   position: fixed; z-index: 2; left: 12px; right: 12px; bottom: 12px;
