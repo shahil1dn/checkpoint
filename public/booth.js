@@ -522,14 +522,20 @@ function buildKeyboard(group, at) {
 function buildMouse(group, at) {
   const mouse = new THREE.Group();
   mouse.position.set(...at);
+  mouse.rotation.y = -0.08;
   group.add(mouse);
-  part(box(0.145, 0.038, 0.09, 0.03), mat('#303a46'), mouse, [0, 0.02, 0], undefined, undefined, false);
-  for (const z of [-0.023, 0.023]) {
-    part(box(0.068, 0.006, 0.04, 0.012), mat('#80929c'), mouse, [0.025, 0.043, z], undefined, undefined, false);
+  part(box(0.15, 0.012, 0.1, 0.035), mat('#252d37'), mouse, [0, 0.008, 0], undefined, undefined, false);
+  part(ball(1, 24, 16), mat('#657683'), mouse, [0, 0.027, 0], undefined, [0.08, 0.031, 0.052], false);
+  for (const z of [-0.02, 0.02]) {
+    part(box(0.058, 0.005, 0.035, 0.012), mat('#91a1aa'), mouse, [0.028, 0.055, z], undefined, undefined, false);
   }
-  part(new THREE.CylinderGeometry(0.008, 0.008, 0.016, 10), mat(BRASS), mouse, [0.033, 0.05, 0], [Math.PI / 2, 0, 0], undefined, false);
+  part(box(0.055, 0.002, 0.003, 0.001), mat('#28333d'), mouse, [0.026, 0.059, 0], undefined, undefined, false);
+  part(new THREE.CylinderGeometry(0.007, 0.007, 0.014, 12), mat('#26313b'), mouse, [0.043, 0.064, 0], [Math.PI / 2, 0, 0], undefined, false);
+  for (const z of [-0.05, 0.05]) {
+    part(box(0.04, 0.009, 0.004, 0.002), mat('#303b46'), mouse, [-0.015, 0.027, z], undefined, undefined, false);
+  }
   const cord = new THREE.CatmullRomCurve3([
-    new THREE.Vector3(-0.068, 0.025, 0),
+    new THREE.Vector3(-0.078, 0.026, 0),
     new THREE.Vector3(-0.12, 0.014, 0.015),
     new THREE.Vector3(-0.19, 0.014, -0.04),
   ]);
@@ -548,7 +554,7 @@ function buildComputer(group, wood) {
   screen.mesh.rotation.y = Math.PI / 2;
   group.add(screen.mesh);
   buildKeyboard(group, [wallX + 0.48, 0.995, z]);
-  buildMouse(group, [wallX + 0.49, 0.995, z + 0.48]);
+  buildMouse(group, [wallX + 0.49, 0.995, z - 0.48]);
   const note = textPlane(0.13, 0.13, (g, w, h) => {
     g.fillStyle = '#f2d96b'; g.fillRect(0, 0, w, h);
     g.fillStyle = INK; g.font = `${h * 0.17}px ${HANDWRITING}`; g.textAlign = 'center'; g.textBaseline = 'middle';
