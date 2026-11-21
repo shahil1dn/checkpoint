@@ -110,6 +110,20 @@ async function main() {
     // Found before the shift starts: the scan is slow, and the sped-up clock would run out meanwhile.
     const stampAt = await page.evaluate(DESK_SPOT('Stamp: let them through'));
     if (!stampAt) throw new Error('could not find the THROUGH stamp on the desk');
+    // The transcript's full page is hidden while the slip is down; it must not
+    // catch the pointer above the slip, where the papers, mic and stamps are.
+    const aboveSlip = await page.evaluate(`(() => {
+      const canvas = document.querySelector('#booth canvas');
+      const tip = document.getElementById('tool-tip');
+      let caught = 0;
+      for (let y = innerHeight * 0.45; y < innerHeight * 0.68; y += 8) for (let x = 0; x < innerWidth; x += 8) {
+        canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+        if (tip.textContent.startsWith('Transcript')) caught += 1;
+      }
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 0, bubbles: true }));
+      return caught;
+    })()`);
+    check('hidden parts of the desk never catch the pointer', aboveSlip === 0, { transcriptAboveTheSlip: aboveSlip });
     await page.evaluate(`document.getElementById('start').click(); true`);
     await sleep(300);
     // Shahil 13:40: no button row in the booth; you click the desk, and a typed question goes with Enter.
