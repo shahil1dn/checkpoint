@@ -1,7 +1,7 @@
 // Checkpoint game rules. Pure: no DOM, no network, no clock reads.
 // The page and the server both import this file, so a limit is enforced the
 // same way in both places.
-import { getTraveller, TRAVELLER_IDS } from './travellers/index.js';
+import { getTraveller, QUEUE } from './travellers/index.js';
 
 export const MAX_QUESTION_CHARS = 300;
 export const MAX_QUESTIONS = 5;
@@ -123,8 +123,12 @@ export function checkNotes(raw, papers = null) {
 // Each function takes a shift and returns a new one, so the page can't
 // half-apply a rule.
 
-export const SHIFT_MS = 2 * 60 * 1000;
-export const DEMO_QUEUE = TRAVELLER_IDS;   // shift order: src/travellers/index.js
+// Each traveller has his own two minutes, so a three-traveller shift is six.
+// usedMs counts along the whole shift, and traveller n owns the slice from
+// n × TRAVELLER_MS to (n + 1) × TRAVELLER_MS. Stamping early skips the rest of
+// his slice, so nobody's spare time is handed on and nobody's overrun eats the next.
+export const TRAVELLER_MS = 2 * 60 * 1000;
+export const DEMO_QUEUE = QUEUE;   // shift order: src/travellers/index.js
 export const VERDICTS = ['through', 'away'];
 
 export function newShift(queue = DEMO_QUEUE, { firstRequestId = 1 } = {}) {
@@ -137,6 +141,7 @@ export function newShift(queue = DEMO_QUEUE, { firstRequestId = 1 } = {}) {
     pending: null,
     lookup: null,
     hearing: false,
+    speaking: false,
     pleading: false,
     nextRequestId: firstRequestId,
     // bribe: null until he makes his offer, then 'offered', 'taken' or 'refused'.
@@ -150,7 +155,11 @@ export const restartShift = (shift) => newShift(shift.queue, { firstRequestId: s
 
 export const currentTravellerId = (shift) => (shift.phase === 'playing' ? shift.queue[shift.current] : null);
 export const questionsLeft = (shift, id) => MAX_QUESTIONS - shift.cases[id].history.length;
-export const timeLeftMs = (shift) => SHIFT_MS - shift.usedMs;
+const sliceStart = (shift) => shift.current * TRAVELLER_MS;
+const sliceUsedMs = (shift) => Math.max(shift.usedMs, sliceStart(shift));
+// What the shift clock shows: his time left plus two minutes for everyone after him.
+export const timeLeftMs = (shift) => Math.max(0, shift.queue.length * TRAVELLER_MS - sliceUsedMs(shift));
+export const travellerTimeLeftMs = (shift) => (shift.phase === 'playing' ? sliceStart(shift) + TRAVELLER_MS - sliceUsedMs(shift) : 0);
 
 // Returns { shift, request } to send to the server, or { shift, error }.
 export function startQuestion(shift, text) {
@@ -161,6 +170,7 @@ export function startQuestion(shift, text) {
   if (!checked.ok) return { shift, error: checked.reason };
   const travellerId = currentTravellerId(shift);
   if (questionsLeft(shift, travellerId) <= 0) return { shift, error: 'outOfQuestions' };
+  if (travellerTimeLeftMs(shift) <= 0) return { shift, error: 'outOfTime' };
   const pending = { id: shift.nextRequestId, travellerId, question: checked.question };
   const record = shift.cases[travellerId];
   const request = { ...pending, history: record.history.map(({ question, reply, mood, cracked }) => ({ question, reply, mood, cracked })), notes: record.notes };
@@ -269,7 +279,7 @@ export function checkLookupAnswer(raw) {
 
 // What can sit on the window ledge, and the words the hints use for it.
 // public/booth.js draws each one: a new item needs a drawing there too.
-export const BRIBE_ITEMS = { croissant: 'croissant', cheese: 'wedge of cheese', sticker: 'sticker' };
+export const BRIBE_ITEMS = { croissant: 'croissant', cheese: 'wedge of cheese', sticker: 'sticker', card: 'business card', pie: 'fish pie' };
 
 // The offer on the ledge, until the inspector takes it or stamps.
 export function bribeOffer(shift) {
@@ -278,10 +288,11 @@ export function bribeOffer(shift) {
   return { travellerId, ...getTraveller(travellerId).bribe };
 }
 
-// True when this stamp would bring out his offer instead of landing.
+// True when this stamp would bring out his offer instead of landing. A
+// traveller without a bribe in his file has nothing to offer (Shahil 16:05).
 export function pleadsFirst(shift, verdict) {
   const travellerId = currentTravellerId(shift);
-  return verdict === 'away' && travellerId !== null && shift.cases[travellerId].bribe === null;
+  return verdict === 'away' && travellerId !== null && shift.cases[travellerId].bribe === null && Boolean(getTraveller(travellerId).bribe);
 }
 
 // Like a stamp, the offer drops a question still out. The clock waits while
@@ -303,19 +314,21 @@ export const setPleading = (shift, pleading) => ({ ...shift, pleading });
 
 // Speech-to-text is a Mistral call too, so the clock waits for it as well.
 export const setHearing = (shift, hearing) => ({ ...shift, hearing });
+// And for his answer being played aloud, so a long answer never costs time.
+export const setSpeaking = (shift, speaking) => ({ ...shift, speaking });
 
 // The clock stands still while a question is out, so a slow connection
-// never costs the player time.
+// never costs the player time. When his two minutes are up the clock stops
+// and the shift waits for a stamp: the questions are over, not the shift.
 export function tick(shift, dtMs) {
-  if (shift.phase !== 'playing' || shift.pending || shift.hearing || shift.pleading || !(dtMs > 0)) return shift;
-  const usedMs = Math.min(SHIFT_MS, shift.usedMs + dtMs);
-  if (usedMs < SHIFT_MS) return { ...shift, usedMs };
-  return { ...shift, usedMs, phase: 'over', endReason: 'time' };
+  if (shift.phase !== 'playing' || shift.pending || shift.hearing || shift.speaking || shift.pleading || !(dtMs > 0)) return shift;
+  const usedMs = Math.min(sliceStart(shift) + TRAVELLER_MS, sliceUsedMs(shift) + dtMs);
+  return { ...shift, usedMs };
 }
 
 // Allowed at any time, even mid-question: the pending reply is dropped.
-// The first TURNED AWAY on each traveller returns { shift, offer } instead:
-// he pleads, and the stamp hasn't landed.
+// The first TURNED AWAY on each traveller with a bribe returns { shift, offer }
+// instead: he pleads, and the stamp hasn't landed.
 export function stamp(shift, verdict) {
   if (shift.phase !== 'playing') return { shift, error: 'shiftOver' };
   if (!VERDICTS.includes(verdict)) return { shift, error: 'badVerdict' };

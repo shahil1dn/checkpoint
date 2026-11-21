@@ -17,6 +17,7 @@ import { getTraveller } from '../src/travellers/index.js';
 import { browserOnThisMachine } from './find-browser.js';
 
 const OUT_OF_QUESTIONS = 'No questions left. Stamp the papers.';
+const OUT_OF_TIME = 'Time is up for this traveller. Stamp the papers.';
 // The bribe steps follow whoever stands first and second in the queue, with
 // the lines and items from their own files, so a new traveller needs no edit here.
 const [FIRST, SECOND] = DEMO_QUEUE.map(getTraveller);
@@ -33,7 +34,7 @@ const SKIPPABLE_CLOCK = `(() => {
   const realFrame = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = (draw) => realFrame(() => draw(performance.now()));
 })();`;
-const SHIFT_AND_A_BIT_MS = 125000;
+const TRAVELLER_AND_A_BIT_MS = 125000;
 
 // Finds a desk object on screen: hover a grid over the lower screen and keep
 // the middle of the spots whose hover label starts with the given words.
@@ -235,10 +236,24 @@ async function main() {
     seen = await desk();
     check(`clicking the ${itemOf(FIRST)} pockets it and lets ${FIRST.name} through`, seen.name === SECOND.name && seen.hint.includes('THROUGH') && seen.hint.includes('record'), { bribeAt, ...seen });
 
-    await page.evaluate(`window.__skipClock(${SHIFT_AND_A_BIT_MS}); true`);
-    await waitFor(`!document.getElementById('report').hidden`, 10000);
+    // Each traveller has two minutes (Shahil 15:25): when they run out the
+    // questions stop, and the shift waits for a stamp instead of ending.
+    await page.evaluate(`window.__skipClock(${TRAVELLER_AND_A_BIT_MS}); true`);
+    await waitFor(`document.getElementById('hint').textContent === ${JSON.stringify(OUT_OF_TIME)}`, 10000);
+    seen = { ...(await screen()), clock: await page.evaluate(`document.getElementById('clock').textContent`) };
+    const outOfTimeClock = `Shift 2:00 · ${SECOND.name.split(' ')[0]} 0:00`;
+    check("his two minutes run out: the questions stop and the shift waits for a stamp", seen.hint === OUT_OF_TIME && !seen.over && seen.clock === outOfTimeClock, seen);
+    // Stamps everyone still waiting THROUGH, which never brings out a bribe.
+    const stampRestThrough = async () => {
+      for (let i = 0; i < DEMO_QUEUE.length && !(await screen()).over; i += 1) {
+        const name = await page.evaluate(`document.getElementById('traveller-name').textContent`);
+        await press(stampAt);
+        await waitFor(`!document.getElementById('report').hidden || document.getElementById('traveller-name').textContent !== ${JSON.stringify(name)}`, 10000);
+      }
+    };
+    await stampRestThrough();
     seen = await screen();
-    check('the shift clock runs out to the report', seen.over, seen);
+    check('stamping everyone left clears the queue to the report', seen.over, seen);
     // Scored by his stored truth alone: the bribe never changes right or wrong.
     const firstRow = await page.evaluate(`document.querySelector('#report-rows tr')?.textContent ?? ''`);
     check('the bribed traveller counts as let through, scored by his truth', firstRow.includes('Through (took a bribe)') && firstRow.endsWith(FIRST.truth.honest ? 'Right' : 'Wrong'), firstRow);
@@ -271,15 +286,14 @@ async function main() {
     check('stamping THROUGH before any question moves the queue on, with no bribe', seen.name !== first && !seen.offer, { first, ...seen });
 
     // The refuse run, on the second traveller: TURNED AWAY brings out his
-    // bribe; TURNED AWAY again lands. Then the clock is skipped to the report.
+    // bribe; TURNED AWAY again lands. Then everyone left goes THROUGH, to the report.
     await press(awayAt);
     await waitFor(OFFER_OUT, 5000);
     seen = await desk();
     check(`${SECOND.name} bribes too: TURNED AWAY brings out the ${itemOf(SECOND)}`, seen.name === SECOND.name && seen.offer && seen.hint.includes(`offers a ${itemOf(SECOND)}`), seen);
     await press(awayAt);
     await waitFor(`document.getElementById('traveller-name').textContent !== ${JSON.stringify(SECOND.name)} || !document.getElementById('report').hidden`, 10000);
-    await page.evaluate(`window.__skipClock(${SHIFT_AND_A_BIT_MS}); true`);
-    await waitFor(`!document.getElementById('report').hidden`, 10000);
+    await stampRestThrough();
     const refused = await page.evaluate(`({ over: !document.getElementById('report').hidden, row: document.querySelectorAll('#report-rows tr')[1]?.textContent ?? '', record: document.getElementById('bribes').textContent })`);
     check('TURNED AWAY again refuses it: the stamp lands and the record stays clean', refused.over && refused.row.includes('Turned away') && !refused.row.includes('bribe') && refused.record.includes('clean'), refused);
 

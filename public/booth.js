@@ -478,7 +478,27 @@ function buildBribe(group) {
   sticker.redraw();
   sticker.mesh.position.set(0, 0.06, -0.05);
   sticker.mesh.rotation.x = -0.35;   // propped against the glass, facing the inspector
-  const items = { croissant, cheese, sticker: sticker.mesh };
+  // Rupert's business card, propped against the glass like the sticker.
+  const card = textPlane(0.13, 0.075, (g, w, h) => {
+    g.fillStyle = '#fbf8ef'; g.fillRect(0, 0, w, h);
+    g.strokeStyle = '#34373f'; g.lineWidth = h * 0.04; g.strokeRect(0, 0, w, h);
+    g.fillStyle = '#34373f'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.font = `bold ${h * 0.2}px Georgia, serif`;
+    g.fillText('R. ASHWORTH-HALE', w / 2, h * 0.38, w * 0.9);
+    g.font = `${h * 0.13}px Georgia, serif`;
+    g.fillText('Thamesbridge Capital', w / 2, h * 0.66, w * 0.9);
+  }, 512);
+  card.redraw();
+  card.mesh.position.set(0, 0.05, -0.05);
+  card.mesh.rotation.x = -0.35;
+  // Granny's fish pie: a tin, a golden crust, and fish heads poking through it.
+  const pie = new THREE.Group();
+  part(new THREE.CylinderGeometry(0.075, 0.06, 0.035, 20), mat('#b4bec3'), pie, [0, 0.018, 0]);
+  part(new THREE.SphereGeometry(0.072, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat('#d9a04a'), pie, [0, 0.034, 0], [0, 0, 0], [1, 0.45, 1]);
+  for (const [x, z, lean] of [[-0.03, 0.01, 0.3], [0.025, -0.015, -0.25], [0.005, 0.03, 0.1]]) {
+    part(new THREE.ConeGeometry(0.012, 0.045, 6), mat('#8a9aa6'), pie, [x, 0.068, z], [0, 0, lean], [1, 1, 0.6], false);
+  }
+  const items = { croissant, cheese, sticker: sticker.mesh, card: card.mesh, pie };
   for (const item of Object.values(items)) holder.add(item);
   return {
     holder,
@@ -806,9 +826,10 @@ function buildStamp(group, verdict, x) {
 
 function makeTraveller(id) {
   // Each traveller's file sets his single accessory, so he reads at a glance.
-  const { scarf = false, ...look } = getTraveller(id)?.look ?? {};
+  const { scarf = false, vestColor, ...look } = getTraveller(id)?.look ?? {};
   const penguin = makePenguin({ scarf });
   penguin.setLook(look);
+  if (vestColor) penguin.looks.vestMat.color.set(vestColor);
   penguin.showHearts = false;   // hearts are for love (art direction); nobody here is in love
   return penguin;
 }
@@ -924,6 +945,14 @@ export function createBooth(container, handlers = {}) {
       paper.marks.hover = line;
       paper.repaint();
     }
+  }
+  // A paper put down takes its lines with it: clear a line's hover label, and
+  // let the next pointer move report whatever is under it afresh.
+  function forgetLine() {
+    if (!hoveredLine) return;
+    hoverLine(null);
+    hovered = null;
+    handlers.onHover?.(null);
   }
   canvas.addEventListener('pointermove', (event) => {
     const { tool, line } = toolAt(event);
@@ -1133,15 +1162,14 @@ export function createBooth(container, handlers = {}) {
     setLookedUp(lines) {
       for (const paper of clickablePapers()) {
         paper.marks.looked = lines;
-        if (paper.fields) paper.repaint();
+        paper.repaint();
       }
     },
-    // 'croissant', 'cheese' or 'sticker' on the window ledge, or null for none.
+    // An item from BRIBE_ITEMS (src/rules.js) on the window ledge, or null for none.
     setBribe(item) { bribe.show(item); },
     toggle(name) {
       lifted = lifted === name ? null : name;
-      hoverLine(null);
-      handlers.onHover?.(null);
+      forgetLine();
     },
     // Turns one view left (-1) or right (+1); papers in hand go back on the desk.
     look(step) {
@@ -1154,8 +1182,7 @@ export function createBooth(container, handlers = {}) {
     view: () => view,
     putDown() {
       lifted = null;
-      hoverLine(null);
-      handlers.onHover?.(null);
+      forgetLine();
     },
     lifted: () => lifted,
     // The stamp comes down on the papers, leaves its mark, and goes home.

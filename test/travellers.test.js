@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import { TRAVELLERS, TRAVELLER_IDS } from '../src/travellers/index.js';
-import { BRIBE_ITEMS, MOODS, newShift, stamp } from '../src/rules.js';
+import { BRIBE_ITEMS, MOODS, bribeOffer, newShift, stamp } from '../src/rules.js';
 
 const folder = new URL('../src/travellers/', import.meta.url);
 const nonEmpty = (value) => typeof value === 'string' && value.trim().length > 0;
@@ -28,20 +28,27 @@ for (const t of TRAVELLERS) {
     assert.ok(nonEmpty(t.voice) || nonEmpty(t.voices?.neutral), 'a voice: voice, or voices with a neutral one');
   });
 
-  // Everyone bribes when you reach for TURNED AWAY, so a bribe is never a tell
-  // (ADR-13). The format, in each traveller file:
+  // A bribe is optional (Shahil 16:05): with one, his first TURNED AWAY brings
+  // it out instead of landing (ADR-13); without one, the stamp lands at once.
+  // The format, in the traveller file:
   //   bribe: { line: 'Wait, wait! ...', item: 'croissant', mood: 'excited' }
-  test(`${t.id}: has a last-ditch bribe: what he says and what he puts on the ledge`, () => {
-    assert.ok(t.bribe, 'bribe is missing: everyone offers one when you reach for TURNED AWAY. Add bribe: { line, item, mood }');
+  test(`${t.id}: a bribe, if he has one, is well formed`, () => {
+    if (!('bribe' in t)) return;
+    assert.ok(t.bribe !== null && typeof t.bribe === 'object', 'bribe: leave it out for no bribe, or give { line, item, mood }');
     assert.ok(nonEmpty(t.bribe.line), 'bribe.line: what he says, out loud, when you reach for TURNED AWAY');
     assert.ok(Object.hasOwn(BRIBE_ITEMS, t.bribe.item), `bribe.item: one of ${Object.keys(BRIBE_ITEMS).join(', ')} (a new item needs BRIBE_ITEMS in src/rules.js and a drawing in public/booth.js)`);
     assert.ok(MOODS.includes(t.bribe.mood), `bribe.mood: the voice and face he says it with, one of ${MOODS.join(', ')}`);
   });
 
-  test(`${t.id}: reaching for TURNED AWAY brings out his own bribe, not the stamp`, () => {
+  test(`${t.id}: his first TURNED AWAY ${t.bribe ? 'brings out his own bribe, not the stamp' : 'lands at once'}`, () => {
     const { shift, offer } = stamp(newShift([t.id]), 'away');
-    assert.deepEqual(offer, { travellerId: t.id, ...t.bribe });
-    assert.equal(shift.cases[t.id].stamp, null);
+    if (t.bribe) {
+      assert.deepEqual(offer, { travellerId: t.id, ...t.bribe });
+      assert.equal(shift.cases[t.id].stamp, null);
+    } else {
+      assert.equal(offer, undefined);
+      assert.equal(shift.cases[t.id].stamp, 'away');
+    }
   });
 
   test(`${t.id}: optional parts are well formed`, () => {
@@ -54,3 +61,19 @@ for (const t of TRAVELLERS) {
     if (t.look !== undefined) assert.equal(typeof t.look, 'object', 'look');
   });
 }
+
+// The roster may have nobody without a bribe yet, so for this test one
+// traveller's bribe is taken out and put back afterwards.
+test('a traveller with no bribe: his first TURNED AWAY lands at once, with nothing on offer', () => {
+  const traveller = TRAVELLERS.find((t) => t.bribe) ?? TRAVELLERS[0];
+  const kept = traveller.bribe;
+  delete traveller.bribe;
+  try {
+    const { shift, offer } = stamp(newShift([traveller.id]), 'away');
+    assert.equal(offer, undefined);
+    assert.deepEqual([shift.cases[traveller.id].stamp, shift.cases[traveller.id].bribe, shift.phase], ['away', null, 'over']);
+    assert.equal(bribeOffer(shift), null);
+  } finally {
+    if (kept !== undefined) traveller.bribe = kept;
+  }
+});

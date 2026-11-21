@@ -30,10 +30,12 @@ test('stamping a liar through scores wrong, even though the model never cracked'
   assert.equal(shift.cases.max.history[0].cracked, false);
   shift = R.stamp(shift, 'through').shift;
   shift = R.stamp(shift, 'through').shift;
+  shift = R.stamp(shift, 'through').shift;
   const report = R.shiftReport(shift);
   assert.deepEqual(report.rows.map((r) => [r.id, r.stamp, r.honest, r.correct]), [
     ['max', 'through', false, false],
-    ['colin', 'through', true, true],
+    ['rupert', 'through', true, true],
+    ['pebble', 'through', false, false],
   ]);
   assert.equal(report.correct, 1);
 });
@@ -63,27 +65,17 @@ test('the clock also waits while speech is being turned into words', () => {
   assert.equal(R.tick(R.setHearing(shift, false), 5000).usedMs, 5000);
 });
 
-test('the shift ends when the clock runs out, and nothing more can happen', () => {
-  const shift = R.tick(R.newShift(), R.SHIFT_MS + 5000);
-  assert.equal(shift.phase, 'over');
-  assert.equal(shift.endReason, 'time');
-  assert.equal(R.timeLeftMs(shift), 0);
-  assert.equal(R.startQuestion(shift, 'Hi').error, 'shiftOver');
-  assert.equal(R.stamp(shift, 'away').error, 'shiftOver');
-  const report = R.shiftReport(shift);
-  assert.equal(report.correct, 0);
-  assert.equal(report.rows[0].stamp, null);
-});
-
 test('stamping is allowed before the first question, and the queue moves on', () => {
   // The first TURNED AWAY brings out his bribe; the second one lands.
   const { shift, error } = R.stamp(R.stamp(R.newShift(), 'away').shift, 'away');
   assert.equal(error, undefined);
-  assert.equal(R.currentTravellerId(shift), 'colin');
-  const done = R.stamp(shift, 'through').shift;
+  assert.equal(R.currentTravellerId(shift), 'rupert');
+  const done = R.stamp(R.stamp(R.stamp(shift, 'through').shift, 'away').shift, 'away').shift;
   assert.equal(done.phase, 'over');
   assert.equal(done.endReason, 'queueEmpty');
-  assert.equal(R.shiftReport(done).correct, 2);
+  assert.equal(R.shiftReport(done).correct, 3);
+  assert.equal(R.startQuestion(done, 'Hi').error, 'shiftOver');
+  assert.equal(R.stamp(done, 'away').error, 'shiftOver');
 });
 
 test('a reply that arrives after the stamp is dropped', () => {
@@ -106,7 +98,7 @@ test("each answer's notes are kept on that traveller's scratchpad", () => {
   const asked = R.startQuestion(R.newShift(), 'Who paid?');
   const shift = R.finishQuestion(asked.shift, asked.request.id, { reply: 'Mistral!', mood: 'happy', cracked: false, notes: ['Says Mistral paid.'] });
   assert.deepEqual(shift.cases.max.notes, ['Says Mistral paid.']);
-  assert.deepEqual(shift.cases.colin.notes, []);
+  assert.deepEqual(shift.cases.rupert.notes, []);
 });
 
 test('a bad verdict is refused', () => {
@@ -200,11 +192,12 @@ test('while the offer is on the ledge there are no more questions: take it or st
 
 test('the clock stands still while he pleads, and runs again once he has said it', () => {
   const offered = reachForAway(R.newShift(PAIR)).shift;
-  assert.equal(R.tick(offered, 1000).usedMs, 0);
-  assert.equal(R.tick(R.setPleading(offered, false), 1000).usedMs, 1000);
-  // Answering the offer, either way, starts the clock again too.
-  assert.equal(R.tick(R.takeBribe(offered).shift, 1000).usedMs, 1000);
-  assert.equal(R.tick(R.stamp(offered, 'away').shift, 1000).usedMs, 1000);
+  const left = (shift) => R.travellerTimeLeftMs(R.tick(shift, 1000));
+  assert.equal(left(offered), R.TRAVELLER_MS);
+  assert.equal(left(R.setPleading(offered, false)), R.TRAVELLER_MS - 1000);
+  // Answering the offer, either way, starts the clock again too: on the next traveller's two minutes.
+  assert.equal(left(R.takeBribe(offered).shift), R.TRAVELLER_MS - 1000);
+  assert.equal(left(R.stamp(offered, 'away').shift), R.TRAVELLER_MS - 1000);
 });
 
 test('the score comes only from the stored truth: a bribe never changes right or wrong', () => {
