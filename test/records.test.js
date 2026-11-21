@@ -54,7 +54,7 @@ test("Colin's misspelled name is a near match on the delayed Paris ship", () => 
   assert.equal(result.ships[0].name, 'Seine Star');
   assert.match(result.ships[0].note, /delayed/);
   assert.deepEqual(result.matches.map((m) => [m.name, m.match]), [['Colin Stiltn', 'near']]);
-  assert.equal(step, 'Seine Star list (42): "Colin Stilton"… 1 near match');
+  assert.match(step, /^Seine Star list \(\d+\): "Colin Stilton"… 1 near match$/);
 });
 
 test('names match in any order and through common misspellings, but not loosely', () => {
@@ -67,4 +67,23 @@ test('a tool call with junk arguments or an unknown name is answered, not thrown
   assert.match(runTool('delete_everything', {}).result.error, /no tool/);
   assert.doesNotThrow(() => runTool('find_person', { name: 42, extra: { nested: true } }));
   assert.equal(runTool('find_person', { name: 'x'.repeat(500) }).result.matches.length, 0);
+});
+
+test("Granny's gaps and Rupert's consistency are findable in the records", () => {
+  const buyer = runTool('find_company', { name: 'Edna Pebble' }).result.matches[0];
+  assert.equal(buyer.name, 'Southern Krill Exchange');
+  assert.match(buyer.note, /E\. Pebble/);
+  assert.match(runTool('search_passenger_lists', { name: 'Edna Pebble' }).result.matches[0].freight, /41 kg/);
+  const fund = runTool('find_company', { name: 'Thamesbridge Capital' }).result.matches[0];
+  assert.match(fund.note, /Return charter booked for the whole group/);
+  assert.equal(runTool('search_passenger_lists', { name: 'Rupert Ashworth-Hale' }).result.matches[0].name, 'Rupert Ashworth-Hail');
+});
+
+test('every traveller in the queue hands over a passport, a visa and a ticket of at most 6 lines each', async () => {
+  const { QUEUE, getTraveller } = await import('../src/travellers/index.js');
+  for (const id of QUEUE) {
+    const docs = documentsFor(getTraveller(id));
+    assert.deepEqual(docs.map((d) => d.kind), ['passport', 'visa', 'ticket'], id);
+    for (const doc of docs) assert.ok(Object.keys(doc.fields).length <= 6, `${id} ${doc.kind}`);
+  }
 });

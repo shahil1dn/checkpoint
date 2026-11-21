@@ -279,12 +279,72 @@ function liftable(group, name, at, yaw, deskScale, tilt = -Math.PI / 2) {
   return { name, holder, desk, t: 0 };
 }
 
+// ---------- papers handed over and back (Shahil 16:20) ----------
+// He slides his folder in on the window ledge and it comes across to the
+// inspector's side, clear of the printer, the mic and the stamps. THROUGH
+// gives it back across the ledge; TURNED AWAY keeps it, in the CONFISCATED
+// tray. The finished transcript is torn off onto the spike by the printer.
+const FOLDER_AT = new THREE.Vector3(-0.02, SILL + 0.014, 0.8);
+const FOLDER_LEDGE = new THREE.Vector3(-0.5, SILL + 0.05, 0.12);
+const TRAY_AT = new THREE.Vector3(0.68, SILL, 1.04);
+const SPIKE_AT = new THREE.Vector3(-0.78, SILL, 1.12);
+const HAND_SECONDS = 0.6;
+
+const arcTo = (object, from, to, p, lift) => object.position.lerpVectors(from, to, ease(p)).setY(from.y + (to.y - from.y) * ease(p) + Math.sin(p * Math.PI) * lift);
+
+function buildTray(group) {
+  const holder = new THREE.Group();
+  holder.userData.tool = 'tray';
+  holder.position.copy(TRAY_AT);
+  group.add(holder);
+  const wood = mat('#6b5a45');
+  part(box(0.42, 0.014, 0.3, 0.004), wood, holder, [0, 0.007, 0]);
+  for (const [w, d, x, z] of [[0.42, 0.014, 0, -0.15], [0.42, 0.014, 0, 0.15], [0.014, 0.3, -0.21, 0], [0.014, 0.3, 0.21, 0]]) {
+    part(box(w, 0.05, d, 0.004), wood, holder, [x, 0.025, z]);
+  }
+  const label = textPlane(0.32, 0.042, (g, w, h) => drawLabel(g, w, h, 'CONFISCATED', COLORS.away), 1024);
+  label.redraw();
+  label.mesh.position.set(0, 0.026, 0.158);
+  holder.add(label.mesh);
+  return { holder, kept: [] };
+}
+
+function buildSpike(group) {
+  const holder = new THREE.Group();
+  holder.userData.tool = 'spike';
+  holder.position.copy(SPIKE_AT);
+  group.add(holder);
+  part(new THREE.CylinderGeometry(0.045, 0.05, 0.015, 16), mat(COLORS.micBody), holder, [0, 0.008, 0]);
+  part(new THREE.CylinderGeometry(0.003, 0.004, 0.16, 6), mat(COLORS.micGrille), holder, [0, 0.09, 0]);
+  return { holder, slips: [] };
+}
+
+// A closed folder that can travel on its own: the one going back to him or
+// into the tray, while the desk's folder waits for the next traveller.
+function looseFolder(group, whose, documents, stamp) {
+  const folder = new THREE.Group();
+  const board = part(box(0.3, 0.4, 0.012, 0.004), mat('#c9a463'), folder, undefined, undefined, undefined, false);
+  board.castShadow = board.receiveShadow = false;
+  const face = textPlane(0.3, 0.4, drawFolderCover, 512);
+  face.redraw(whose?.name, documents, stamp);
+  face.mesh.position.z = 0.007;
+  folder.add(face.mesh);
+  group.add(folder);
+  return folder;
+}
+
+function drawTornSlip(g, w, h) {
+  g.fillStyle = COLORS.paper; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#9a917f';
+  for (let y = h * 0.2; y < h * 0.9; y += h * 0.16) g.fillRect(w * 0.08, y, w * (0.5 + ((y * 7) % 30) / 100), h * 0.05);
+}
+
 // The folder sits where the papers did; P and a click open it, and opened it
 // becomes the spread of documents in front of the eyes (the cover swaps out
 // half way up, as the scratchpad's does).
 const FOLDER_GAP = 0.03;
 function buildFolder(group) {
-  const item = liftable(group, 'papers', new THREE.Vector3(-0.28, SILL + 0.014, 0.5), -0.06, 1);
+  const item = liftable(group, 'papers', FOLDER_AT.clone(), -0.06, 1);
   item.cover = new THREE.Group();
   item.holder.add(item.cover);
   const board = part(box(0.3, 0.4, 0.012, 0.004), mat('#c9a463'), item.cover, undefined, undefined, undefined, false);
@@ -310,6 +370,9 @@ function buildFolder(group) {
       print.mesh.position.set(x + w / 2, tallest / 2 - h / 2, 0.002 * i);
       print.mesh.rotation.z = [0.02, -0.015, 0.025][i % 3];
       x += w + FOLDER_GAP;
+      // Held up to read, the documents are drawn over the desk's things (the mic stood in front of the visa).
+      print.mesh.material.depthTest = false;
+      print.mesh.renderOrder = 10;
       const sheet = { name: 'papers', owner: item, marks: {}, doc, mesh: print.mesh };
       sheet.repaint = () => print.redraw(doc, sheet.marks, i === 0 ? item.stamp : null);
       print.mesh.userData.paper = sheet;
@@ -324,6 +387,7 @@ function buildFolder(group) {
       item.layoutKey = key;
       layOut(documents);
     }
+    item.documents = documents;
     item.stamp = stamp;
     if (whose) item.whose = whose;
     for (const sheet of item.docs) {
@@ -1054,6 +1118,9 @@ export function createBooth(container, handlers = {}) {
   engine.setWorld({ group, camTarget: LOOK_AT, startDir: dir, fit: [1.7, fitHalfHeight], walls: { backWall: [], sideWall: [], wallAt: -99 } });
 
   const papers = buildFolder(group);
+  const tray = buildTray(group);
+  const spike = buildSpike(group);
+  let handOvers = 0;   // counts hand-overs, so a stale one never finishes
   const notebook = buildNotebook(group);
   const { item: transcript, printer } = buildTranscript(group);
   const liftables = [papers, notebook, transcript];
@@ -1063,7 +1130,7 @@ export function createBooth(container, handlers = {}) {
   const thoughtBubble = buildThoughtBubble(group);
   const bribe = buildBribe(group);
   const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };
-  const tools = [papers.holder, notebook.holder, transcript.holder, printer, mic.holder, stamps.through.holder, stamps.away.holder];
+  const tools = [papers.holder, notebook.holder, transcript.holder, printer, mic.holder, stamps.through.holder, stamps.away.holder, tray.holder, spike.holder];
   const clickablePapers = () => [...papers.docs, transcript];
   let screenState = { calls: [], terminal: null };
   let hoveredLine = null;
@@ -1131,7 +1198,8 @@ export function createBooth(container, handlers = {}) {
     hovered = tool;
     hoverLine(line);
     canvas.style.cursor = tool ? 'pointer' : 'default';
-    handlers.onHover?.(line ? 'line' : tool, line);
+    const counts = { tray: tray.kept.length, spike: spike.slips.length };
+    handlers.onHover?.(line ? 'line' : tool, line ?? counts[tool]);
   });
   canvas.addEventListener('pointerdown', (event) => {
     const { tool } = toolAt(event);
@@ -1288,6 +1356,57 @@ export function createBooth(container, handlers = {}) {
     penguin.walking = false;
   }
 
+  // His folder comes in on the ledge and slides across, once he's at the window.
+  async function handOver(mine) {
+    if (mine !== handOvers) return;   // stamped before he even arrived
+    papers.holder.visible = true;
+    const from = FOLDER_LEDGE.clone();
+    await tween(HAND_SECONDS, (p) => {
+      if (mine === handOvers) arcTo({ position: papers.desk.position }, from, FOLDER_AT, p, 0.06);
+    });
+  }
+
+  // The last traveller's folder leaves the desk: back across the ledge to him,
+  // or into the tray. A fresh, hidden one waits on the ledge for the next.
+  function clearFolder(reaction) {
+    if (!papers.documents) return;
+    lifted = lifted === 'papers' ? null : lifted;
+    const loose = looseFolder(group, papers.whose, papers.documents, papers.stamp);
+    loose.position.copy(papers.desk.position);
+    loose.quaternion.copy(papers.desk.quaternion);
+    papers.holder.visible = false;
+    papers.desk.position.copy(FOLDER_LEDGE);
+    const from = loose.position.clone();
+    if (reaction === 'away') {
+      const n = tray.kept.length;
+      tray.kept.push(loose);
+      const to = TRAY_AT.clone().add(new THREE.Vector3(0, 0.022 + n * 0.012, 0));
+      const turn = new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, Math.PI / 2 + (n % 2 ? 0.08 : -0.06), 'XYZ'));
+      const start = loose.quaternion.clone();
+      tween(0.5, (p) => {
+        arcTo(loose, from, to, p, 0.12);
+        loose.quaternion.slerpQuaternions(start, turn, ease(p));
+        loose.scale.setScalar(1 - 0.12 * ease(p));
+      });
+    } else {
+      tween(0.45, (p) => arcTo(loose, from, FOLDER_LEDGE, p, 0.05)).then(() => tween(0.6, () => {})).then(() => group.remove(loose));
+    }
+  }
+
+  // The printer's finished slip is torn off onto the spike; the next prints fresh.
+  function spikeTranscript() {
+    if (!transcript.fields?.length) return;
+    const slip = textPlane(0.16, 0.1, drawTornSlip, 512);
+    slip.redraw();
+    group.add(slip.mesh);
+    const n = spike.slips.length;
+    spike.slips.push(slip.mesh);
+    const from = SLIP.bottom.clone().add(new THREE.Vector3(0, 0.12, 0));
+    const to = SPIKE_AT.clone().add(new THREE.Vector3(0, 0.03 + n * 0.006, 0));
+    slip.mesh.rotation.set(-Math.PI / 2, 0, 0.3 * (n % 3) - 0.3);
+    tween(0.45, (p) => arcTo(slip.mesh, from, to, p, 0.1));
+  }
+
   const booth = {
     // Swapping travellers walks the old one off and the new one on.
     show(id, { reaction } = {}) {
@@ -1300,11 +1419,18 @@ export function createBooth(container, handlers = {}) {
       face = FACES.neutral;
       if (old && reaction === 'away') snatch(old);
       else if (old) walkOff(old, reaction === 'through' ? 'happy' : 'neutral');
+      if (old) {
+        clearFolder(reaction);
+        spikeTranscript();
+      }
+      handOvers += 1;
+      const mine = handOvers;
       if (!traveller) return;
-      if (old) walkOn(traveller);
+      if (old) walkOn(traveller).then(() => handOver(mine));
       else {
         traveller.root.position.copy(TRAVELLER_AT);
         group.add(traveller.root);
+        handOver(mine);
       }
     },
     setMood(mood) {
@@ -1354,6 +1480,13 @@ export function createBooth(container, handlers = {}) {
     putDown() {
       lifted = null;
       forgetLine();
+    },
+    // A new shift starts with an empty tray and an empty spike.
+    clearDesk() {
+      for (const loose of tray.kept) group.remove(loose);
+      for (const slip of spike.slips) group.remove(slip);
+      tray.kept.length = 0;
+      spike.slips.length = 0;
     },
     lifted: () => lifted,
     // The stamp comes down on the papers, leaves its mark, and goes home.

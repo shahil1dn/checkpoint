@@ -26,7 +26,7 @@ const DEMO = [
     'If you love Mistral so much, what is the nickname of Mistral Large 4?',
     'Then why did Frontier Horizon Labs pay for your ticket?',
   ], stamp: 'away' },
-  { traveller: 'Rupert Ashworth-Hale', questions: [
+  { traveller: 'Rupert Ashworth-Hale', readPapers: true, lookUp: 'Return ticket', questions: [
     'Why have you got no return ticket?',
   ], stamp: 'through' },
   { traveller: 'Granny Pebble', questions: [
@@ -196,6 +196,7 @@ async function main() {
     const key = async (code, keyCode) => {
       for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, code, key: code, windowsVirtualKeyCode: keyCode });
     };
+    const slug = (name) => name.split(' ')[0].toLowerCase();
     const shot = async (name) => {
       const { data } = await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: 85 });
       await writeFile(path.join(OUT, name), Buffer.from(data, 'base64'));
@@ -220,7 +221,7 @@ async function main() {
         await click('papers');
         note('opened the case folder to read it');
         await sleep(1500);
-        await shot('case-folder-1440.jpg');
+        await shot(`${slug(step.traveller)}-case-folder-1440.jpg`);
         await sleep(1000);
         await key('Escape', 27);
         note('closed the case folder');
@@ -286,12 +287,12 @@ async function main() {
         await key('Escape', 27);
         await key('ArrowLeft', 37);
         await sleep(1300);
-        await shot('terminal-mid-search-1440.jpg');
+        await shot(`${slug(step.traveller)}-terminal-mid-search-1440.jpg`);
         const looked = await waitFor(`document.getElementById('lookups-left').textContent.includes(' 2 of ')`, 20000);
         if (!looked) throw new Error('the lookup did not finish');
         note(`records terminal answered: ${await evaluate(`document.getElementById('lookups-left').textContent`)}`);
         await sleep(2500);
-        await shot('terminal-answer-1440.jpg');
+        await shot(`${slug(step.traveller)}-terminal-answer-1440.jpg`);
         await key('ArrowRight', 39);
         await sleep(900);
       }

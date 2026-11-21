@@ -143,6 +143,22 @@ async function main() {
       if (!ok) failures.push(name);
     };
     let seen;
+    // Shahil 16:20: the tray and the spike say on hover how many they hold.
+    const countOf = async (label) => {
+      const at = await page.evaluate(DESK_SPOT(label, { top: 0.3, bottom: 0.99 }));
+      if (!at) return null;
+      return page.evaluate(`(() => {
+        const canvas = document.querySelector('#booth canvas');
+        canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: ${at[0]}, clientY: ${at[1]}, bubbles: true }));
+        const n = Number((document.getElementById('tool-tip').textContent.match(/(\\d+)$/) ?? [])[1]);
+        canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 0, bubbles: true }));
+        return Number.isFinite(n) ? n : null;
+      })()`);
+    };
+    const folderAt = () => page.evaluate(DESK_SPOT('Case folder', { top: 0.3, bottom: 0.99 }));
+    // The ledge is about 230 px from the desk spot at this size; the spot found
+    // moves a little with whatever overlaps the folder.
+    const near = (a, b) => Boolean(a && b) && Math.hypot(a[0] - b[0], a[1] - b[1]) <= 100;
     const ask = (text) => page.evaluate(`document.getElementById('question').value = ${JSON.stringify(text)}; document.getElementById('ask-form').requestSubmit(); true`);
 
     const stampAt = await page.evaluate(DESK_SPOT('Stamp: let them through'));
@@ -190,8 +206,10 @@ async function main() {
         await page.send('Input.dispatchMouseEvent', { type, x: sponsorAt[0], y: sponsorAt[1], button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
       }
     }
+    await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'Escape', bubbles: true })); true`);
     await waitFor(`document.getElementById('lookups-left').textContent.includes(' 2 of ')`, 10000);
     await waitFor(`document.getElementById('hint').textContent.startsWith('The records report is ready')`, 5000);
+    await sleep(700);   // the folder settles back on the desk
     const looked = await page.evaluate(`({ left: document.getElementById('lookups-left').textContent, hint: document.getElementById('hint').textContent })`);
     await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft', bubbles: true })); true`);
     const afterTurning = await page.evaluate(`document.getElementById('hint').textContent`);
@@ -248,10 +266,18 @@ async function main() {
     check(`TURNED AWAY does not land: ${FIRST.name} pleads and the ${itemOf(FIRST)} comes out`, seen.name === FIRST.name && seen.offer && seen.said.includes(FIRST.bribe.line) && seen.hint.includes(`offers a ${itemOf(FIRST)}`), seen);
     // Only the ledge's left half is scanned, to keep the check quick.
     const bribeAt = (await page.evaluate(DESK_SPOT('A bribe', { left: 0.15, right: 0.5, top: 0.45, bottom: 0.7 }))) ?? [0, 0];
+    const deskSpot = await folderAt();
     await press(bribeAt);
     await waitFor(`document.getElementById('traveller-name').textContent !== ${JSON.stringify(FIRST.name)}`, 10000);
+    // The next folder isn't on the desk until he's at the window to hand it over.
+    const whileArriving = await folderAt();
     seen = await desk();
     check(`clicking the ${itemOf(FIRST)} pockets it and lets ${FIRST.name} through`, seen.name === SECOND.name && seen.hint.includes('THROUGH') && seen.hint.includes('record'), { bribeAt, ...seen });
+    await sleep(2500);
+    const handedOver = await folderAt();
+    check('hand-over: the next folder comes across to the desk once he arrives', Boolean(deskSpot) && !near(whileArriving, deskSpot) && near(handedOver, deskSpot), { deskSpot, whileArriving, handedOver });
+    const afterBribe = { tray: await countOf('Confiscated'), spike: await countOf('Finished transcripts') };
+    check('a taken bribe lets him through with his papers, and his transcript is torn off onto the spike', afterBribe.tray === 0 && afterBribe.spike === 1, afterBribe);
 
     // Each traveller has two minutes (Shahil 15:25): when they run out the
     // questions stop, and the shift waits for a stamp instead of ending.
@@ -301,6 +327,8 @@ async function main() {
     await waitFor(`document.getElementById('traveller-name').textContent !== ${JSON.stringify(first)}`, 10000);
     seen = await desk();
     check('stamping THROUGH before any question moves the queue on, with no bribe', seen.name !== first && !seen.offer, { first, ...seen });
+    const afterThrough = { tray: await countOf('Confiscated'), spike: await countOf('Finished transcripts') };
+    check('THROUGH gives his papers back, and Play again empties the tray and the spike', afterThrough.tray === 0 && afterThrough.spike === 0, afterThrough);
 
     // The refuse run, on the second traveller: TURNED AWAY brings out his
     // bribe; TURNED AWAY again lands. Then everyone left goes THROUGH, to the report.
@@ -310,6 +338,9 @@ async function main() {
     check(`${SECOND.name} bribes too: TURNED AWAY brings out the ${itemOf(SECOND)}`, seen.name === SECOND.name && seen.offer && seen.hint.includes(`offers a ${itemOf(SECOND)}`), seen);
     await press(awayAt);
     await waitFor(`document.getElementById('traveller-name').textContent !== ${JSON.stringify(SECOND.name)} || !document.getElementById('report').hidden`, 10000);
+    await sleep(700);   // the folder drops into the tray
+    const kept = await countOf('Confiscated');
+    check('TURNED AWAY keeps his papers: they go into the CONFISCATED tray', kept === 1, { kept });
     await stampRestThrough();
     const refused = await page.evaluate(`({ over: !document.getElementById('report').hidden, row: document.querySelectorAll('#report-rows tr')[1]?.textContent ?? '', record: document.getElementById('bribes').textContent })`);
     check('TURNED AWAY again refuses it: the stamp lands and the record stays clean', refused.over && refused.row.includes('Turned away') && !refused.row.includes('bribe') && refused.record.includes('clean'), refused);
