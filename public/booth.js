@@ -329,6 +329,9 @@ function buildFolder(group) {
       print.mesh.position.set(x + w / 2, tallest / 2 - h / 2, 0.002 * i);
       print.mesh.rotation.z = [0.02, -0.015, 0.025][i % 3];
       x += w + FOLDER_GAP;
+      // Held up to read, the documents are drawn over the desk's things (the mic stood in front of the visa).
+      print.mesh.material.depthTest = false;
+      print.mesh.renderOrder = 10;
       const sheet = { name: 'papers', owner: item, marks: {}, doc, mesh: print.mesh };
       sheet.repaint = () => print.redraw(doc, sheet.marks, i === 0 ? item.stamp : null);
       print.mesh.userData.paper = sheet;
