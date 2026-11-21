@@ -342,7 +342,7 @@ async function main() {
 
     const report = await evaluate(`({ visible: !document.getElementById('report').hidden, score: document.getElementById('score').textContent, rows: [...document.querySelectorAll('#report-rows tr')].map((tr) => tr.textContent) })`);
     note(`end-of-shift report: ${report.score}`);
-    await sleep(2000);
+    await sleep(5000);   // the view turns to the computer and Mistral's review comes in (about 2 s)
     clearInterval(capture);
     const total = Number(at()) - 2;
     const pass = report.visible && total < LIMIT_S;

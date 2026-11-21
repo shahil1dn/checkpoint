@@ -61,6 +61,8 @@ body { font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; color: v
 .procedure li { padding: 5px 0; font-size: 17px; line-height: 1.4; }
 #start { display: block; width: 100%; min-height: 56px; font-size: 21px; letter-spacing: 0.08em; text-transform: uppercase; color: #ffffff; background: #3f6e8c; border: 3px solid var(--ink); }
 #report { width: min(820px, calc(100% - 32px)); }
+/* With the 3D desk, the shift review is on the computer screen instead. */
+#report.on-computer { display: none; }
 #end-reason { margin: 0 0 18px; color: #4d4b47; font-size: 16px; }
 .report-table-wrap { background: #fbf8ef; border: 1px solid #b9ac96; }
 #report table { margin: 0; table-layout: fixed; }

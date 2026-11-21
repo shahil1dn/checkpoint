@@ -1,6 +1,6 @@
 // The only file that reads the Mistral key. Plain fetch, no SDK (ADR-5).
 // fetchImpl is injectable so tests can check what is sent without the network.
-import { LOOKUP_TOOLS, NOTES_FORMAT, REPLY_FORMAT, buildLookupMessages, buildMessages, buildNoteMessages } from './prompt.js';
+import { LOOKUP_TOOLS, NOTES_FORMAT, REPLY_FORMAT, REVIEW_FORMAT, buildLookupMessages, buildMessages, buildNoteMessages, buildReviewMessages } from './prompt.js';
 import { runTool } from '../src/records/search.js';
 
 const API = 'https://api.mistral.ai/v1';
@@ -49,6 +49,13 @@ export function makeMistralJsonChat({ fetchImpl = fetch } = {}) {
     }, fetchImpl);
     return textOf(data?.choices?.[0]?.message?.content);
   };
+}
+
+// The end-of-shift review: words only, the score is the code's (ADR-2).
+export const REVIEW_MAX_TOKENS = 700;
+export function makeMistralReviewer({ fetchImpl = fetch } = {}) {
+  const chatJson = makeMistralJsonChat({ fetchImpl });
+  return ({ report, rating }) => chatJson({ messages: buildReviewMessages(report, rating), format: REVIEW_FORMAT, maxTokens: REVIEW_MAX_TOKENS });
 }
 
 // The traveller's reply to one question.

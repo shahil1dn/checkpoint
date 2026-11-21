@@ -158,3 +158,45 @@ export function buildMessages(traveller, history, question, { nudge } = {}) {
   messages.push({ role: 'user', content: fence(question) });
   return messages;
 }
+
+// ---- The shift review (Shahil 17:10): Mistral writes the words, the code
+// has already scored and rated the shift (ADR-2). The game is over, so the
+// truths may be told.
+export const REVIEW_FORMAT = {
+  type: 'json_schema',
+  json_schema: {
+    name: 'review',
+    strict: true,
+    schema: {
+      type: 'object',
+      additionalProperties: false,
+      required: ['headline', 'per_traveller', 'tip'],
+      properties: {
+        headline: { type: 'string' },
+        per_traveller: {
+          type: 'array',
+          items: {
+            type: 'object',
+            additionalProperties: false,
+            required: ['name', 'comment'],
+            properties: { name: { type: 'string' }, comment: { type: 'string' } },
+          },
+        },
+        tip: { type: 'string' },
+      },
+    },
+  },
+};
+
+const REVIEW_INSTRUCTIONS = `You are the Chief of a penguin border post in Antarctica, writing a short, dry, funny review of one inspector's shift.
+The score and rating are already decided and final: repeat them as given, never change or recalculate them.
+Write a headline under 100 characters, one comment under 140 characters per traveller (use the exact names given), and one tip under 140 characters for the next shift.
+Plain text only, no markdown.`;
+
+export function buildReviewMessages(report, rating) {
+  const lines = report.rows.map((row) => `- ${row.name}: stamped ${row.stamp ?? 'nothing'}${row.bribeTaken ? ' (the inspector took his bribe)' : ''}. Truth: ${row.honest ? 'honest' : 'lying'}. ${row.secret} Call: ${row.correct ? 'right' : 'wrong'}.`);
+  return [
+    { role: 'system', content: REVIEW_INSTRUCTIONS },
+    { role: 'user', content: `Score: ${report.correct} of ${report.total} right. Rating: ${rating.title}. Record: ${report.record}.\nTravellers:\n${lines.join('\n')}` },
+  ];
+}

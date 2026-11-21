@@ -12,7 +12,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createApp } from '../server/app.js';
-import { BRIBE_ITEMS, DEMO_QUEUE } from '../src/rules.js';
+import { BRIBE_ITEMS, DEMO_QUEUE, shiftReport } from '../src/rules.js';
 import { getTraveller } from '../src/travellers/index.js';
 import { browserOnThisMachine } from './find-browser.js';
 
@@ -320,10 +320,22 @@ async function main() {
     const bribes = await page.evaluate(`document.getElementById('bribes').textContent`);
     check('the report names the bribe taken and marks the record', bribes.includes(FIRST.name) && bribes.includes('CORRUPT'), bribes);
 
-    await page.evaluate(`document.getElementById('again').click(); true`);
+    // Shahil 17:10: the shift ends on the computer, turned to by itself, with the
+    // review and a PLAY AGAIN that is clicked on the screen, not an HTML button.
+    // PLAY AGAIN is only found by pointing at the screen, so finding it proves
+    // the view turned left and the review is on it.
+    const expected = `${shiftReport({ queue: DEMO_QUEUE, cases: Object.fromEntries(DEMO_QUEUE.map((id, i) => [id, { stamp: 'through', bribe: i === 0 ? 'taken' : null }])) }).correct} / ${DEMO_QUEUE.length} correct`;
+    const ended = await page.evaluate(`({ view: document.getElementById('look-left').textContent === '' && document.getElementById('look-right').textContent === 'Window ›', screen: document.getElementById('booth').getAttribute('aria-label') ?? '', htmlReport: getComputedStyle(document.getElementById('report')).display })`);
+    // The view turns over a moment; let it come to rest before looking.
+    await sleep(1500);
+    const againAt = await page.evaluate(DESK_SPOT('Play again', { top: 0.2, bottom: 0.99 }));
+    const onTop = againAt ? await page.evaluate(`(() => { const e = document.elementFromPoint(${againAt[0]}, ${againAt[1]}); return e ? e.tagName + '#' + e.id + '.' + e.className : null; })()`) : null;
+    check('the shift ends on the computer: the view turns left and the screen shows the score and PLAY AGAIN', ended.view && ended.screen.includes(expected) && ended.screen.includes('CORRUPT') && ended.htmlReport === 'none' && Boolean(againAt), { ...ended, expected, againAt, onTop });
+    await press(againAt ?? [0, 0]);
     await waitFor(`!document.getElementById('controls').hidden`, 5000);
     seen = await screen();
-    check('Play again starts with no hint left over from the last shift', seen.hint === '' && seen.left.includes(' 5 of '), seen);
+    check('PLAY AGAIN on the screen starts a new shift with no hint left over from the last', !seen.over && seen.hint === '' && seen.left.includes(' 5 of '), { ...seen, onTop });
+    await sleep(1500);   // the view turns back to the window
 
     // SPEC item 8: stamping is allowed at any time, even before the first question.
     const first = await page.evaluate(`document.getElementById('traveller-name').textContent`);
@@ -365,6 +377,7 @@ async function main() {
     // The B key takes the offer too (Hamzah's PR #3 idea), and only when one is out.
     await page.evaluate(`document.getElementById('again').click(); true`);
     await waitFor(`!document.getElementById('controls').hidden`, 5000);
+    await sleep(1500);   // the view turns back from the review to the window
     const key = async (code, key) => {
       for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, code, key });
     };
