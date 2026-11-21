@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { createEngine, part, box, ball, mat, mapMat, textPlane } from '/penguins/engine.js';
 import { makePenguin } from '/penguins/penguin.js';
-import { buildScenery } from '/scenery.js';
+import { buildScenery, INSPECTION_DOOR } from '/scenery.js';
 import { FORM_TITLE, NOTICES, RULE_SPOT, TIN_LABEL } from '/notices.js';
 import { getTraveller } from '/src/travellers/index.js';
 
@@ -1279,11 +1279,17 @@ export function createBooth(container, handlers = {}) {
   }
 
   async function walkOn(penguin) {
-    penguin.root.position.set(-WALK_OFF_X, TRAVELLER_AT.y, TRAVELLER_AT.z);
-    penguin.root.rotation.y = Math.PI / 2;
+    const from = new THREE.Vector3(INSPECTION_DOOR.x, TRAVELLER_AT.y, INSPECTION_DOOR.z + 0.12);
+    const approachAngle = Math.atan2(TRAVELLER_AT.x - from.x, TRAVELLER_AT.z - from.z);
+    penguin.root.position.copy(from);
+    penguin.root.rotation.y = approachAngle;
     penguin.walking = true;
     group.add(penguin.root);
-    await tween(1.1, (p) => { penguin.root.position.x = -WALK_OFF_X + (TRAVELLER_AT.x + WALK_OFF_X) * p; });
+    await tween(1.6, (p) => {
+      penguin.root.position.lerpVectors(from, TRAVELLER_AT, p);
+      penguin.root.rotation.y = approachAngle * (1 - p);
+    });
+    penguin.root.rotation.y = 0;
     penguin.walking = false;
   }
 
@@ -1300,11 +1306,7 @@ export function createBooth(container, handlers = {}) {
       if (old && reaction === 'away') snatch(old);
       else if (old) walkOff(old, reaction === 'through' ? 'happy' : 'neutral');
       if (!traveller) return;
-      if (old) walkOn(traveller);
-      else {
-        traveller.root.position.copy(TRAVELLER_AT);
-        group.add(traveller.root);
-      }
+      walkOn(traveller);
     },
     setMood(mood) {
       face = FACES[mood] ?? FACES.neutral;

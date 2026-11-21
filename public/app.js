@@ -524,7 +524,7 @@ function render() {
   $('hint').hidden = !playing;
   $('tool-tip').hidden = !playing;
   renderClock();
-  if (!stampingNow) booth?.show(over ? null : R.currentTravellerId(shift));
+  if (!stampingNow) booth?.show(playing ? R.currentTravellerId(shift) : null);
   if (over) {
     booth?.putDown();
     $('captions').hidden = true;

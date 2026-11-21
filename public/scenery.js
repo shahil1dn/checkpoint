@@ -14,6 +14,7 @@ const COLORS = {
 };
 const AMBER = '#f2b544';
 const BOARD_FONT = 'Menlo, "Courier New", monospace';
+export const INSPECTION_DOOR = { x: -0.85, z: -2.55 };
 
 // The inspector's eye is only just above the window, so everything to be seen
 // sits below eye height; the crowd walks well behind the traveller so it stays
@@ -65,7 +66,7 @@ function buildShip(group) {
 }
 
 function buildSign(group) {
-  const at = new THREE.Vector3(-1.55, 1.5, SIGNS_Z);
+  const at = new THREE.Vector3(INSPECTION_DOOR.x, 2.4, INSPECTION_DOOR.z + 0.04);
   const sign = textPlane(1.1, 0.24, (g, w, h) => {
     g.fillStyle = COLORS.sign; g.fillRect(0, 0, w, h);
     g.fillStyle = '#f4efe2'; g.font = `600 ${h * 0.44}px system-ui, sans-serif`;
@@ -76,7 +77,7 @@ function buildSign(group) {
   part(box(1.16, 0.3, 0.05, 0.015), mat(COLORS.steel), group, [at.x, at.y, at.z]);
   sign.mesh.position.set(at.x, at.y, at.z + 0.03);
   group.add(sign.mesh);
-  for (const dx of [-0.45, 0.45]) part(new THREE.CylinderGeometry(0.012, 0.012, 2, 8), mat(COLORS.steel), group, [at.x + dx, at.y + 1.15, at.z]);
+  for (const dx of [-0.45, 0.45]) part(box(0.025, 0.12, 0.03), mat(COLORS.steel), group, [at.x + dx, at.y - 0.19, at.z - 0.02]);
 }
 
 function drawBoard(g, w, h) {
@@ -112,6 +113,38 @@ function buildBoard(group) {
   group.add(face.mesh);
   part(new THREE.CylinderGeometry(0.04, 0.05, at.y - 0.3, 10), mat(COLORS.steel), group, [at.x, (at.y - 0.3) / 2, at.z]);
   part(new THREE.CylinderGeometry(0.16, 0.18, 0.04, 16), mat(COLORS.steel), group, [at.x, 0.02, at.z]);
+}
+
+// The side entrance is set back from the counter, so the next traveller can
+// be seen leaving it and walking forward through the unchanged booth window.
+function buildInspectionDoor(group) {
+  const { x, z } = INSPECTION_DOOR;
+  const wall = mat('#8fb3a8');
+  const frame = mat('#e8e2d4');
+  const dark = mat('#283b43');
+  part(box(1.5, 0.44, 0.14), wall, group, [x, 1.98, z - 0.12]);
+  for (const side of [-1, 1]) {
+    part(box(0.32, 1.76, 0.14), wall, group, [x + side * 0.59, 0.88, z - 0.12]);
+    part(box(0.055, 1.76, 0.16), frame, group, [x + side * 0.405, 0.88, z - 0.02]);
+  }
+  part(box(0.87, 0.055, 0.17), frame, group, [x, 1.78, z - 0.02]);
+  part(box(0.86, 1.72, 0.015), dark, group, [x, 0.86, z - 0.22], undefined, undefined, false);
+  part(box(0.92, 0.035, 0.34), mat('#5f6b73'), group, [x, 0.02, z + 0.03], undefined, undefined, false);
+  const leaf = new THREE.Group();
+  leaf.position.set(x - 0.38, 0, z + 0.01);
+  leaf.rotation.y = 1.05;
+  group.add(leaf);
+  part(box(0.76, 1.63, 0.045, 0.012), mat('#597578'), leaf, [0.38, 0.83, 0]);
+  part(new THREE.SphereGeometry(0.023, 10, 8), mat('#c4a46b'), leaf, [0.68, 0.85, 0.045], undefined, undefined, false);
+  const label = textPlane(0.78, 0.18, (g, w, h) => {
+    g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#f4efe2'; g.font = `bold ${h * 0.47}px ${BOARD_FONT}`;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('ARRIVALS', w / 2, h * 0.54);
+  }, 1024);
+  label.redraw();
+  label.mesh.position.set(x, 2.04, z - 0.03);
+  group.add(label.mesh);
 }
 
 // Crowd penguins are re-dressed every time they come ashore (art direction,
@@ -165,5 +198,6 @@ export function buildScenery(group) {
   buildShip(group);
   buildSign(group);
   buildBoard(group);
+  buildInspectionDoor(group);
   return makeArrivals(group);
 }
