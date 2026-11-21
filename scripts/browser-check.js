@@ -197,6 +197,15 @@ async function main() {
     const afterTurning = await page.evaluate(`document.getElementById('hint').textContent`);
     check('opening the case folder and clicking a line on his visa looks it up, and a hint says when the report is ready', Boolean(sponsorAt) && looked.left === 'Lookups left: 2 of 3' && looked.hint.startsWith('The records report is ready') && afterTurning === '', { sponsorAt, ...looked, afterTurning });
     await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight', bubbles: true })); true`);
+    // The turn back eases a little each frame, so on a busy machine it takes seconds:
+    // wait until the TURNED AWAY stamp is back under its spot, or a press lands on a turning view.
+    await waitFor(`(() => {
+      const canvas = document.querySelector('#booth canvas');
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: ${awayAt[0]}, clientY: ${awayAt[1]}, bubbles: true }));
+      const back = document.getElementById('tool-tip').textContent.startsWith('Stamp: turn them away');
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 0, bubbles: true }));
+      return back;
+    })()`, 10000);
     // A line he never said, sent straight to the server, is refused and costs nothing.
     const refusedLine = await page.evaluate(`fetch('/api/lookup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ travellerId: 'max', line: 'Is he a spy for a rival lab?', earlier: [] }) })
       .then(async (res) => ({ status: res.status, error: (await res.json()).error, left: document.getElementById('lookups-left').textContent }))`);
