@@ -140,6 +140,21 @@ async function main() {
 
     const stampAt = await page.evaluate(DESK_SPOT('Stamp: let them through'));
     if (!stampAt) throw new Error('could not find the THROUGH stamp on the desk');
+    const awayAt = await page.evaluate(DESK_SPOT('Stamp: turn them away'));
+    if (!awayAt) throw new Error('could not find the TURNED AWAY stamp on the desk');
+    const press = async ([x, y]) => {
+      for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
+        await page.send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
+      }
+    };
+    const OFFER_OUT = `!document.getElementById('take-bribe').hidden`;
+    const desk = () => page.evaluate(`({
+      name: document.getElementById('traveller-name').textContent,
+      hint: document.getElementById('hint').textContent,
+      said: document.getElementById('subtitle').textContent,
+      offer: ${OFFER_OUT},
+      over: !document.getElementById('report').hidden,
+    })`);
     // The transcript's full page is hidden while the slip is down; it must not
     // catch the pointer above the slip, where the papers, mic and stamps are.
     const aboveSlip = await page.evaluate(`(() => {
@@ -168,33 +183,35 @@ async function main() {
     for (let i = 2; i <= 5; i += 1) {
       await ask(`Question ${i}?`);
       await waitFor(`document.getElementById('questions-left').textContent.includes(' ${5 - i} of ')`, 5000);
-      // Offline, Max's 2nd answer offers a bribe (src/travellers/max.js): it
-      // sits on the window ledge, and clicking it pockets it.
-      if (i === 2) {
-        const offered = await page.evaluate(`document.getElementById('hint').textContent`);
-        // Only the ledge's left half is scanned, to keep the check quick.
-        const bribeAt = (await page.evaluate(DESK_SPOT('A bribe', { left: 0.15, right: 0.5, top: 0.45, bottom: 0.7 }))) ?? [0, 0];
-        const bribe = await page.evaluate(`(() => {
-          const canvas = document.querySelector('#booth canvas');
-          const at = { clientX: ${bribeAt[0]}, clientY: ${bribeAt[1]}, bubbles: true, pointerId: 1 };
-          canvas.dispatchEvent(new PointerEvent('pointermove', at));
-          canvas.dispatchEvent(new PointerEvent('pointerdown', at));
-          canvas.dispatchEvent(new PointerEvent('pointerup', at));
-          return { hint: document.getElementById('hint').textContent };
-        })()`);
-        check('a bribe slides onto the ledge, and clicking it pockets it', offered.includes('onto the ledge') && bribe.hint.includes('record'), { offered, bribeAt, ...bribe });
-      }
     }
+    // Shahil 14:34: nobody bribes while he's being questioned.
+    seen = await desk();
+    check('no bribe is offered during the questions', !seen.offer && !seen.hint.includes('offers a'), seen);
     // A 6th question can still be typed; it must be refused with a hint.
     await ask('One more?');
     await waitFor(`document.getElementById('hint').textContent === ${JSON.stringify(OUT_OF_QUESTIONS)}`, 5000);
     seen = await screen();
     check('a 6th question shows the out-of-questions hint', seen.hint === OUT_OF_QUESTIONS && seen.left.includes(' 0 of '), seen);
 
+    // The take run: TURNED AWAY brings out his bribe instead of landing, and
+    // clicking it on the ledge lets him through.
+    await press(awayAt);
+    await waitFor(OFFER_OUT, 5000);
+    seen = await desk();
+    check('TURNED AWAY does not land: Max says "wait" and a croissant comes out', seen.name === 'Max Tokens' && seen.offer && seen.said.includes('Wait, wait!') && seen.hint.includes('offers a croissant'), seen);
+    // Only the ledge's left half is scanned, to keep the check quick.
+    const bribeAt = (await page.evaluate(DESK_SPOT('A bribe', { left: 0.15, right: 0.5, top: 0.45, bottom: 0.7 }))) ?? [0, 0];
+    await press(bribeAt);
+    await waitFor(`document.getElementById('traveller-name').textContent !== 'Max Tokens'`, 10000);
+    seen = await desk();
+    check('clicking the croissant pockets it and lets Max through', seen.name === 'Colin Stilton' && seen.hint.includes('THROUGH') && seen.hint.includes('record'), { bribeAt, ...seen });
+
     await page.evaluate(`window.__skipClock(${SHIFT_AND_A_BIT_MS}); true`);
     await waitFor(`!document.getElementById('report').hidden`, 10000);
     seen = await screen();
     check('the shift clock runs out to the report', seen.over, seen);
+    const maxRow = await page.evaluate(`document.querySelector('#report-rows tr')?.textContent ?? ''`);
+    check('the bribed liar counts as let through, and wrong', maxRow.includes('Through (took a bribe)') && maxRow.endsWith('Wrong'), maxRow);
     const bribes = await page.evaluate(`document.getElementById('bribes').textContent`);
     check('the report names the bribe taken and marks the record', bribes.includes('Max Tokens') && bribes.includes('CORRUPT'), bribes);
 
@@ -218,12 +235,36 @@ async function main() {
         hintCentre: Math.round(hint.left + hint.width / 2 - innerWidth / 2), hintFromBottom: Math.round(innerHeight - hint.bottom), overlap };
     })()`);
     check('the hover label sits by the pointer, apart from the status line', placed.tipFromPointer <= 24 && Math.abs(placed.hintCentre) <= 1 && placed.hintFromBottom <= 16 && !placed.overlap, placed);
-    for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
-      await page.send('Input.dispatchMouseEvent', { type, x: stampAt[0], y: stampAt[1], button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
-    }
+    await press(stampAt);
     await waitFor(`document.getElementById('traveller-name').textContent !== ${JSON.stringify(first)}`, 10000);
-    const next = await page.evaluate(`document.getElementById('traveller-name').textContent`);
-    check('stamping before any question moves the queue on', next !== first, { first, next, ...(await screen()) });
+    seen = await desk();
+    check('stamping THROUGH before any question moves the queue on, with no bribe', seen.name !== first && !seen.offer, { first, ...seen });
+
+    // The refuse run: TURNED AWAY brings out Colin's cheese; TURNED AWAY again lands.
+    await press(awayAt);
+    await waitFor(OFFER_OUT, 5000);
+    seen = await desk();
+    check('the honest one bribes too: TURNED AWAY brings out the cheese', seen.name === 'Colin Stilton' && seen.offer && seen.hint.includes('wedge of cheese'), seen);
+    await press(awayAt);
+    await waitFor(`!document.getElementById('report').hidden`, 10000);
+    const refused = await page.evaluate(`({ over: !document.getElementById('report').hidden, row: document.querySelectorAll('#report-rows tr')[1]?.textContent ?? '', record: document.getElementById('bribes').textContent })`);
+    check('TURNED AWAY again refuses it: the stamp lands and the record stays clean', refused.over && refused.row.includes('Turned away') && !refused.row.includes('bribe') && refused.record.includes('clean'), refused);
+
+    // The B key takes the offer too (Hamzah's PR #3 idea), and only when one is out.
+    await page.evaluate(`document.getElementById('again').click(); true`);
+    await waitFor(`!document.getElementById('controls').hidden`, 5000);
+    const key = async (code, key) => {
+      for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, code, key });
+    };
+    await key('KeyB', 'b');
+    await sleep(300);
+    const noOffer = await desk();
+    await press(awayAt);
+    await waitFor(OFFER_OUT, 5000);
+    await key('KeyB', 'b');
+    await waitFor(`document.getElementById('traveller-name').textContent !== 'Max Tokens'`, 10000);
+    seen = await desk();
+    check('B takes the offer, and does nothing with none out', noOffer.name === 'Max Tokens' && seen.name === 'Colin Stilton' && seen.hint.includes('pocket the croissant'), { noOffer, ...seen });
 
     // Sounds: headless Chrome may have no audio device; the page must not mind.
     const sound = await page.evaluate(`(() => {

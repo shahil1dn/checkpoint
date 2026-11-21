@@ -22,8 +22,9 @@ A new browser game in this repo, built on the shape of `~/Documents/projects/fan
 
 You're the inspector at a checkpoint. Travellers step up one at a time with papers on your desk.
 You question them **out loud**; they answer **out loud**, each in their own voice, and they
-flatter you, offer bribes and dodge. When you're sure, you stamp them **through** or **turned
-away**. At the end of the shift the game reveals who was lying and scores you. The first
+flatter you and dodge. When you're sure, you stamp them **through** or **turned
+away**; reach for turned away and they try one last bribe first (ADR-13). At the end of the
+shift the game reveals who was lying and scores you. The first
 traveller is a Mistral superfan, so a room of Mistral judges can catch him out with what they know.
 
 ## In scope

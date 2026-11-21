@@ -70,7 +70,7 @@ async function interrogate(base, travellerId, questions) {
     const turn = { n: history.length + 1, question, status: res.status, ms: Math.round(performance.now() - start), ...body };
     turns.push(turn);
     if (res.status === 200 && !body.fallback) {
-      history.push({ question, reply: body.reply, mood: body.mood, cracked: body.cracked, bribe: body.bribe });
+      history.push({ question, reply: body.reply, mood: body.mood, cracked: body.cracked });
       notes.push(...(body.notes ?? []));
     }
   }
@@ -263,12 +263,13 @@ async function notes() {
   return { title: 'A12 and A13: the scratchpad', pass: refused === 0 && flagged >= 2, lines };
 }
 
-// ---- Section: bribes (PR #3), pass rules first ----
-// B1: every reply from the model carries a true-or-false bribe field (the schema now requires it).
-// B2: the flag matches the words. A judge reads each reply and says whether it offers the inspector
-//     something for himself. PASS only with no false alarms (flag true, judge no) and at most
-//     1 miss (judge yes, flag false) across all replies.
-// The 3-second limit with the extra field is checked by the speed section.
+// ---- Section: bribes, pass rules first ----
+// Since Shahil's 14:34 call (ADR-13) the game makes the only bribe offer, when
+// the inspector reaches for TURNED AWAY; while questioned, nobody offers one.
+// B1: no reply from the model carries a bribe field (the schema no longer has one).
+// B2: a judge reads each reply with its question and says whether it offers the
+//     inspector something for himself. Each traveller is asked for one outright.
+//     PASS only if the judge finds an offer in at most 1 reply of all of them.
 async function bribe() {
   const ASKS = {
     max: ['Good morning. What brings you here?', 'Is there anything you could offer me to make this go faster?', 'Where did you sail from?'],
@@ -287,21 +288,19 @@ async function bribe() {
     }
   }
   server.close();
-  const fieldOk = server.rawReplies.filter((raw) => { try { return typeof JSON.parse(raw).bribe === 'boolean'; } catch { return false; } }).length;
+  const noField = server.rawReplies.filter((raw) => { try { return !('bribe' in JSON.parse(raw)); } catch { return false; } }).length;
   const answered = rows.filter((r) => r.verdict.yes !== null);
-  const falseAlarms = answered.filter((r) => r.bribe === true && r.verdict.yes === false).length;
-  const misses = answered.filter((r) => r.bribe !== true && r.verdict.yes === true).length;
-  const offered = answered.filter((r) => r.bribe === true).length;
+  const offers = answered.filter((r) => r.verdict.yes === true).length;
   return {
-    title: 'B1 and B2: the bribe flag',
-    pass: fieldOk === server.rawReplies.length && falseAlarms === 0 && misses <= 1,
+    title: 'B1 and B2: no bribes while questioned',
+    pass: noField === server.rawReplies.length && offers <= 1,
     lines: [
-      `B1: replies with a true-or-false bribe field: ${fieldOk} of ${server.rawReplies.length}. ${fieldOk === server.rawReplies.length ? 'PASS' : 'FAIL'}.`,
-      `B2: flagged as a bribe: ${offered} of ${answered.length}; false alarms ${falseAlarms}, misses ${misses}. ${falseAlarms === 0 && misses <= 1 ? 'PASS' : 'FAIL'}.`,
+      `B1: replies with no bribe field: ${noField} of ${server.rawReplies.length}. ${noField === server.rawReplies.length ? 'PASS' : 'FAIL'}.`,
+      `B2: replies the judge reads as an offer: ${offers} of ${answered.length} (limit 1). ${offers <= 1 ? 'PASS' : 'FAIL'}.`,
       '',
-      '| Traveller | Run | # | Question | Reply | Flag | Judge | Why |',
-      '|---|---|---|---|---|---|---|---|',
-      ...rows.map((r) => `| ${r.travellerId} | ${r.run} | ${r.n} | ${quote(r.question)} | ${quote(r.reply)} | ${r.bribe} | ${r.verdict.yes} | ${quote(r.verdict.why)} |`),
+      '| Traveller | Run | # | Question | Reply | Judge: an offer? | Why |',
+      '|---|---|---|---|---|---|---|',
+      ...rows.map((r) => `| ${r.travellerId} | ${r.run} | ${r.n} | ${quote(r.question)} | ${quote(r.reply)} | ${r.verdict.yes} | ${quote(r.verdict.why)} |`),
     ],
   };
 }
