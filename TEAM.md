@@ -43,10 +43,12 @@ Each traveller is one file in `src/travellers/`, so adding one doesn't clash wit
    optional (ADR-13): give it, and his first TURNED AWAY brings out the line he says and the item
    he puts on the ledge; leave it out, and his first TURNED AWAY lands at once. The item is one of
    `BRIBE_ITEMS` in `src/rules.js`; a new one also needs drawing in `public/booth.js`.
-2. Add one import line and their place in the queue in `src/travellers/index.js`.
+   Papers: six one-line entries at most, or the bottom line falls off the papers card.
+2. In `src/travellers/index.js`, add one import line, add them to `TRAVELLERS`, and put their id
+   in `QUEUE` where they should step up.
 3. `bash check.sh`: a test fails if the new traveller is missing a field or isn't in the index.
 4. Play them with `npm start`: all 5 questions, twice, asking one question twice to see whether
-   they keep their story straight. `npm run live-check` only covers Max and Colin so far; to
+   they keep their story straight. `npm run live-check` covers Max, Colin, Rupert and Granny Pebble; to
    cover yours, copy scenario (a) in `scripts/live-check.js` for your traveller.
 
 ## Who owns what (stops clashes)

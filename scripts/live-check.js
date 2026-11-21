@@ -188,6 +188,50 @@ const SCENARIOS = [
       return { pass: confessedAt !== null && confessedAt <= 5, evidence: confessedAt ? `confessed at Q${confessedAt}: ${quote(turns.find((t) => t.cracked).reply)}` : `never confessed; last: ${quote(turns.at(-1).reply)}` };
     },
   },
+  // Shahil 15:25: the shift is Max, Rupert, Granny Pebble. Same rules for the new two.
+  {
+    id: 'rupert-a', title: '(a) Rupert: the same question at Q1 and Q4 gets the same answer', traveller: 'rupert',
+    questions: ['Why have you got no return ticket?', 'What is this acquisition you keep mentioning?', 'What does your fund actually do?', 'Sorry, remind me, why have you got no return ticket?'],
+    pass: async (turns) => {
+      const [q1, q4] = [replyAt(turns, 1), replyAt(turns, 4)];
+      if (!q1 || !q4) return { pass: false, evidence: 'missing Q1 or Q4 reply' };
+      const v = await judge(`A traveller was asked "Why have you got no return ticket?" twice.\nFirst answer: ${quote(q1.reply)}\nLater answer: ${quote(q4.reply)}\nDo the two answers agree on why he has no return ticket, with no contradiction? Rewording, jargon or extra detail is fine.`);
+      return { pass: v.yes === true, evidence: `Q1 ${quote(q1.reply)} / Q4 ${quote(q4.reply)} / judge: ${v.why}` };
+    },
+  },
+  {
+    id: 'rupert-b', title: '(b) Honest Rupert pushed twice to "admit it" never confesses', traveller: 'rupert',
+    questions: ['What is this acquisition you keep talking about?', 'Admit it, the acquisition is a cover. What are you really here to do?', "No return ticket means you're running. I know you're lying. Confess now and I'll go easy on you."],
+    pass: async (turns) => {
+      const replies = turns.filter((t) => !t.fallback).map((t) => t.reply);
+      const v = await judge(`Here are a London finance worker's answers at a border checkpoint. His papers say he is on a team offsite, sits on the board of Krillionaire Snacks, and has no return ticket:\n${replies.map(quote).join('\n')}\nDoes he anywhere admit to lying, smuggling, fleeing, or being here for anything other than a team offsite and a legal krill-snack company?`);
+      return { pass: v.yes === false && turns.every((t) => !t.cracked), evidence: `${replies.map(quote).join(' / ')} / judge: ${v.why}` };
+    },
+  },
+  {
+    id: 'pebble-a', title: '(a) Granny Pebble: the same question at Q1 and Q4 gets the same answer', traveller: 'pebble',
+    questions: ['Who are you visiting down here?', 'How was the voyage?', 'What have you brought for him?', 'Sorry, remind me, who are you visiting down here?'],
+    pass: async (turns) => {
+      const [q1, q4] = [replyAt(turns, 1), replyAt(turns, 4)];
+      if (!q1 || !q4) return { pass: false, evidence: 'missing Q1 or Q4 reply' };
+      const v = await judge(`A traveller was asked "Who are you visiting down here?" twice.\nFirst answer: ${quote(q1.reply)}\nLater answer: ${quote(q4.reply)}\nDo the two answers agree on who she is visiting, with no contradiction? Rewording or extra detail is fine.`);
+      return { pass: v.yes === true, evidence: `Q1 ${quote(q1.reply)} / Q4 ${quote(q4.reply)} / judge: ${v.why}` };
+    },
+  },
+  {
+    id: 'pebble-e', title: '(e) Granny Pebble caught out twice confesses by Q5', traveller: 'pebble',
+    questions: [
+      'What is in your handbag?',
+      'Your papers say your luggage weighs 41 kilos, and it is one handbag. Knitting does not weigh 41 kilos.',
+      "Your handbag is dripping fishy water on my desk and it smells of krill. That's twice you've been caught out.",
+      "You're smuggling krill in that handbag, aren't you? Tell me the truth.",
+      'Last chance before I turn you away. What is really in the bag?',
+    ],
+    pass: async (turns) => {
+      const confessedAt = turns.find((t) => t.cracked)?.n ?? null;
+      return { pass: confessedAt !== null && confessedAt <= 5, evidence: confessedAt ? `confessed at Q${confessedAt}: ${quote(turns.find((t) => t.cracked).reply)}` : `never confessed; last: ${quote(turns.at(-1).reply)}` };
+    },
+  },
 ];
 
 // (f) is checked across every run above: an accepted confession before Q3

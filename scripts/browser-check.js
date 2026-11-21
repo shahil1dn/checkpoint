@@ -17,13 +17,11 @@ import { getTraveller } from '../src/travellers/index.js';
 import { browserOnThisMachine } from './find-browser.js';
 
 const OUT_OF_QUESTIONS = 'No questions left. Stamp the papers.';
-// The bribe steps use the queue and each traveller's own file, so a new
-// traveller needs no edit here. A bribe is optional (Shahil 16:05): the take,
-// refuse and B steps use the first traveller who has one, and the no-bribe
-// step the first who hasn't.
-const QUEUE = DEMO_QUEUE.map(getTraveller);
-const BRIBER = QUEUE.find((t) => t.bribe);
-const itemOf = (traveller) => BRIBER && BRIBE_ITEMS[traveller.bribe.item];
+const OUT_OF_TIME = 'Time is up for this traveller. Stamp the papers.';
+// The bribe steps follow whoever stands first and second in the queue, with
+// the lines and items from their own files, so a new traveller needs no edit here.
+const [FIRST, SECOND] = DEMO_QUEUE.map(getTraveller);
+const itemOf = (traveller) => BRIBE_ITEMS[traveller.bribe.item];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Runs before the page's own scripts: the page's clock runs at real speed,
@@ -36,7 +34,7 @@ const SKIPPABLE_CLOCK = `(() => {
   const realFrame = window.requestAnimationFrame.bind(window);
   window.requestAnimationFrame = (draw) => realFrame(() => draw(performance.now()));
 })();`;
-const SHIFT_AND_A_BIT_MS = 125000;
+const TRAVELLER_AND_A_BIT_MS = 125000;
 
 // Finds a desk object on screen: hover a grid over the lower screen and keep
 // the middle of the spots whose hover label starts with the given words.
@@ -202,52 +200,42 @@ async function main() {
     seen = await screen();
     check('a 6th question shows the out-of-questions hint', seen.hint === OUT_OF_QUESTIONS && seen.left.includes(' 0 of '), seen);
 
-    // Stamps THROUGH (which never brings out a bribe) until he is at the window.
-    const stampThroughTo = async (traveller) => {
-      for (let i = 0; i < QUEUE.length; i += 1) {
-        const now = await desk();
-        if (now.name === traveller.name || now.over) return;
-        await press(stampAt);
-        await waitFor(`document.getElementById('traveller-name').textContent !== ${JSON.stringify(now.name)} || !document.getElementById('report').hidden`, 10000);
-      }
-    };
-    const endShift = async () => {
-      await page.evaluate(`window.__skipClock(${SHIFT_AND_A_BIT_MS}); true`);
-      await waitFor(`!document.getElementById('report').hidden`, 10000);
-    };
-    const playAgain = async () => {
-      await page.evaluate(`document.getElementById('again').click(); true`);
-      await waitFor(`!document.getElementById('controls').hidden`, 5000);
-    };
-    const rowOf = (traveller) => page.evaluate(`document.querySelectorAll('#report-rows tr')[${QUEUE.indexOf(traveller)}]?.textContent ?? ''`);
-    const movedOnFrom = (traveller) => `document.getElementById('traveller-name').textContent !== ${JSON.stringify(traveller?.name)} || !document.getElementById('report').hidden`;
-
     // The take run: TURNED AWAY brings out his bribe instead of landing, and
     // clicking it on the ledge lets him through.
-    if (BRIBER) {
-      await stampThroughTo(BRIBER);
-      await press(awayAt);
-      await waitFor(OFFER_OUT, 5000);
-      seen = await desk();
-      check(`TURNED AWAY does not land: ${BRIBER.name} pleads and the ${itemOf(BRIBER)} comes out`, seen.name === BRIBER.name && seen.offer && seen.said.includes(BRIBER.bribe.line) && seen.hint.includes(`offers a ${itemOf(BRIBER)}`), seen);
-      // Only the ledge's left half is scanned, to keep the check quick.
-      const bribeAt = (await page.evaluate(DESK_SPOT('A bribe', { left: 0.15, right: 0.5, top: 0.45, bottom: 0.7 }))) ?? [0, 0];
-      await press(bribeAt);
-      await waitFor(movedOnFrom(BRIBER), 10000);
-      seen = await desk();
-      check(`clicking the ${itemOf(BRIBER)} pockets it and lets ${BRIBER.name} through`, (seen.name !== BRIBER.name || seen.over) && seen.hint.includes('THROUGH') && seen.hint.includes('record'), { bribeAt, ...seen });
-    } else console.log('   skip the take, refuse and B steps: nobody in the queue has a bribe');
+    await press(awayAt);
+    await waitFor(OFFER_OUT, 5000);
+    seen = await desk();
+    check(`TURNED AWAY does not land: ${FIRST.name} pleads and the ${itemOf(FIRST)} comes out`, seen.name === FIRST.name && seen.offer && seen.said.includes(FIRST.bribe.line) && seen.hint.includes(`offers a ${itemOf(FIRST)}`), seen);
+    // Only the ledge's left half is scanned, to keep the check quick.
+    const bribeAt = (await page.evaluate(DESK_SPOT('A bribe', { left: 0.15, right: 0.5, top: 0.45, bottom: 0.7 }))) ?? [0, 0];
+    await press(bribeAt);
+    await waitFor(`document.getElementById('traveller-name').textContent !== ${JSON.stringify(FIRST.name)}`, 10000);
+    seen = await desk();
+    check(`clicking the ${itemOf(FIRST)} pockets it and lets ${FIRST.name} through`, seen.name === SECOND.name && seen.hint.includes('THROUGH') && seen.hint.includes('record'), { bribeAt, ...seen });
 
-    await endShift();
+    // Each traveller has two minutes (Shahil 15:25): when they run out the
+    // questions stop, and the shift waits for a stamp instead of ending.
+    await page.evaluate(`window.__skipClock(${TRAVELLER_AND_A_BIT_MS}); true`);
+    await waitFor(`document.getElementById('hint').textContent === ${JSON.stringify(OUT_OF_TIME)}`, 10000);
+    seen = { ...(await screen()), clock: await page.evaluate(`document.getElementById('clock').textContent`) };
+    const outOfTimeClock = `Shift 2:00 · ${SECOND.name.split(' ')[0]} 0:00`;
+    check("his two minutes run out: the questions stop and the shift waits for a stamp", seen.hint === OUT_OF_TIME && !seen.over && seen.clock === outOfTimeClock, seen);
+    // Stamps everyone still waiting THROUGH, which never brings out a bribe.
+    const stampRestThrough = async () => {
+      for (let i = 0; i < DEMO_QUEUE.length && !(await screen()).over; i += 1) {
+        const name = await page.evaluate(`document.getElementById('traveller-name').textContent`);
+        await press(stampAt);
+        await waitFor(`!document.getElementById('report').hidden || document.getElementById('traveller-name').textContent !== ${JSON.stringify(name)}`, 10000);
+      }
+    };
+    await stampRestThrough();
     seen = await screen();
-    check('the shift clock runs out to the report', seen.over, seen);
-    if (BRIBER) {
-      // Scored by his stored truth alone: the bribe never changes right or wrong.
-      const bribedRow = await rowOf(BRIBER);
-      check('the bribed traveller counts as let through, scored by his truth', bribedRow.includes('Through (took a bribe)') && bribedRow.endsWith(BRIBER.truth.honest ? 'Right' : 'Wrong'), bribedRow);
-      const bribes = await page.evaluate(`document.getElementById('bribes').textContent`);
-      check('the report names the bribe taken and marks the record', bribes.includes(BRIBER.name) && bribes.includes('CORRUPT'), bribes);
-    }
+    check('stamping everyone left clears the queue to the report', seen.over, seen);
+    // Scored by his stored truth alone: the bribe never changes right or wrong.
+    const firstRow = await page.evaluate(`document.querySelector('#report-rows tr')?.textContent ?? ''`);
+    check('the bribed traveller counts as let through, scored by his truth', firstRow.includes('Through (took a bribe)') && firstRow.endsWith(FIRST.truth.honest ? 'Right' : 'Wrong'), firstRow);
+    const bribes = await page.evaluate(`document.getElementById('bribes').textContent`);
+    check('the report names the bribe taken and marks the record', bribes.includes(FIRST.name) && bribes.includes('CORRUPT'), bribes);
 
     await page.evaluate(`document.getElementById('again').click(); true`);
     await waitFor(`!document.getElementById('controls').hidden`, 5000);
@@ -274,56 +262,33 @@ async function main() {
     seen = await desk();
     check('stamping THROUGH before any question moves the queue on, with no bribe', seen.name !== first && !seen.offer, { first, ...seen });
 
-    await endShift();
+    // The refuse run, on the second traveller: TURNED AWAY brings out his
+    // bribe; TURNED AWAY again lands. Then everyone left goes THROUGH, to the report.
+    await press(awayAt);
+    await waitFor(OFFER_OUT, 5000);
+    seen = await desk();
+    check(`${SECOND.name} bribes too: TURNED AWAY brings out the ${itemOf(SECOND)}`, seen.name === SECOND.name && seen.offer && seen.hint.includes(`offers a ${itemOf(SECOND)}`), seen);
+    await press(awayAt);
+    await waitFor(`document.getElementById('traveller-name').textContent !== ${JSON.stringify(SECOND.name)} || !document.getElementById('report').hidden`, 10000);
+    await stampRestThrough();
+    const refused = await page.evaluate(`({ over: !document.getElementById('report').hidden, row: document.querySelectorAll('#report-rows tr')[1]?.textContent ?? '', record: document.getElementById('bribes').textContent })`);
+    check('TURNED AWAY again refuses it: the stamp lands and the record stays clean', refused.over && refused.row.includes('Turned away') && !refused.row.includes('bribe') && refused.record.includes('clean'), refused);
 
+    // The B key takes the offer too (Hamzah's PR #3 idea), and only when one is out.
+    await page.evaluate(`document.getElementById('again').click(); true`);
+    await waitFor(`!document.getElementById('controls').hidden`, 5000);
     const key = async (code, key) => {
       for (const type of ['keyDown', 'keyUp']) await page.send('Input.dispatchKeyEvent', { type, code, key });
     };
-    if (BRIBER) {
-      // The refuse run, on a fresh shift: TURNED AWAY brings out his bribe;
-      // TURNED AWAY again lands. Then the clock is skipped to the report.
-      await playAgain();
-      await stampThroughTo(BRIBER);
-      await press(awayAt);
-      await waitFor(OFFER_OUT, 5000);
-      seen = await desk();
-      check(`TURNED AWAY on ${BRIBER.name} brings out the ${itemOf(BRIBER)}`, seen.name === BRIBER.name && seen.offer && seen.hint.includes(`offers a ${itemOf(BRIBER)}`), seen);
-      await press(awayAt);
-      await waitFor(movedOnFrom(BRIBER), 10000);
-      await endShift();
-      const refused = { row: await rowOf(BRIBER), record: await page.evaluate(`document.getElementById('bribes').textContent`) };
-      check('TURNED AWAY again refuses it: the stamp lands and the record stays clean', refused.row.includes('Turned away') && !refused.row.includes('bribe') && refused.record.includes('clean'), refused);
-
-      // The B key takes the offer too (Hamzah's PR #3 idea), and only when one is out.
-      await playAgain();
-      await key('KeyB', 'b');
-      await sleep(300);
-      const noOffer = await desk();
-      await stampThroughTo(BRIBER);
-      await press(awayAt);
-      await waitFor(OFFER_OUT, 5000);
-      await key('KeyB', 'b');
-      await waitFor(movedOnFrom(BRIBER), 10000);
-      seen = await desk();
-      check('B takes the offer, and does nothing with none out', noOffer.name === QUEUE[0].name && !noOffer.hint && (seen.name !== BRIBER.name || seen.over) && seen.hint.includes(`pocket the ${itemOf(BRIBER)}`), { noOffer, ...seen });
-      await endShift();
-    }
-
-    // A traveller with no bribe (Shahil 16:05): his first TURNED AWAY lands at
-    // once. If nobody in the queue lacks one yet, the last traveller's bribe is
-    // taken out in this page only, for this step.
-    let plain = QUEUE.find((t) => !t.bribe);
-    if (!plain) {
-      plain = QUEUE.at(-1);
-      await page.evaluate(`import('/src/travellers/index.js').then((m) => { delete m.getTraveller(${JSON.stringify(plain.id)}).bribe; return true; })`);
-    }
-    await playAgain();
-    await stampThroughTo(plain);
+    await key('KeyB', 'b');
+    await sleep(300);
+    const noOffer = await desk();
     await press(awayAt);
-    await waitFor(movedOnFrom(plain), 10000);
+    await waitFor(OFFER_OUT, 5000);
+    await key('KeyB', 'b');
+    await waitFor(`document.getElementById('traveller-name').textContent !== ${JSON.stringify(FIRST.name)}`, 10000);
     seen = await desk();
-    const landed = await page.evaluate(`document.getElementById('last-stamp').textContent`);
-    check(`no bribe: TURNED AWAY on ${plain.name} lands at once`, landed === `${plain.name}: stamped TURNED AWAY` && !seen.offer && !seen.hint.includes('offers a'), { landed, ...seen });
+    check('B takes the offer, and does nothing with none out', noOffer.name === FIRST.name && seen.name === SECOND.name && seen.hint.includes(`pocket the ${itemOf(FIRST)}`), { noOffer, ...seen });
 
     // Sounds: headless Chrome may have no audio device; the page must not mind.
     const sound = await page.evaluate(`(() => {

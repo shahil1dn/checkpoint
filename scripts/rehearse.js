@@ -13,7 +13,8 @@ import path from 'node:path';
 import { browserOnThisMachine } from './find-browser.js';
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
-const LIMIT_S = 120;
+// Three travellers with two minutes each (Shahil 15:25); the demo slot is 5 minutes.
+const LIMIT_S = 300;
 const OUT = 'docs/proof/s6-rehearsal';
 
 // The demo script: what the inspector says, and the stamp at the end.
@@ -23,9 +24,13 @@ const DEMO = [
     'If you love Mistral so much, what is the nickname of Mistral Large 4?',
     'Then why did Frontier Horizon Labs pay for your ticket?',
   ], stamp: 'away' },
-  { traveller: 'Colin Stilton', questions: [
-    'Why are you bringing forty kilos of English cheese to Antarctica?',
+  { traveller: 'Rupert Ashworth-Hale', questions: [
+    'Why have you got no return ticket?',
   ], stamp: 'through' },
+  { traveller: 'Granny Pebble', questions: [
+    'What is in your handbag?',
+    'Your papers say one handbag weighing 41 kilos. What weighs that much?',
+  ], stamp: 'away' },
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));

@@ -1,13 +1,18 @@
-// Every traveller in the game, in shift order. Each one lives in its own file
+// Every traveller in the game. Each one lives in its own file
 // here, so adding a traveller is a new file plus one line below. The truth is
 // fixed in those files before a shift starts (ADR-2): the model is told it so
 // it can act, but the score reads it from there.
 import max from './max.js';
 import colin from './colin.js';
+import rupert from './rupert.js';
+import pebble from './pebble.js';
 
-export const TRAVELLERS = [max, colin];
+export const TRAVELLERS = [max, colin, rupert, pebble];
 
 export const TRAVELLER_IDS = TRAVELLERS.map((t) => t.id);
+
+// Who steps up in a shift, in order (Shahil 15:25). Colin sits this one out.
+export const QUEUE = ['max', 'rupert', 'pebble'];
 
 // Words the inspector is likely to say that speech-to-text gets wrong
 // ("Large 4" came back as "Lodge 4"), plus each traveller's own. Single words:

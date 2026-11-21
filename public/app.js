@@ -26,6 +26,7 @@ const HINTS = {
   tooLong: 'Keep it under 300 characters.',
   pending: 'Wait for the answer.',
   outOfQuestions: 'No questions left. Stamp the papers.',
+  outOfTime: 'Time is up for this traveller. Stamp the papers.',
   shiftOver: 'The shift is over.',
   unclear: 'They mumble something unclear. Ask again.',
   tap: 'Hold the microphone (or Space) while you talk, then let go.',
@@ -45,7 +46,7 @@ const TOOL_TIPS = {
   'stamp-away': 'Stamp: turn them away',
 };
 const STAMP_WORDS = { through: 'Through', away: 'Turned away' };
-const END_REASONS = { queueEmpty: 'Queue cleared.', time: "Time's up. Anyone not stamped counts as wrong." };
+const END_REASONS = { queueEmpty: 'Queue cleared.' };
 
 const hint = (text) => { $('hint').textContent = text; };
 
@@ -140,11 +141,11 @@ function playVoice(base64Mp3, speechMs, onDone = () => {}) {
   if (speechMs !== undefined) {
     clip.addEventListener('loadedmetadata', () => logCall(lineForSpeech(clip.duration, speechMs, models)), { once: true });
   }
-  clip.addEventListener('ended', () => { if (voice === clip) booth?.setTalking(false); });
+  for (const stopped of ['ended', 'error']) clip.addEventListener(stopped, () => { if (voice === clip) setSpeaking(false); });
   for (const stopped of ['ended', 'pause', 'error']) clip.addEventListener(stopped, onDone);
-  booth?.setTalking(true);
+  setSpeaking(true);
   clip.play().catch(() => {
-    booth?.setTalking(false);
+    setSpeaking(false);
     hint(HINTS.blocked);
     onDone();
   });
@@ -153,7 +154,13 @@ function playVoice(base64Mp3, speechMs, onDone = () => {}) {
 function stopVoice() {
   voice?.pause();
   voice = null;
-  booth?.setTalking(false);
+  setSpeaking(false);
+}
+
+// His clock waits while he talks, the same as while Mistral thinks.
+function setSpeaking(speaking) {
+  shift = R.setSpeaking(shift, speaking);
+  booth?.setTalking(speaking);
 }
 
 // ---- Actions ----
@@ -245,6 +252,7 @@ async function pocketBribe() {
 function beginTalking() {
   if (!started || shift.phase !== 'playing' || shift.pending || shift.hearing) return;
   if (R.bribeOffer(shift)) return hint(HINTS.bribeOnTable);
+  if (R.travellerTimeLeftMs(shift) <= 0) return hint(HINTS.outOfTime);
   stopVoice();
   if (!startClip()) return;
   talkingTo = R.currentTravellerId(shift);
@@ -387,11 +395,17 @@ function renderReport() {
   $('bribes').className = report.record;
 }
 
+const minutes = (ms) => {
+  const seconds = Math.ceil(ms / 1000);
+  return `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+};
+
+// The shift's six minutes, and the two that belong to whoever is at the window.
 function renderClock() {
-  const secondsLeft = Math.ceil(R.timeLeftMs(shift) / 1000);
-  const clock = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
-  const paused = shift.pending || shift.hearing || shift.pleading ? ' (paused)' : '';
-  $('clock').textContent = started ? `Clock ${clock}${paused}` : '';
+  const id = R.currentTravellerId(shift);
+  const paused = shift.pending || shift.hearing || shift.speaking || shift.pleading ? ' (paused)' : '';
+  const his = id ? ` · ${getTraveller(id).name.split(' ')[0]} ${minutes(R.travellerTimeLeftMs(shift))}${paused}` : '';
+  $('clock').textContent = started ? `Shift ${minutes(R.timeLeftMs(shift))}${his}` : '';
 }
 
 function render() {
@@ -427,15 +441,15 @@ function render() {
   const offer = R.bribeOffer(shift);
   if (!stampingNow) booth?.setBribe(offer?.item ?? null);
   $('take-bribe').hidden = !offer;
-  $('talk').disabled = Boolean(shift.pending || shift.hearing) || left === 0 || !micReady();
+  $('talk').disabled = Boolean(shift.pending || shift.hearing) || left === 0 || R.travellerTimeLeftMs(shift) <= 0 || !micReady();
 }
 
 function frame(now) {
   if (started && shift.phase === 'playing') {
+    const hadTime = R.travellerTimeLeftMs(shift) > 0;
     if (!micSetup) shift = R.tick(shift, now - lastFrame);
-    if (shift.phase === 'over') {
-      stopVoice();
-      booth?.show(null, { reaction: 'away' });
+    if (hadTime && R.travellerTimeLeftMs(shift) <= 0) {
+      hint(HINTS.outOfTime);
       render();
     } else {
       renderClock();
