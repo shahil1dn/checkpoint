@@ -21,8 +21,9 @@ export default {
   look: { hat: 'chef', glasses: 'round' },
   hearingHints: ['Colin', 'Stilton', 'Cambridgeshire', 'cheesemonger'],
   // Honest, and he still bribes when you reach for TURNED AWAY, so a bribe is never a tell.
+  // Asked for one, he says he doesn't bribe inspectors; this line owns the U-turn (Shahil 15:20).
   bribe: {
-    line: "Hang on, hang on! I've got something for you. A wedge of my best Stilton. Go on, take it, and let me through.",
+    line: 'Hey, hey, okay! How about a bribe, actually? A wedge of my best Stilton?',
     item: 'cheese',
     mood: 'sad',
   },

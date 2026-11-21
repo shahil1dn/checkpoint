@@ -31,7 +31,7 @@ export default {
   // His last-ditch offer when you reach for TURNED AWAY (Shahil 14:34): said in
   // his mood voice, and the item appears on the window ledge (BRIBE_ITEMS in src/rules.js).
   bribe: {
-    line: 'Wait, wait! Before you stamp that, I have something for you. A croissant, fresh from Paris. For my favourite inspector?',
+    line: 'Wait, wait! I have a croissant, just for you!',
     item: 'croissant',
     mood: 'excited',
   },
