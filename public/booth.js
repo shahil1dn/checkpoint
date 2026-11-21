@@ -349,14 +349,7 @@ function buildBribe(group) {
   card.redraw();
   card.mesh.position.set(0, 0.05, -0.05);
   card.mesh.rotation.x = -0.35;
-  // Granny's fish pie: a tin, a golden crust, and fish heads poking through it.
-  const pie = new THREE.Group();
-  part(new THREE.CylinderGeometry(0.075, 0.06, 0.035, 20), mat('#b4bec3'), pie, [0, 0.018, 0]);
-  part(new THREE.SphereGeometry(0.072, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat('#d9a04a'), pie, [0, 0.034, 0], [0, 0, 0], [1, 0.45, 1]);
-  for (const [x, z, lean] of [[-0.03, 0.01, 0.3], [0.025, -0.015, -0.25], [0.005, 0.03, 0.1]]) {
-    part(new THREE.ConeGeometry(0.012, 0.045, 6), mat('#8a9aa6'), pie, [x, 0.068, z], [0, 0, lean], [1, 1, 0.6], false);
-  }
-  const items = { croissant, cheese, sticker: sticker.mesh, card: card.mesh, pie };
+  const items = { croissant, cheese, sticker: sticker.mesh, card: card.mesh };
   for (const item of Object.values(items)) holder.add(item);
   return {
     holder,

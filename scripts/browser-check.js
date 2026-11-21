@@ -290,6 +290,23 @@ async function main() {
     seen = await desk();
     check('B takes the offer, and does nothing with none out', noOffer.name === FIRST.name && seen.name === SECOND.name && seen.hint.includes(`pocket the ${itemOf(FIRST)}`), { noOffer, ...seen });
 
+    // A traveller with no bribe (Shahil 15:27, ADR-13): his first TURNED AWAY lands at once.
+    const PLAIN = DEMO_QUEUE.map(getTraveller).find((t) => !t.bribe);
+    if (!PLAIN) check('someone in the queue has no bribe, for the no-bribe step', false, DEMO_QUEUE);
+    else {
+      for (let i = 0; i < DEMO_QUEUE.length; i += 1) {
+        const now = await desk();
+        if (now.name === PLAIN.name || now.over) break;
+        await press(stampAt);
+        await waitFor(`document.getElementById('traveller-name').textContent !== ${JSON.stringify(now.name)} || !document.getElementById('report').hidden`, 10000);
+      }
+      await press(awayAt);
+      await waitFor(`document.getElementById('last-stamp').textContent.startsWith(${JSON.stringify(PLAIN.name)}) || ${OFFER_OUT}`, 10000);
+      seen = await desk();
+      const landed = await page.evaluate(`document.getElementById('last-stamp').textContent`);
+      check(`no bribe: TURNED AWAY on ${PLAIN.name} lands at once`, landed === `${PLAIN.name}: stamped TURNED AWAY` && !seen.offer && !seen.hint.includes('offers a'), { landed, ...seen });
+    }
+
     // Sounds: headless Chrome may have no audio device; the page must not mind.
     const sound = await page.evaluate(`(() => {
       const button = document.getElementById('mute');
