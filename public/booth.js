@@ -4,7 +4,7 @@
 // import map (ADR-7). Screen only: the booth shows what it is told and reports
 // what was clicked; every rule is decided in app.js and src/rules.js.
 import * as THREE from 'three';
-import { createEngine, part, box, ball, mat, textPlane } from '/penguins/engine.js';
+import { createEngine, part, box, ball, mat, mapMat, textPlane } from '/penguins/engine.js';
 import { makePenguin } from '/penguins/penguin.js';
 import { buildScenery } from '/scenery.js';
 import { FORM_TITLE, NOTICES, RULE_SPOT, TIN_LABEL } from '/notices.js';
@@ -20,6 +20,8 @@ const TYPEWRITER = '"American Typewriter", "Courier New", monospace';
 const HANDWRITING = '"Noteworthy", "Bradley Hand", "Marker Felt", cursive';
 const TERMINAL = 'Menlo, "Courier New", monospace';
 const AMBER = '#f2b544';
+const BRASS = '#c4a46b';
+const BRASS_DARK = '#80613b';
 
 
 // One face per mood, the same for every traveller, so the face is a fair tell.
@@ -135,6 +137,42 @@ function drawLabel(g, w, h, text, colour) {
 
 // ---------- building the booth ----------
 
+function deskWood() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1024; canvas.height = 512;
+  const g = canvas.getContext('2d');
+  const board = canvas.height / 4;
+  for (let plank = 0; plank < 4; plank += 1) {
+    const y = plank * board;
+    const wash = g.createLinearGradient(0, y, 0, y + board);
+    wash.addColorStop(0, plank % 2 ? '#ae784b' : '#bb8757');
+    wash.addColorStop(0.5, plank % 2 ? '#b78253' : '#c18c5c');
+    wash.addColorStop(1, plank % 2 ? '#a97348' : '#b17b4f');
+    g.fillStyle = wash; g.fillRect(0, y, canvas.width, board);
+    for (let line = 0; line < 25; line += 1) {
+      const start = y + ((line * 47 + plank * 29) % board);
+      g.beginPath();
+      for (let x = 0; x <= canvas.width; x += 32) {
+        const bend = Math.sin(x * 0.013 + line * 1.8) * (1.4 + line % 3);
+        const drift = Math.sin(x * 0.004 + line * 0.7) * 2;
+        if (x === 0) g.moveTo(x, start + bend + drift);
+        else g.lineTo(x, start + bend + drift);
+      }
+      g.strokeStyle = line % 4 ? '#6e482b27' : '#f7d4a33b';
+      g.lineWidth = line % 5 ? 1 : 2;
+      g.stroke();
+    }
+    if (plank) {
+      g.fillStyle = '#5f3d2670'; g.fillRect(0, y - 2, canvas.width, 3);
+      g.fillStyle = '#f0bf8659'; g.fillRect(0, y + 1, canvas.width, 2);
+    }
+  }
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.anisotropy = 8;
+  return mapMat(texture);
+}
+
 function buildRoom(group) {
   const wall = mat(COLORS.booth);
   const [top, half] = [2.3, 1.15];
@@ -145,8 +183,11 @@ function buildRoom(group) {
   part(box(half * 2 + 0.16, 0.08, 0.24), frame, group, [0, SILL, 0]);
   part(box(half * 2 + 0.16, 0.08, 0.24), frame, group, [0, top, 0]);
   for (const s of [-1, 1]) part(box(0.08, top - SILL, 0.24), frame, group, [s * half, (SILL + top) / 2, 0]);
-  part(box(3.4, 0.1, 1.4, 0.04), mat(COLORS.deskTop), group, [0, SILL - 0.05, 0.75]);
-  part(box(3.3, SILL - 0.1, 1.3, 0.04), mat(COLORS.desk), group, [0, (SILL - 0.1) / 2, 0.75]);
+  part(box(3.4, 0.1, 1.4, 0.04), deskWood(), group, [0, SILL - 0.05, 0.75]);
+  part(box(3.3, SILL - 0.1, 1.3, 0.04), mat('#805636'), group, [0, (SILL - 0.1) / 2, 0.75]);
+  // Fine inlay and a dark lower edge give the broad desk a readable silhouette.
+  part(box(3.26, 0.012, 0.012, 0.004), mat(BRASS), group, [0, SILL - 0.019, 1.435], undefined, undefined, false);
+  part(box(3.25, 0.035, 0.025, 0.006), mat('#62432e'), group, [0, SILL - 0.09, 1.41], undefined, undefined, false);
   // The inside of the booth, for turning to the left and right walls.
   for (const s of [-1, 1]) part(box(0.16, 3.4, BOOTH_DEPTH), mat(COLORS.inside), group, [s * SIDE_WALL_X, 1.7, BOOTH_DEPTH / 2]);
   part(box(SIDE_WALL_X * 2, 0.1, BOOTH_DEPTH), mat(COLORS.floor), group, [0, -0.05, BOOTH_DEPTH / 2]);
@@ -167,6 +208,10 @@ function liftable(group, name, at, yaw, deskScale, tilt = -Math.PI / 2) {
 
 function buildPapers(group) {
   const item = liftable(group, 'papers', new THREE.Vector3(-0.28, SILL + 0.012, 0.5), -0.06, 0.7);
+  for (const [x, y, z] of [[-0.008, -0.007, -0.004], [0.006, -0.004, -0.002]]) {
+    const under = part(box(0.42, 0.56, 0.004, 0.002), mat('#d7ccba'), item.holder, [x, y, z], undefined, undefined, false);
+    under.castShadow = under.receiveShadow = false;
+  }
   // A sheet is a thin part (ART-DIRECTION section 1): no ink hull, which framed
   // it in thick black when held up, and no shadow, which left a dark patch on the desk.
   const sheet = part(box(0.42, 0.56, 0.008, 0.004), mat(COLORS.paper), item.holder, undefined, undefined, undefined, false);
@@ -181,6 +226,13 @@ function buildPapers(group) {
 function buildNotebook(group) {
   const item = liftable(group, 'notebook', new THREE.Vector3(-0.88, SILL + 0.02, 0.5), 0.18, 0.6);
   item.cover = part(box(0.42, 0.56, 0.03, 0.01), mat(COLORS.cover), item.holder);
+  part(box(0.035, 0.54, 0.035, 0.008), mat('#294b62'), item.cover, [-0.19, 0, 0.004], undefined, undefined, false);
+  for (const y of [-0.19, 0, 0.19]) {
+    part(ball(0.008, 8, 6), mat(BRASS), item.cover, [-0.19, y, 0.024], undefined, undefined, false);
+  }
+  for (const x of [-0.17, 0.17]) {
+    part(box(0.035, 0.045, 0.006, 0.002), mat(BRASS), item.cover, [x, 0.24, 0.019], undefined, undefined, false);
+  }
   const label = textPlane(0.3, 0.08, (g, w, h) => drawLabel(g, w, h, 'SCRATCHPAD', INK), 1024);
   label.redraw();
   label.mesh.position.set(0, 0.12, 0.017);
@@ -265,6 +317,7 @@ function buildTranscript(group) {
   group.add(printer);
   // A thin part (ART-DIRECTION section 1): no ink hull, which drew a line across the slip.
   part(box(SLIP.width + 0.03, 0.03, 0.05, 0.01), mat(COLORS.micBody), printer, [0, SILL + 0.015, SLIP.front + 0.02], undefined, undefined, false);
+  part(box(SLIP.width - 0.04, 0.007, 0.008, 0.003), mat(BRASS), printer, [0, SILL + 0.035, SLIP.front + 0.047], undefined, undefined, false);
   return { item, printer };
 }
 
@@ -274,8 +327,11 @@ function buildMic(group) {
   holder.position.set(0.28, SILL, 0.32);
   group.add(holder);
   part(new THREE.CylinderGeometry(0.09, 0.11, 0.03, 20), mat(COLORS.micBody), holder, [0, 0.015, 0]);
+  part(new THREE.CylinderGeometry(0.07, 0.085, 0.006, 20), mat(BRASS_DARK), holder, [0, 0.033, 0], undefined, undefined, false);
   part(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 8), mat(COLORS.micGrille), holder, [0, 0.13, 0], [0.35, 0, 0]);
   part(ball(0.05, 16, 12), mat(COLORS.micGrille), holder, [0, 0.25, -0.04], [0, 0, 0], [1, 1.3, 1]);
+  part(new THREE.TorusGeometry(0.044, 0.004, 6, 20), mat(BRASS), holder, [0, 0.215, -0.04], [Math.PI / 2, 0, 0], undefined, false);
+  part(new THREE.TorusGeometry(0.044, 0.004, 6, 20), mat(BRASS), holder, [0, 0.28, -0.04], [Math.PI / 2, 0, 0], undefined, false);
   // Its own material: shared materials are cached by colour, so tinting one would tint them all.
   const light = new THREE.MeshBasicMaterial({ color: COLORS.off });
   part(ball(0.018, 10, 8), light, holder, [0.07, 0.035, 0.05]);
@@ -507,9 +563,13 @@ function buildStamp(group, verdict, x) {
   holder.userData.tool = `stamp-${verdict}`;
   holder.position.set(x, SILL, 0.42);
   group.add(holder);
+  part(box(0.15, 0.012, 0.1, 0.004), mat('#312f2c'), holder, [0, 0.006, 0], undefined, undefined, false);
   part(box(0.16, 0.05, 0.11, 0.015), mat(COLORS[verdict]), holder, [0, 0.025, 0]);
+  part(box(0.135, 0.009, 0.09, 0.003), mat(BRASS), holder, [0, 0.054, 0], undefined, undefined, false);
   part(new THREE.CylinderGeometry(0.025, 0.03, 0.12, 12), mat(COLORS.wood), holder, [0, 0.11, 0]);
+  part(new THREE.CylinderGeometry(0.034, 0.034, 0.012, 16), mat(BRASS_DARK), holder, [0, 0.064, 0], undefined, undefined, false);
   part(ball(0.045, 14, 10), mat(COLORS.wood), holder, [0, 0.19, 0]);
+  part(new THREE.TorusGeometry(0.032, 0.004, 6, 16), mat(BRASS), holder, [0, 0.168, 0], [Math.PI / 2, 0, 0], undefined, false);
   const label = textPlane(0.22, 0.06, (g, w, h) => drawLabel(g, w, h, STAMP_WORDS[verdict], COLORS[verdict]), 1024);
   label.redraw();
   label.mesh.position.set(0, 0.03, 0.13);
