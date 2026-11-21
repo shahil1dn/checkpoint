@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readdirSync } from 'node:fs';
 import { TRAVELLERS, TRAVELLER_IDS } from '../src/travellers/index.js';
-import { BRIBE_ITEMS, MOODS } from '../src/rules.js';
+import { BRIBE_ITEMS, MOODS, newShift, stamp } from '../src/rules.js';
 
 const folder = new URL('../src/travellers/', import.meta.url);
 const nonEmpty = (value) => typeof value === 'string' && value.trim().length > 0;
@@ -28,12 +28,20 @@ for (const t of TRAVELLERS) {
     assert.ok(nonEmpty(t.voice) || nonEmpty(t.voices?.neutral), 'a voice: voice, or voices with a neutral one');
   });
 
-  // Everyone bribes when you reach for TURNED AWAY, so a bribe is never a tell.
+  // Everyone bribes when you reach for TURNED AWAY, so a bribe is never a tell
+  // (ADR-13). The format, in each traveller file:
+  //   bribe: { line: 'Wait, wait! ...', item: 'croissant', mood: 'excited' }
   test(`${t.id}: has a last-ditch bribe: what he says and what he puts on the ledge`, () => {
-    assert.ok(t.bribe, 'bribe is missing: everyone offers one when you reach for TURNED AWAY');
-    assert.ok(nonEmpty(t.bribe.line), 'bribe.line: what he says');
-    assert.ok(BRIBE_ITEMS.includes(t.bribe.item), `bribe.item: one of ${BRIBE_ITEMS.join(', ')}`);
-    assert.ok(MOODS.includes(t.bribe.mood), `bribe.mood: one of ${MOODS.join(', ')}`);
+    assert.ok(t.bribe, 'bribe is missing: everyone offers one when you reach for TURNED AWAY. Add bribe: { line, item, mood }');
+    assert.ok(nonEmpty(t.bribe.line), 'bribe.line: what he says, out loud, when you reach for TURNED AWAY');
+    assert.ok(Object.hasOwn(BRIBE_ITEMS, t.bribe.item), `bribe.item: one of ${Object.keys(BRIBE_ITEMS).join(', ')} (a new item needs BRIBE_ITEMS in src/rules.js and a drawing in public/booth.js)`);
+    assert.ok(MOODS.includes(t.bribe.mood), `bribe.mood: the voice and face he says it with, one of ${MOODS.join(', ')}`);
+  });
+
+  test(`${t.id}: reaching for TURNED AWAY brings out his own bribe, not the stamp`, () => {
+    const { shift, offer } = stamp(newShift([t.id]), 'away');
+    assert.deepEqual(offer, { travellerId: t.id, ...t.bribe });
+    assert.equal(shift.cases[t.id].stamp, null);
   });
 
   test(`${t.id}: optional parts are well formed`, () => {

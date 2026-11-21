@@ -39,7 +39,9 @@ not proof.
 Each traveller is one file in `src/travellers/`, so adding one doesn't clash with anyone.
 
 1. Copy `src/travellers/colin.js` (honest) or `max.js` (lying) to `src/travellers/<id>.js`,
-   and change everything in it: name, papers, truth, story prompt, voice and look.
+   and change everything in it: name, papers, truth, story prompt, voice, look and `bribe`: the
+   line he says and the item he puts on the ledge when you reach for TURNED AWAY (ADR-13). The
+   item is one of `BRIBE_ITEMS` in `src/rules.js`; a new one also needs drawing in `public/booth.js`.
 2. Add one import line and their place in the queue in `src/travellers/index.js`.
 3. `bash check.sh`: a test fails if the new traveller is missing a field or isn't in the index.
 4. Play them with `npm start`: all 5 questions, twice, asking one question twice to see whether

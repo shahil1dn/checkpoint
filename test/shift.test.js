@@ -132,11 +132,13 @@ test('the request sent to the server carries past exchanges with their real crac
 // A bribe is a last-ditch offer, never part of the questioning: the first
 // TURNED AWAY on a traveller doesn't land, and he offers what his own file
 // in src/travellers/ says. The game decides when; the model never does.
+// A fixed queue, so changing the demo queue in src/travellers/index.js never breaks these.
+const PAIR = ['max', 'colin'];
 const reachForAway = (shift) => R.stamp(shift, 'away');
 const offerOf = (id) => ({ travellerId: id, ...getTraveller(id).bribe });
 
 test('no bribe is on offer before the inspector reaches for TURNED AWAY', () => {
-  let shift = R.newShift();
+  let shift = R.newShift(PAIR);
   for (let i = 0; i < 5; i += 1) shift = askAndAnswer(shift);
   assert.equal(R.bribeOffer(shift), null);
   assert.equal(R.takeBribe(shift).error, 'noBribe');
@@ -147,7 +149,7 @@ test('no bribe is on offer before the inspector reaches for TURNED AWAY', () => 
 });
 
 test('the first TURNED AWAY does not land: he makes his offer instead', () => {
-  const asked = R.startQuestion(R.newShift(), 'Why?');
+  const asked = R.startQuestion(R.newShift(PAIR), 'Why?');
   const { shift, offer, error } = reachForAway(asked.shift);
   assert.equal(error, undefined);
   assert.deepEqual(offer, offerOf('max'));
@@ -159,7 +161,7 @@ test('the first TURNED AWAY does not land: he makes his offer instead', () => {
 });
 
 test('one offer per traveller: TURNED AWAY again refuses it, and the stamp lands', () => {
-  const offered = reachForAway(R.newShift()).shift;
+  const offered = reachForAway(R.newShift(PAIR)).shift;
   assert.equal(R.pleadsFirst(offered, 'away'), false);
   const refused = R.stamp(offered, 'away');
   assert.equal(refused.offer, undefined);
@@ -169,13 +171,13 @@ test('one offer per traveller: TURNED AWAY again refuses it, and the stamp lands
 });
 
 test('every traveller makes his own offer, the honest one too, so a bribe is never a tell', () => {
-  const pastMax = R.stamp(reachForAway(R.newShift()).shift, 'away').shift;
+  const pastMax = R.stamp(reachForAway(R.newShift(PAIR)).shift, 'away').shift;
   assert.equal(getTraveller('colin').truth.honest, true);
   assert.deepEqual(reachForAway(pastMax).offer, offerOf('colin'));
 });
 
 test('taking the bribe lets him THROUGH and makes the record CORRUPT', () => {
-  const { shift, error } = R.takeBribe(reachForAway(R.newShift()).shift);
+  const { shift, error } = R.takeBribe(reachForAway(R.newShift(PAIR)).shift);
   assert.equal(error, undefined);
   assert.deepEqual([shift.cases.max.stamp, shift.cases.max.bribe, shift.current], ['through', 'taken', 1]);
   assert.equal(R.bribeOffer(shift), null);
@@ -186,18 +188,18 @@ test('taking the bribe lets him THROUGH and makes the record CORRUPT', () => {
 });
 
 test('THROUGH while the offer is out lets him through without taking it', () => {
-  const { shift } = R.stamp(reachForAway(R.newShift()).shift, 'through');
+  const { shift } = R.stamp(reachForAway(R.newShift(PAIR)).shift, 'through');
   assert.deepEqual([shift.cases.max.stamp, shift.cases.max.bribe], ['through', 'refused']);
   assert.equal(R.shiftReport(shift).record, 'clean');
 });
 
 test('while the offer is on the ledge there are no more questions: take it or stamp', () => {
-  const offered = reachForAway(R.newShift()).shift;
+  const offered = reachForAway(R.newShift(PAIR)).shift;
   assert.equal(R.startQuestion(offered, 'Is that a bribe?').error, 'bribeOnTable');
 });
 
 test('the clock stands still while he pleads, and runs again once he has said it', () => {
-  const offered = reachForAway(R.newShift()).shift;
+  const offered = reachForAway(R.newShift(PAIR)).shift;
   assert.equal(R.tick(offered, 1000).usedMs, 0);
   assert.equal(R.tick(R.setPleading(offered, false), 1000).usedMs, 1000);
   // Answering the offer, either way, starts the clock again too.
@@ -207,19 +209,19 @@ test('the clock stands still while he pleads, and runs again once he has said it
 
 test('the score comes only from the stored truth: a bribe never changes right or wrong', () => {
   const takeBoth = (shift) => R.takeBribe(reachForAway(R.takeBribe(reachForAway(shift).shift).shift).shift).shift;
-  const bought = R.shiftReport(takeBoth(R.newShift()));
+  const bought = R.shiftReport(takeBoth(R.newShift(PAIR)));
   // The liar let through for a croissant is wrong; the honest one is right, and the record is corrupt.
   assert.deepEqual(bought.rows.map((r) => [r.id, r.stamp, r.correct]), [['max', 'through', false], ['colin', 'through', true]]);
   assert.deepEqual([bought.correct, bought.bribesTaken, bought.record], [1, 2, 'corrupt']);
   // Refusing both: turning the liar away is right, turning the honest one away is wrong.
   const refuseBoth = (shift) => R.stamp(reachForAway(R.stamp(reachForAway(shift).shift, 'away').shift).shift, 'away').shift;
-  const refused = R.shiftReport(refuseBoth(R.newShift()));
+  const refused = R.shiftReport(refuseBoth(R.newShift(PAIR)));
   assert.deepEqual(refused.rows.map((r) => [r.id, r.stamp, r.correct]), [['max', 'away', true], ['colin', 'away', false]]);
   assert.deepEqual([refused.correct, refused.record], [1, 'clean']);
 });
 
 test('a reply cannot make or take an offer', () => {
-  const asked = R.startQuestion(R.newShift(), 'Well?');
+  const asked = R.startQuestion(R.newShift(PAIR), 'Well?');
   const shift = R.finishQuestion(asked.shift, asked.request.id, { reply: 'A croissant?', mood: 'happy', cracked: false, bribe: true, bribeTaken: true });
   assert.equal(shift.cases.max.bribe, null);
   assert.equal('bribe' in shift.cases.max.history[0], false);
@@ -227,7 +229,7 @@ test('a reply cannot make or take an offer', () => {
 });
 
 test('Play again starts with a clean record and a fresh offer from everyone', () => {
-  const fresh = R.restartShift(R.takeBribe(reachForAway(R.newShift()).shift).shift);
+  const fresh = R.restartShift(R.takeBribe(reachForAway(R.newShift(PAIR)).shift).shift);
   assert.equal(fresh.cases.max.bribe, null);
   assert.equal(R.shiftReport(fresh).record, 'clean');
   assert.deepEqual(reachForAway(fresh).offer, offerOf('max'));
