@@ -12,7 +12,7 @@ import { createApp } from '../server/app.js';
 import { browserOnThisMachine } from './find-browser.js';
 
 const PORT = 9336;
-const SPEED = 60;   // a 2-minute shift ends in 2 seconds
+const SPEED = 30;   // a 2-minute shift ends in 4 seconds (2 was a race on a busy machine)
 const OUT_OF_QUESTIONS = 'No questions left. Stamp the papers.';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 

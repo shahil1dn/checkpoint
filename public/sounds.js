@@ -6,7 +6,7 @@
 const MUTE_KEY = 'checkpoint-muted';
 // Kept low on purpose: the travellers' voices and the microphone come first.
 const MASTER = 0.6;
-const WIND = 0.05;
+const WIND = 0.14;
 // booth.stamp() lifts the stamp for 0.45 s before it lands on the papers.
 const STAMP_LANDS_AFTER = 0.45;
 // A turned-away traveller is hauled off before the next one walks on.
@@ -135,13 +135,13 @@ export function createSounds({
     },
     // Two rising notes, like a counter bell: next, please.
     stepUp(at) {
-      note({ from: 587, at, lasts: 0.22, loud: 0.1 });
-      note({ from: 784, at: at + 0.13, lasts: 0.3, loud: 0.1 });
+      note({ from: 587, at, lasts: 0.22, loud: 0.2 });
+      note({ from: 784, at: at + 0.13, lasts: 0.3, loud: 0.2 });
     },
     // Two falling notes: the police have him.
     takenAway(at) {
-      note({ type: 'triangle', from: 392, at, lasts: 0.2, loud: 0.12 });
-      note({ type: 'triangle', from: 262, to: 233, at: at + 0.17, lasts: 0.38, loud: 0.12 });
+      note({ type: 'triangle', from: 392, at, lasts: 0.2, loud: 0.22 });
+      note({ type: 'triangle', from: 262, to: 233, at: at + 0.17, lasts: 0.38, loud: 0.22 });
     },
   };
 
