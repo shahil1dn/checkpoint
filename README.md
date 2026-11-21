@@ -4,6 +4,17 @@ Built at the Mistral Vibe Hackathon, London, 21 Nov 2026, by Shahil, Hamzah and 
 the inspector at an Antarctic border post: question penguin travellers out loud, then stamp them
 through or turned away. What it does: `SPEC.md`. How the team works: `TEAM.md`.
 
+## For judges
+
+- The Mistral API key is not in this repo, on purpose.
+- To play it live, use your own key: `cp .env.example .env`, paste the key straight after
+  `MISTRAL_API_KEY=`, then `npm install`, `npm start` and open http://localhost:5173
+  (Node.js 22.9 or newer).
+- Without a key it still runs, offline: the travellers give canned replies with no voices, you
+  type your questions instead of speaking, and the records terminal searches by code alone.
+- Mistral models: `voxtral-mini-latest` hears your questions, `mistral-medium-3.5` answers as the
+  travellers, writes the notes and searches the records, and `voxtral-mini-tts-3` gives them voices.
+
 ## Set up (about 10 minutes)
 
 You need **Node.js 22.9 or newer** (the LTS from nodejs.org is fine), **Git**, and **Chrome or
