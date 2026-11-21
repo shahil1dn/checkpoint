@@ -50,6 +50,22 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
   background: var(--ink); color: #ffffff; font-size: 16px; font-weight: 600;
 }
 #lines p:empty { display: none; }
+#hint[data-mode="listening"] { background: #6f211e; }
+#hint[data-mode="listening"]::before {
+  content: ''; display: inline-block; width: 11px; height: 11px; margin-right: 9px;
+  border-radius: 50%; background: #ff6b60; box-shadow: 0 0 0 3px #ffffff55;
+  animation: recording-pulse 1.2s ease-in-out infinite;
+}
+#hint[data-mode="thinking"], #hint[data-mode="transcribing"] { background: #fbf8ef; color: var(--ink); }
+#hint[data-mode="thinking"]::after, #hint[data-mode="transcribing"]::after {
+  content: ' •••'; display: inline-block; letter-spacing: 3px;
+  animation: thinking-pulse 1.2s ease-in-out infinite;
+}
+@keyframes recording-pulse { 50% { box-shadow: 0 0 0 6px #ffffff33; } }
+@keyframes thinking-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) {
+  #hint[data-mode="listening"]::before, #hint[data-mode="thinking"]::after, #hint[data-mode="transcribing"]::after { animation: none; }
+}
 #ask-form { display: flex; gap: 6px; }
 #tools { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 

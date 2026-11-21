@@ -14,6 +14,7 @@ let live = false;
 let voice = null;
 let stampingNow = false;
 let talkingTo = null;
+let micSetup = false;
 let lastFrame = performance.now();
 
 const HINTS = {
@@ -39,6 +40,16 @@ const STAMP_WORDS = { through: 'Through', away: 'Turned away' };
 const END_REASONS = { queueEmpty: 'Queue cleared.', time: "Time's up. Anyone not stamped counts as wrong." };
 
 const hint = (text) => { $('hint').textContent = text; };
+
+function renderActivity() {
+  const mode = !started || shift.phase !== 'playing' ? ''
+    : recording() ? 'listening'
+    : shift.hearing ? 'transcribing'
+    : shift.pending ? 'thinking' : '';
+  $('hint').dataset.mode = mode;
+  booth?.setRecording(mode === 'listening');
+  booth?.setThinking(mode === 'thinking');
+}
 
 // The 3D booth is scenery and controls together; without it the plain papers
 // panel and the toolbar still run the whole game.
@@ -103,7 +114,7 @@ async function askQuestion(text) {
   if (asked.error) return hint(HINTS[asked.error]);
   shift = asked.shift;
   const traveller = getTraveller(asked.request.travellerId);
-  hint(`${traveller.name} is thinking…`);
+  hint(`${traveller.name} is thinking`);
   render();
 
   const { reply, error } = await fetchReply(asked.request);
@@ -142,19 +153,19 @@ function beginTalking() {
   stopVoice();
   if (!startClip()) return;
   talkingTo = R.currentTravellerId(shift);
-  booth?.setRecording(true);
   $('talk').textContent = 'Listening… let go to ask';
   hint('Listening… let go to ask.');
+  renderActivity();
 }
 
 async function finishTalking() {
   if (!recording()) return;
-  booth?.setRecording(false);
   $('talk').textContent = 'Hold to talk';
   const clip = await endClip();
+  renderActivity();
   if (!clip) return hint(HINTS.tap);
   shift = R.setHearing(shift, true);
-  hint('Listening back…');
+  hint('Transcribing your question');
   render();
   const { text, error } = await fetchTranscript(clip);
   shift = R.setHearing(shift, false);
@@ -168,15 +179,22 @@ async function finishTalking() {
 async function startShift() {
   started = true;
   $('start-screen').hidden = true;
+  micSetup = live;
+  if (live) hint('Allow the microphone, or type a question.');
+  lastFrame = performance.now();
+  render();
   if (live) {
     try {
       await prepareMic();
+      if (!shift.pending && !shift.hearing) hint('');
     } catch {
-      hint(HINTS.noMic);
+      if (!shift.pending && !shift.hearing) hint(HINTS.noMic);
+    } finally {
+      micSetup = false;
+      lastFrame = performance.now();
+      render();
     }
   }
-  lastFrame = performance.now();
-  render();
 }
 
 function playAgain() {
@@ -256,6 +274,7 @@ function renderClock() {
 function render() {
   const over = shift.phase === 'over';
   const playing = started && !over;
+  renderActivity();
   $('report').hidden = !started || !over;
   $('shift-info').hidden = !playing;
   $('controls').hidden = !playing;
@@ -283,7 +302,7 @@ function render() {
 
 function frame(now) {
   if (started && shift.phase === 'playing') {
-    shift = R.tick(shift, now - lastFrame);
+    if (!micSetup) shift = R.tick(shift, now - lastFrame);
     if (shift.phase === 'over') {
       stopVoice();
       booth?.show(null, { reaction: 'away' });
