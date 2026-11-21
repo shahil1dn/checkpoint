@@ -444,9 +444,9 @@ export function cannedReview(report, rating) {
     : `${rating.title}: ${report.correct} of ${report.total} called right.`;
   const comments = report.rows.map((row) => {
     if (row.bribeTaken) return { name: row.name, comment: 'Let through for a bribe.' };
-    if (row.correct) return { name: row.name, comment: row.honest ? 'Honest, and you let him through.' : 'Lying, and you caught him.' };
+    if (row.correct) return { name: row.name, comment: row.honest ? 'Honest, and let through.' : 'Lying, and caught.' };
     if (row.stamp === null) return { name: row.name, comment: 'Never stamped.' };
-    return { name: row.name, comment: row.honest ? 'Honest, but you turned him away.' : 'Lying, and he got past you.' };
+    return { name: row.name, comment: row.honest ? 'Honest, but turned away.' : 'Lying, and got past you.' };
   });
   return { headline, comments, tip: 'Check his papers against the records before you stamp.' };
 }
