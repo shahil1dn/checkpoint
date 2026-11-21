@@ -145,3 +145,19 @@ only some bribe, and bribing doesn't line up with lying; without one, TURNED AWA
 while an offer is on the ledge, so the model never has to know about it; THROUGH while an offer is out lets him through without taking it; the shift clock waits
 while the line is spoken, not while you decide.
 **Supersedes:** the model-flagged bribe from PR #3.
+
+## ADR-14: Records lookups run on Medium 3.5, and the terminal checks only the traveller's words (21 Nov 15:45)
+
+**Decided:** the records terminal (ADR-12) calls `mistral-medium-3.5` with function calling
+(`search_passenger_lists`, `find_person`, `find_company`, `read_rulebook`). Besides the clicked
+line, it is told the name on his documents, so a ship or ticket line is checked against the right
+passenger. Only lines on his documents and his own answers can be looked up, never the
+inspector's questions. The server remembers his answers in memory to check that.
+**Why:** measured on 21 Nov: Large 4 took 4.7 to 32 s for a lookup and once timed out after 20 s,
+even at `reasoning_effort: low`. Medium 3.5 took 1.1 to 3.3 s and follows leads across record
+books. The live check (R1 to R5, `docs/live-check/`) passes on Medium, with the slowest lookup at
+2.8 s. The name is already on the documents in front of the player, so it tells the terminal
+nothing secret. A typed question is the player's own words, so looking it up would be free
+typing by the back door.
+**Turned down:** Large 4 for lookups (not demo-safe at 32 s); sending only the line, which
+couldn't tell whether a ship's list had *him* on it.

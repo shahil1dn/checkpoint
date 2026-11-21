@@ -16,11 +16,12 @@ import { TRAVELLERS } from '../src/travellers/index.js';
 const APP = process.env.APP_URL ?? 'http://localhost:5173/';
 // Three travellers with two minutes each (Shahil 15:25); the demo slot is 5 minutes.
 const LIMIT_S = 300;
-const OUT = 'docs/proof/s6-rehearsal';
+const OUT = process.env.REHEARSE_OUT ?? 'docs/proof/s6-rehearsal';
 
 // The demo script: what the inspector says, and the stamp at the end.
 const DEMO = [
-  { traveller: 'Max Tokens', readPapers: true, questions: [
+  // lookUp: after the questions, open his case folder and look up the line starting with this.
+  { traveller: 'Max Tokens', readPapers: true, lookUp: 'Sponsor', questions: [
     'Good evening. What brings you to the checkpoint?',
     'If you love Mistral so much, what is the nickname of Mistral Large 4?',
     'Then why did Frontier Horizon Labs pay for your ticket?',
@@ -37,7 +38,7 @@ const DEMO = [
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // The hover tip names each desk object, so hovering finds them on screen.
-const DESK_TIPS = { mic: 'Microphone', papers: 'Papers', through: 'Stamp: let', away: 'Stamp: turn' };
+const DESK_TIPS = { mic: 'Microphone', papers: 'Case folder', through: 'Stamp: let', away: 'Stamp: turn' };
 
 // Synthetic test speech; written to a temp folder and deleted at the end.
 async function speakToMp3(dir, text, i) {
@@ -107,7 +108,7 @@ async function main() {
   const chrome = spawn(browser, [
     '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${path.join(work, 'profile')}`,
     '--autoplay-policy=no-user-gesture-required', '--use-fake-ui-for-media-stream',
-    '--window-size=1280,900', 'about:blank',
+    '--window-size=1440,900', 'about:blank',
   ], { stdio: 'ignore' });
 
   try {
@@ -192,6 +193,13 @@ async function main() {
       await mouse('mousePressed', spot(tool));
       await mouse('mouseReleased', spot(tool));
     };
+    const key = async (code, keyCode) => {
+      for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, code, key: code, windowsVirtualKeyCode: keyCode });
+    };
+    const shot = async (name) => {
+      const { data } = await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: 85 });
+      await writeFile(path.join(OUT, name), Buffer.from(data, 'base64'));
+    };
     const waitFor = async (condition, ms = 10000) => {
       for (let waited = 0; waited < ms; waited += 100) {
         if (await evaluate(condition)) return true;
@@ -210,10 +218,12 @@ async function main() {
       if (name !== step.traveller) throw new Error(`expected ${step.traveller}, desk shows ${name}`);
       if (step.readPapers) {
         await click('papers');
-        note('lifted the papers to read them');
-        await sleep(2500);
-        await click('papers');
-        note('put the papers down');
+        note('opened the case folder to read it');
+        await sleep(1500);
+        await shot('case-folder-1440.jpg');
+        await sleep(1000);
+        await key('Escape', 27);
+        note('closed the case folder');
         await sleep(500);
       }
       for (const [i, question] of step.questions.entries()) {
@@ -253,6 +263,37 @@ async function main() {
         note(heard.fallback ? `fallback, not counted: ${heard.fallback}` : `subtitle (${heard.seconds.toFixed(1)} s of voice): ${heard.reply}`);
         await evaluate(`new Promise((r) => { const v = window.__voices.at(-1); if (v.ended || v.paused) return r(true); v.addEventListener('ended', () => r(true)); setTimeout(() => r(false), ${LIMIT_S * 1000}); })`);
         note('voice finished');
+      }
+      // ADR-12: look one line up on the records terminal, and watch it search.
+      if (step.lookUp) {
+        await click('papers');
+        await sleep(1200);
+        const lineAt = await evaluate(`(() => {
+          const canvas = document.querySelector('#booth canvas');
+          const tip = document.getElementById('tool-tip');
+          const hits = [];
+          for (let y = innerHeight * 0.05; y < innerHeight * 0.95; y += 10) for (let x = innerWidth * 0.1; x < innerWidth * 0.9; x += 10) {
+            canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+            if (tip.textContent.startsWith(${JSON.stringify(`Look up: ${step.lookUp}`)})) hits.push([x, y]);
+          }
+          return hits[Math.floor(hits.length / 2)] ?? null;
+        })()`);
+        if (!lineAt) throw new Error(`no "${step.lookUp}" line in ${step.traveller}'s case folder`);
+        await mouse('mouseMoved', lineAt);
+        await mouse('mousePressed', lineAt);
+        await mouse('mouseReleased', lineAt);
+        note(`clicked "${step.lookUp}" in the case folder to look it up`);
+        await key('Escape', 27);
+        await key('ArrowLeft', 37);
+        await sleep(1300);
+        await shot('terminal-mid-search-1440.jpg');
+        const looked = await waitFor(`document.getElementById('lookups-left').textContent.includes(' 2 of ')`, 20000);
+        if (!looked) throw new Error('the lookup did not finish');
+        note(`records terminal answered: ${await evaluate(`document.getElementById('lookups-left').textContent`)}`);
+        await sleep(2500);
+        await shot('terminal-answer-1440.jpg');
+        await key('ArrowRight', 39);
+        await sleep(900);
       }
       await sleep(800);
       const voicesBefore = await evaluate('window.__voices.length');
