@@ -1,0 +1,118 @@
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import { createApp } from '../server/app.js';
+
+const FAKE_KEY = 'test-key-must-not-leak';
+let server;
+let base;
+const calls = [];
+let nextRaw;
+
+before(async () => {
+  process.env.MISTRAL_API_KEY = FAKE_KEY;
+  const handle = await createApp({
+    liveAvailable: true,
+    ask: async (req) => {
+      calls.push(req);
+      if (nextRaw instanceof Error) throw nextRaw;
+      return nextRaw;
+    },
+  });
+  server = http.createServer(handle);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  base = `http://127.0.0.1:${server.address().port}`;
+});
+after(() => server.close());
+
+const post = (body) => fetch(`${base}/api/ask`, {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: typeof body === 'string' ? body : JSON.stringify(body),
+});
+const valid = { travellerId: 'max', question: 'Why are you here?', history: [] };
+const pastExchange = { question: 'Hello?', reply: 'Bonjour, inspector!', mood: 'happy' };
+const GOOD_RAW = '{"reply":"For the hackathon, of course!","mood":"confident","cracked":false}';
+
+test('a good question reaches Mistral and the checked reply comes back', async () => {
+  calls.length = 0;
+  nextRaw = GOOD_RAW;
+  const res = await post(valid);
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false });
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].traveller.id, 'max');
+  assert.equal(calls[0].question, 'Why are you here?');
+});
+
+// A4: every one of these must be refused with Mistral called 0 times.
+const badRequests = {
+  'broken JSON': '{nope',
+  'a body over 16 KB': { ...valid, pad: 'x'.repeat(17 * 1024) },
+  'an empty question': { ...valid, question: '   ' },
+  'a 301-character question': { ...valid, question: 'a'.repeat(301) },
+  'an unknown traveller': { ...valid, travellerId: 'nobody' },
+  'a 6th question (history of 5)': { ...valid, history: Array(5).fill(pastExchange) },
+  'a history item that is not an exchange': { ...valid, history: ['hi'] },
+  'a past reply over 300 characters': { ...valid, history: [{ ...pastExchange, reply: 'a'.repeat(301) }] },
+};
+for (const [name, body] of Object.entries(badRequests)) {
+  test(`${name} is refused before Mistral is called`, async () => {
+    calls.length = 0;
+    nextRaw = GOOD_RAW;
+    const res = await post(body);
+    assert.equal(res.status, 400);
+    assert.equal(calls.length, 0);
+  });
+}
+
+test('a 300-character question with 4 past exchanges is still allowed', async () => {
+  calls.length = 0;
+  nextRaw = GOOD_RAW;
+  const res = await post({ ...valid, question: 'a'.repeat(300), history: Array(4).fill(pastExchange) });
+  assert.equal(res.status, 200);
+  assert.equal(calls.length, 1);
+});
+
+test('a failed Mistral call returns 502 without detail', async () => {
+  nextRaw = new Error(`secret detail ${FAKE_KEY}`);
+  const res = await post(valid);
+  assert.equal(res.status, 502);
+  assert.deepEqual(await res.json(), { error: 'callFailed' });
+});
+
+test('a reply that is not JSON returns 502, not a broken reply', async () => {
+  nextRaw = 'Sure! Here is my answer';
+  const res = await post(valid);
+  assert.equal(res.status, 502);
+  assert.deepEqual(await res.json(), { error: 'badReply' });
+});
+
+test('only known files are served', async () => {
+  assert.equal((await fetch(`${base}/`)).status, 200);
+  assert.equal((await fetch(`${base}/src/rules.js`)).status, 200);
+  for (const p of ['/.env', '/src/../.env', '/server/mistral.js', '/package.json', '/%2e%2e/.env']) {
+    assert.equal((await fetch(`${base}${p}`)).status, 404, p);
+  }
+});
+
+// A6: with a key set, nothing the browser can fetch contains it.
+test('the key never appears in any page file or API response', async () => {
+  nextRaw = GOOD_RAW;
+  const bodies = await Promise.all([
+    fetch(`${base}/`), fetch(`${base}/app.js`), fetch(`${base}/src/travellers.js`),
+    fetch(`${base}/src/rules.js`), fetch(`${base}/api/health`), post(valid), post('{nope'),
+  ].map(async (p) => (await p).text()));
+  for (const body of bodies) assert.ok(!body.includes(FAKE_KEY));
+});
+
+test('with no key the server says live is off and refuses to ask', async () => {
+  const handle = await createApp({ liveAvailable: false, ask: null });
+  const s = http.createServer(handle);
+  await new Promise((resolve) => s.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${s.address().port}`;
+  assert.deepEqual(await (await fetch(`${url}/api/health`)).json(), { live: false });
+  const res = await fetch(`${url}/api/ask`, { method: 'POST', body: JSON.stringify(valid) });
+  assert.equal(res.status, 503);
+  s.close();
+});

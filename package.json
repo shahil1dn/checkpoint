@@ -1,0 +1,13 @@
+{
+  "name": "checkpoint",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server/server.js",
+    "test": "node --test",
+    "live-check": "node --env-file-if-exists=.env scripts/live-check.js"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

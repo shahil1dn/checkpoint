@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Checkpoint</title>
+</head>
+<body>
+  <h1>Checkpoint</h1>
+  <p id="status">Connecting…</p>
+
+  <section>
+    <h2 id="traveller-name"></h2>
+    <dl id="papers"></dl>
+  </section>
+
+  <section>
+    <ol id="conversation"></ol>
+    <form id="ask-form">
+      <input id="question" type="text" maxlength="300" autocomplete="off" placeholder="Type a question">
+      <button id="ask" type="submit">Ask</button>
+    </form>
+    <p id="hint" role="status"></p>
+  </section>
+
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
