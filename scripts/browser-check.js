@@ -141,6 +141,19 @@ async function main() {
     const first = await page.evaluate(`document.getElementById('traveller-name').textContent`);
     const stampAt = await page.evaluate(DESK_SPOT('Stamp: let them through'));
     if (!stampAt) throw new Error('could not find the THROUGH stamp on the desk');
+    // Shahil 13:40: one message at a time. The hover label sits by the pointer,
+    // and the status line keeps its own fixed place at the bottom centre.
+    const placed = await page.evaluate(`(() => {
+      document.getElementById('hint').textContent = 'Say or type a question first.';
+      document.querySelector('#booth canvas').dispatchEvent(new PointerEvent('pointermove', { clientX: ${stampAt[0]}, clientY: ${stampAt[1]}, bubbles: true }));
+      const tip = document.getElementById('tool-tip').getBoundingClientRect();
+      const hint = document.getElementById('hint').getBoundingClientRect();
+      document.getElementById('hint').textContent = '';
+      const overlap = !(tip.right < hint.left || hint.right < tip.left || tip.bottom < hint.top || hint.bottom < tip.top);
+      return { tipFromPointer: Math.round(Math.hypot(Math.max(tip.left - ${stampAt[0]}, ${stampAt[0]} - tip.right, 0), Math.max(tip.top - ${stampAt[1]}, ${stampAt[1]} - tip.bottom, 0))),
+        hintCentre: Math.round(hint.left + hint.width / 2 - innerWidth / 2), hintFromBottom: Math.round(innerHeight - hint.bottom), overlap };
+    })()`);
+    check('the hover label sits by the pointer, apart from the status line', placed.tipFromPointer <= 24 && Math.abs(placed.hintCentre) <= 1 && placed.hintFromBottom <= 16 && !placed.overlap, placed);
     for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
       await page.send('Input.dispatchMouseEvent', { type, x: stampAt[0], y: stampAt[1], button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
     }

@@ -294,6 +294,8 @@ function render() {
   $('look').hidden = !playing || !booth;
   $('fallback').hidden = Boolean(booth) || !playing;
   $('tools').hidden = Boolean(booth);
+  $('hint').hidden = !playing;
+  $('tool-tip').hidden = !playing;
   renderClock();
   if (!stampingNow) booth?.show(over ? null : R.currentTravellerId(shift));
   if (over) {
@@ -342,6 +344,13 @@ document.addEventListener('keydown', (event) => {
   else if (event.code === 'Escape') booth?.putDown();
   else if (event.code === 'ArrowLeft') booth?.look(-1);
   else if (event.code === 'ArrowRight') booth?.look(1);
+});
+// The hover label follows the pointer, flipping to its left near the right edge.
+document.addEventListener('pointermove', (event) => {
+  const tip = $('tool-tip');
+  tip.style.left = `${event.clientX}px`;
+  tip.style.top = `${event.clientY}px`;
+  tip.classList.toggle('flip', event.clientX > innerWidth - 260);
 });
 document.addEventListener('keyup', (event) => {
   if (event.code !== 'Space' || typingInBox(event) || !micReady()) return;
