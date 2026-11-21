@@ -35,7 +35,7 @@ export const NOTICES = [
 // The empty spot kept on the board for the judge's rule card (SPEC stretch 11).
 export const RULE_SPOT = "TODAY'S RULE";
 
-export const FORM_TITLE = 'FORM 12: FISH DECLARATION';
+export const FORM_TITLE = 'FORM 12: KRILL DECLARATION';
 export const TIN_LABEL = 'SARDINES';
 
 export const ALL_WORDS = [
