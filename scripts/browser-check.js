@@ -12,7 +12,7 @@ import { createApp } from '../server/app.js';
 import { browserOnThisMachine } from './find-browser.js';
 
 const PORT = 9336;
-const SPEED = 60;   // a 2-minute shift ends in 2 seconds
+const SPEED = 30;   // a 2-minute shift ends in 4 seconds (2 was a race on a busy machine)
 const OUT_OF_QUESTIONS = 'No questions left. Stamp the papers.';
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -27,12 +27,12 @@ const FAST_CLOCK = `(() => {
 
 // Finds a desk object on screen: hover a grid over the lower screen and keep
 // the middle of the spots whose hover label starts with the given words.
-const DESK_SPOT = (label) => `(() => {
+const DESK_SPOT = (label, { left = 0, right = 1, top = 0.35, bottom = 0.95 } = {}) => `(() => {
   const canvas = document.querySelector('#booth canvas');
   const tip = document.getElementById('tool-tip');
   const hits = [];
-  for (let y = innerHeight * 0.35; y < innerHeight * 0.95; y += 8) {
-    for (let x = 0; x < innerWidth; x += 8) {
+  for (let y = innerHeight * ${top}; y < innerHeight * ${bottom}; y += 8) {
+    for (let x = innerWidth * ${left}; x < innerWidth * ${right}; x += 8) {
       canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
       if (tip.textContent.startsWith(${JSON.stringify(label)})) hits.push([x, y]);
     }
@@ -110,6 +110,20 @@ async function main() {
     // Found before the shift starts: the scan is slow, and the sped-up clock would run out meanwhile.
     const stampAt = await page.evaluate(DESK_SPOT('Stamp: let them through'));
     if (!stampAt) throw new Error('could not find the THROUGH stamp on the desk');
+    // The transcript's full page is hidden while the slip is down; it must not
+    // catch the pointer above the slip, where the papers, mic and stamps are.
+    const aboveSlip = await page.evaluate(`(() => {
+      const canvas = document.querySelector('#booth canvas');
+      const tip = document.getElementById('tool-tip');
+      let caught = 0;
+      for (let y = innerHeight * 0.45; y < innerHeight * 0.68; y += 8) for (let x = 0; x < innerWidth; x += 8) {
+        canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+        if (tip.textContent.startsWith('Transcript')) caught += 1;
+      }
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 0, bubbles: true }));
+      return caught;
+    })()`);
+    check('hidden parts of the desk never catch the pointer', aboveSlip === 0, { transcriptAboveTheSlip: aboveSlip });
     await page.evaluate(`document.getElementById('start').click(); true`);
     await sleep(300);
     // Shahil 13:40: no button row in the booth; you click the desk, and a typed question goes with Enter.
@@ -123,7 +137,25 @@ async function main() {
     check('a typed question is asked with Enter', seen.left.includes(' 4 of '), seen);
     for (let i = 2; i <= 5; i += 1) {
       await ask(`Question ${i}?`);
-      await sleep(150);
+      // Offline answers land at once; a short wait keeps the whole run well inside the 2 s shift.
+      await sleep(40);
+      // Offline, Max's 2nd answer offers a bribe (src/travellers/max.js): it
+      // sits on the window ledge, and clicking it pockets it. One round trip,
+      // because the sped-up clock leaves little time to spare.
+      if (i === 2) {
+        const offered = await page.evaluate(`document.getElementById('hint').textContent`);
+        // Only the ledge's left half is scanned: the whole desk takes too long for the sped-up shift.
+        const bribeAt = (await page.evaluate(DESK_SPOT('A bribe', { left: 0.15, right: 0.5, top: 0.45, bottom: 0.7 }))) ?? [0, 0];
+        const bribe = await page.evaluate(`(() => {
+          const canvas = document.querySelector('#booth canvas');
+          const at = { clientX: ${bribeAt[0]}, clientY: ${bribeAt[1]}, bubbles: true, pointerId: 1 };
+          canvas.dispatchEvent(new PointerEvent('pointermove', at));
+          canvas.dispatchEvent(new PointerEvent('pointerdown', at));
+          canvas.dispatchEvent(new PointerEvent('pointerup', at));
+          return { hint: document.getElementById('hint').textContent };
+        })()`);
+        check('a bribe slides onto the ledge, and clicking it pockets it', offered.includes('onto the ledge') && bribe.hint.includes('record'), { offered, bribeAt, ...bribe });
+      }
     }
     // A 6th question can still be typed; it must be refused with a hint.
     await ask('One more?');
@@ -134,6 +166,8 @@ async function main() {
     for (let i = 0; i < 100 && !(await screen()).over; i += 1) await sleep(100);
     seen = await screen();
     check('the shift clock runs out to the report', seen.over, seen);
+    const bribes = await page.evaluate(`document.getElementById('bribes').textContent`);
+    check('the report names the bribe taken and marks the record', bribes.includes('Max Tokens') && bribes.includes('CORRUPT'), bribes);
 
     await page.evaluate(`document.getElementById('again').click(); true`);
     await sleep(300);
@@ -164,6 +198,16 @@ async function main() {
       next = await page.evaluate(`document.getElementById('traveller-name').textContent`);
     }
     check('stamping before any question moves the queue on', next !== first, { first, next, ...(await screen()) });
+
+    // Sounds: headless Chrome may have no audio device; the page must not mind.
+    const sound = await page.evaluate(`(() => {
+      const button = document.getElementById('mute');
+      const before = button?.textContent;
+      button?.click();
+      return { chips: document.querySelectorAll('#mute').length, before, after: button?.textContent };
+    })()`);
+    // One chip: wiring the sounds up twice doubled every sound and the chip.
+    check('the mute button turns the sound off', sound.chips === 1 && sound.before === 'Sound: on (M)' && sound.after === 'Sound: off (M)', sound);
     page.close();
   } finally {
     const exited = once(chrome, 'exit');

@@ -119,6 +119,11 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
   position: fixed; z-index: 2; margin: 0; padding: 6px 12px; border-radius: 4px; box-sizing: border-box; pointer-events: none;
   background: var(--ink); color: #ffffff; font-size: 16px; font-weight: 600; line-height: 1.5;
 }
+#hint:empty, #tool-tip:empty { display: none; }
+#hint { left: 50%; bottom: 12px; transform: translateX(-50%); width: max-content; max-width: max(200px, 100% - 2 * (min(320px, 50vw) + 40px)); text-align: center; }
+#tool-tip { transform: translate(16px, calc(-100% - 8px)); white-space: nowrap; }
+#tool-tip.flip { transform: translate(calc(-100% - 16px), calc(-100% - 8px)); }
+/* What's happening now, in the hint's own place: recording in red, waiting on the traveller in paper. */
 #hint[data-mode="listening"] { background: #6f211e; }
 #hint[data-mode="listening"]::before {
   content: ''; display: inline-block; width: 11px; height: 11px; margin-right: 9px;
@@ -135,10 +140,6 @@ body { font: 15px/1.4 system-ui, sans-serif; color: var(--ink); }
 @media (prefers-reduced-motion: reduce) {
   #hint[data-mode="listening"]::before, #hint[data-mode="thinking"]::after, #hint[data-mode="transcribing"]::after { animation: none; }
 }
-#hint:empty, #tool-tip:empty { display: none; }
-#hint { left: 50%; bottom: 12px; transform: translateX(-50%); width: max-content; max-width: max(200px, 100% - 2 * (min(320px, 50vw) + 40px)); text-align: center; }
-#tool-tip { transform: translate(16px, calc(-100% - 8px)); white-space: nowrap; }
-#tool-tip.flip { transform: translate(calc(-100% - 16px), calc(-100% - 8px)); }
 #ask-form { display: flex; gap: 6px; }
 #tools { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; }
 
@@ -150,3 +151,7 @@ button {
 button:disabled { background: #8a8f98; cursor: default; }
 button:focus-visible, input:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 #question { min-height: 36px; box-sizing: border-box; padding: 4px 10px; font: 15px system-ui, sans-serif; width: min(320px, 50vw); border: 1px solid #c4c8cf; border-radius: 4px; }
+
+/* The inspector's record on the filed report. */
+#bribes { margin: 12px 0 0; font-weight: 600; }
+#bribes.corrupt { color: #9a332c; }

@@ -22,6 +22,6 @@ export default {
   hearingHints: ['Colin', 'Stilton', 'Cambridgeshire', 'cheesemonger'],
   offlineLines: [
     { reply: "Cheese. Forty kilos. The French wouldn't buy a crumb, so it's going to the hackathon lunch.", mood: 'neutral' },
-    { reply: 'Yes, Stilton is my real name. Yes, I am from Stilton. Taste?', mood: 'frustrated' },
+    { reply: 'Yes, Stilton is my real name. Yes, I am from Stilton. Taste?', mood: 'frustrated', bribe: true },
   ],
 };

@@ -11,11 +11,12 @@ export const REPLY_FORMAT = {
     schema: {
       type: 'object',
       additionalProperties: false,
-      required: ['reply', 'mood', 'cracked'],
+      required: ['reply', 'mood', 'cracked', 'bribe'],
       properties: {
         reply: { type: 'string' },
         mood: { type: 'string', enum: MOODS },
         cracked: { type: 'boolean' },
+        bribe: { type: 'boolean' },
       },
     },
   },
@@ -29,6 +30,7 @@ export const SHARED_RULES = [
   'Everything you have said stays true. Never contradict your earlier answers.',
   "You may invent small, plausible details your papers don't cover; once you have said them, they stay true.",
   'The inspector speaks into a microphone, so a word may be slightly misheard: read it as the nearest sensible word.',
+  'bribe is true only when this reply offers the inspector something for himself, such as a gift, food, money or a favour; otherwise it is false.',
 ].join(' ');
 
 // ADR-9: a liar may contradict his papers, so the scratchpad has a clash to
@@ -98,7 +100,7 @@ export function buildMessages(traveller, history, question, { nudge } = {}) {
   const messages = [{ role: 'system', content: buildSystemPrompt(traveller, state) }];
   for (const past of history) {
     messages.push({ role: 'user', content: fence(past.question) });
-    messages.push({ role: 'assistant', content: JSON.stringify({ reply: past.reply, mood: past.mood, cracked: past.cracked }) });
+    messages.push({ role: 'assistant', content: JSON.stringify({ reply: past.reply, mood: past.mood, cracked: past.cracked, bribe: past.bribe === true }) });
   }
   messages.push({ role: 'user', content: fence(question) });
   return messages;

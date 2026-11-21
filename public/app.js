@@ -6,6 +6,7 @@ import { mockReply } from '/src/mockBrain.js';
 import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
 import { createBooth } from '/booth.js';
 import { MAX_LINES, lineForHeard, lineForSpeech, lineForTyped, linesForAnswer, modelName } from '/computer.js';
+import { createSounds } from '/sounds.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -31,11 +32,13 @@ const HINTS = {
   notHeard: "Didn't catch that. Try again.",
   noMic: 'No microphone, so type your questions.',
   blocked: 'Click the page once so the browser lets them speak.',
+  noBribe: 'Nothing is on offer.',
 };
 const TOOL_TIPS = {
   papers: 'Papers: click to read',
   notebook: 'Scratchpad: click to open',
   transcript: 'Transcript: click to read it all',
+  bribe: 'A bribe: click to pocket it',
   mic: 'Microphone: hold to ask (or hold Space)',
   'stamp-through': 'Stamp: let them through',
   'stamp-away': 'Stamp: turn them away',
@@ -44,16 +47,6 @@ const STAMP_WORDS = { through: 'Through', away: 'Turned away' };
 const END_REASONS = { queueEmpty: 'Queue cleared.', time: "Time's up. Anyone not stamped counts as wrong." };
 
 const hint = (text) => { $('hint').textContent = text; };
-
-function renderActivity() {
-  const mode = !started || shift.phase !== 'playing' ? ''
-    : recording() ? 'listening'
-    : shift.hearing ? 'transcribing'
-    : shift.pending ? 'thinking' : '';
-  $('hint').dataset.mode = mode;
-  booth?.setRecording(mode === 'listening');
-  booth?.setThinking(mode === 'thinking');
-}
 
 // What each edge arrow turns to, from each view.
 const LOOK_LABELS = {
@@ -69,12 +62,25 @@ function renderLook(view) {
   $('look-right').hidden = !right;
 }
 
+// Which cue shows for what's happening now: the mic's light and ring while
+// recording, a thought bubble while the traveller thinks, and the hint's style.
+function renderActivity() {
+  const mode = !started || shift.phase !== 'playing' ? ''
+    : recording() ? 'listening'
+    : shift.hearing ? 'transcribing'
+    : shift.pending ? 'thinking' : '';
+  $('hint').dataset.mode = mode;
+  booth?.setRecording(mode === 'listening');
+  booth?.setThinking(mode === 'thinking');
+}
+
 // The 3D booth is scenery and controls together: you click the desk itself.
 // Without it, the plain papers panel and a button row run the whole game.
 const booth = createBooth($('booth'), {
   onMicDown: () => beginTalking(),
   onMicUp: () => finishTalking(),
   onStampClick: (verdict) => stampTraveller(verdict),
+  onBribeClick: () => pocketBribe(),
   onHover: (tool) => { $('tool-tip').textContent = TOOL_TIPS[tool] ?? ''; },
   onView: (view) => renderLook(view),
 });
@@ -156,7 +162,8 @@ async function askQuestion(text, { typed = false } = {}) {
   if (reply?.timings) logCall(...linesForAnswer(reply, traveller.name, models));
   else if (error && live) logCall({ who: modelName(models?.answer), what: 'call failed, so nothing was counted' });
   if (error) hint(HINTS[error]);
-  else hint(reply.fallback ? `${traveller.name}: "${reply.reply}" (that question wasn't counted)` : '');
+  else if (reply.fallback) hint(`${traveller.name}: "${reply.reply}" (that question wasn't counted)`);
+  else hint(bribeOnTheLedge() ? `${traveller.name} slides a ${bribeOnTheLedge()} onto the ledge.` : '');
   if (reply) booth?.setMood(reply.mood);
   if (reply?.audio) playVoice(reply.audio, reply.timings?.speechMs);
   render();
@@ -177,6 +184,21 @@ async function stampTraveller(verdict) {
   booth?.show(R.currentTravellerId(shift), { reaction: verdict });
   $('last-stamp').textContent = `${getTraveller(travellerId).name}: stamped ${STAMP_WORDS[verdict].toUpperCase()}`;
   hint('');
+  render();
+}
+
+// A bribe sits on the window ledge until you pocket it (click it) or move on
+// (ask again or stamp). The rules record a pocketed one; the report shows it.
+function bribeOnTheLedge() {
+  const offer = R.bribeOffer(shift);
+  return offer ? R.offeredItem(offer.reply) : null;
+}
+
+function pocketBribe() {
+  const result = R.answerBribe(shift, true);
+  if (result.error) return hint(HINTS[result.error]);
+  shift = result.shift;
+  hint('You pocket it. That goes on your record.');
   render();
 }
 
@@ -297,7 +319,7 @@ function renderReport() {
     tr.dataset.result = row.correct ? 'right' : 'wrong';
     const cells = [
       row.name,
-      row.stamp ? STAMP_WORDS[row.stamp] : 'Not stamped',
+      `${row.stamp ? STAMP_WORDS[row.stamp] : 'Not stamped'}${row.bribeTaken ? ' (took a bribe)' : ''}`,
       row.honest ? `Honest. ${row.secret}` : `Lying. ${row.secret}`,
       row.correct ? 'Right' : 'Wrong',
     ];
@@ -309,6 +331,11 @@ function renderReport() {
     return tr;
   }));
   $('score').textContent = `You got ${report.correct} of ${report.total} right.`;
+  const bribers = report.rows.filter((row) => row.bribeTaken).map((row) => row.name).join(', ');
+  $('bribes').textContent = report.record === 'corrupt'
+    ? `Bribes taken: ${report.bribesTaken} (${bribers}). Inspector's record: CORRUPT.`
+    : "No bribes taken. Inspector's record: clean.";
+  $('bribes').className = report.record;
 }
 
 function renderClock() {
@@ -347,6 +374,7 @@ function render() {
   if (!booth) renderFallbackPanel(traveller);
   renderCaptions(traveller);
   renderTranscript(traveller);
+  booth?.setBribe(bribeOnTheLedge());
   $('talk').disabled = Boolean(shift.pending || shift.hearing) || left === 0 || !micReady();
 }
 
@@ -420,6 +448,8 @@ async function checkLive() {
   $('status').textContent = live ? 'Live: Mistral connected.' : 'Offline: canned replies, no voices.';
 }
 
+// Sounds follow what the page tells the booth (public/sounds.js).
+createSounds().follow(booth);
 if (booth) renderLook(booth.view());
 render();
 checkLive();

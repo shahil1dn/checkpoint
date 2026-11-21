@@ -65,7 +65,7 @@ test('a good question reaches Mistral and the checked, spoken reply comes back',
   const res = await post(valid);
   assert.equal(res.status, 200);
   const { timings, ...answer } = await res.json();
-  assert.deepEqual(answer, { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false, audio: 'QUJD', notes: [NOTE] });
+  assert.deepEqual(answer, { reply: 'For the hackathon, of course!', mood: 'confident', cracked: false, bribe: false, audio: 'QUJD', notes: [NOTE] });
   // Real timings for the inspector's computer: whole milliseconds for each call.
   for (const name of ['answerMs', 'speechMs', 'notesMs']) assert.ok(Number.isInteger(timings[name]) && timings[name] >= 0, name);
   assert.equal(calls.length, 1);

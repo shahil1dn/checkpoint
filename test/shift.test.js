@@ -122,6 +122,75 @@ test('a restarted shift never accepts a reply from the old one', () => {
 test('the request sent to the server carries past exchanges with their real cracked flag', () => {
   const shift = askAndAnswer(R.newShift());
   const { request } = R.startQuestion(shift, 'And?');
-  assert.deepEqual(Object.keys(request.history[0]).sort(), ['cracked', 'mood', 'question', 'reply']);
+  assert.deepEqual(Object.keys(request.history[0]).sort(), ['bribe', 'cracked', 'mood', 'question', 'reply']);
   assert.equal(R.validateAskRequest({ travellerId: request.travellerId, question: request.question, history: request.history }).ok, true);
+});
+
+// ---- Bribes ----
+// Offline, Max's 2nd canned line offers a sticker or a croissant.
+function toMaxsBribe() {
+  return askAndAnswer(askAndAnswer(R.newShift()));
+}
+
+test('the mock brain offers a bribe, so the offer can be played offline', () => {
+  const shift = toMaxsBribe();
+  assert.deepEqual(shift.cases.max.history.map((e) => e.bribe), [false, true]);
+  assert.deepEqual(R.bribeOffer(shift), { travellerId: 'max', reply: shift.cases.max.history[1].reply });
+});
+
+test('there is no offer before one is made, or while a question is out', () => {
+  assert.equal(R.bribeOffer(R.newShift()), null);
+  assert.equal(R.answerBribe(R.newShift(), true).error, 'noBribe');
+  assert.equal(R.bribeOffer(askAndAnswer(R.newShift())), null);
+  assert.equal(R.bribeOffer(R.startQuestion(toMaxsBribe(), 'And?').shift), null);
+});
+
+test('taking a bribe is recorded by the rules and closes the offer', () => {
+  const { shift, error } = R.answerBribe(toMaxsBribe(), true);
+  assert.equal(error, undefined);
+  assert.equal(shift.cases.max.bribeTaken, true);
+  assert.equal(shift.cases.colin.bribeTaken, false);
+  assert.equal(R.bribeOffer(shift), null);
+  assert.equal(R.answerBribe(shift, true).error, 'noBribe');
+});
+
+test('an ignored bribe is not on the record, and a later offer can still be taken', () => {
+  let shift = R.answerBribe(toMaxsBribe(), false).shift;
+  assert.equal(shift.cases.max.bribeTaken, false);
+  assert.equal(R.bribeOffer(shift), null);
+  const asked = R.startQuestion(shift, 'Anything else?');
+  shift = R.finishQuestion(asked.shift, asked.request.id, { reply: 'Fifty fish, then?', mood: 'excited', cracked: false, bribe: true });
+  assert.equal(R.bribeOffer(shift).reply, 'Fifty fish, then?');
+  assert.equal(R.answerBribe(shift, true).shift.cases.max.bribeTaken, true);
+});
+
+test('asking the next question leaves the old offer behind', () => {
+  const shift = askAndAnswer(toMaxsBribe());
+  assert.equal(shift.cases.max.history[2].bribe, false);
+  assert.equal(R.bribeOffer(shift), null);
+  assert.equal(shift.cases.max.bribeTaken, false);
+});
+
+test('only the game can record a bribe: a reply cannot mark one as taken', () => {
+  const asked = R.startQuestion(R.newShift(), 'Well?');
+  const shift = R.finishQuestion(asked.shift, asked.request.id, { reply: 'You took my fish!', mood: 'happy', cracked: false, bribe: true, bribeTaken: true });
+  assert.equal(shift.cases.max.bribeTaken, false);
+  assert.equal(R.shiftReport(shift).bribesTaken, 0);
+});
+
+test('the report names bribes taken and marks the record, without changing right or wrong', () => {
+  const stampBoth = (shift) => R.stamp(R.stamp(shift, 'away').shift, 'through').shift;
+  const clean = R.shiftReport(stampBoth(toMaxsBribe()));
+  const bought = R.shiftReport(stampBoth(R.answerBribe(toMaxsBribe(), true).shift));
+  assert.deepEqual([clean.bribesTaken, clean.record], [0, 'clean']);
+  assert.deepEqual([bought.bribesTaken, bought.record], [1, 'corrupt']);
+  assert.deepEqual(bought.rows.map((r) => [r.id, r.bribeTaken]), [['max', true], ['colin', false]]);
+  assert.deepEqual(bought.rows.map((r) => r.correct), clean.rows.map((r) => r.correct));
+  assert.equal(bought.correct, 2);
+});
+
+test('Play again starts with a clean record', () => {
+  const fresh = R.restartShift(R.answerBribe(toMaxsBribe(), true).shift);
+  assert.equal(fresh.cases.max.bribeTaken, false);
+  assert.equal(R.shiftReport(fresh).record, 'clean');
 });
