@@ -38,7 +38,7 @@ Edge**. Then ask Shahil for the Mistral key in a private message.
 npm start            # the game on http://localhost:5173
 npm test             # the rules, server and Mistral-call tests, no network
 npm run live-check   # real questions to the travellers: consistency, notes, voice, timing
-npm run rehearse     # timed demo shift in headless Chrome (needs npm start running)
+npm run rehearse     # Mac only: timed demo shift in headless Chrome (needs npm start running)
 python3 scripts/smoke.py   # proves the key works and lists the models
 ```
 

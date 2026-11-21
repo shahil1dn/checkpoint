@@ -34,6 +34,18 @@ Using an AI agent (Claude Code, OpenCode, Mistral Vibe or another)? It reads `AG
 which feature and which files, and check its work by playing the game yourself. Its "done" is
 not proof.
 
+## Adding a traveller
+
+Each traveller is one file in `src/travellers/`, so adding one doesn't clash with anyone.
+
+1. Copy `src/travellers/colin.js` (honest) or `max.js` (lying) to `src/travellers/<id>.js`,
+   and change everything in it: name, papers, truth, story prompt, voice and look.
+2. Add one import line and their place in the queue in `src/travellers/index.js`.
+3. `bash check.sh`: a test fails if the new traveller is missing a field or isn't in the index.
+4. Play them with `npm start`: all 5 questions, twice, asking one question twice to see whether
+   they keep their story straight. `npm run live-check` only covers Max and Colin so far; to
+   cover yours, copy scenario (a) in `scripts/live-check.js` for your traveller.
+
 ## Who owns what (stops clashes)
 
 | Files | Owner | Others |
