@@ -27,13 +27,14 @@ any agent; these rules apply to all of them.
   `voxtral-mini-tts-3` and a preset `voice_id`. Other TTS model names refuse preset voices
   ("voice is not supported for speech v1"). The reply is JSON `{audio_data: <base64>}`. Preset
   voices: `GET /v1/audio/voices`. Speech in is `POST /v1/audio/transcriptions`, multipart,
-  `model=voxtral-mini-latest` plus `file`: mp3 works; browser webm is not checked yet.
+  `model=voxtral-mini-latest` plus `file`: mp3 and the browser's webm both work (checked 21 Nov).
 - **Large 4 always reasons before answering** (checked 21 Nov). `reasoning_effort` takes `low`,
   `medium` or `high`; `none` is refused. Its `message.content` is a **list of parts**, a
   `thinking` part then a `text` part: read the answer from the `text` parts only. Give
   `max_tokens` room for the thinking too, or the reply is cut off before the answer.
 - Creativity is the bar. A surprising, demoable idea beats a polished, ordinary one.
-- The demo must run in under 2 minutes, start to finish, on this laptop.
+- The demo slot is **5 minutes** (Shahil, 21 Nov 15:00; it was 2), run on this laptop. The game
+  part must leave room to explain it.
 
 ## Rules
 
