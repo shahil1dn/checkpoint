@@ -1,20 +1,19 @@
 // The view through the booth window (ADR-11): the border post into Antarctica.
 // An ice shelf, the sea, a ship moored at the ice edge, icebergs, a welcome
-// arrivals board, and penguins coming down the gangway. Scenery
+// sign and an arrivals board, and penguins coming down the gangway. Scenery
 // only: nothing here knows about the game. Every sign is made up.
 import * as THREE from 'three';
-import { part, box, mat, mapMat, textPlane } from '/penguins/engine.js';
+import { part, box, mat, textPlane } from '/penguins/engine.js';
 import { makePenguin } from '/penguins/penguin.js';
 import { DECK_Y, GANGWAY_X, WALK_Z, makeCrowd, pointAt } from '/arrivals.js';
 
 const COLORS = {
   snow: '#e4e8ea', iceCliff: '#b9c6cc', drift: '#d6dde0', sea: '#35505f', berg: '#eef2f3',
   hull: '#b5533c', hullBand: '#ddd6c6', cabin: '#ddd6c6', window: '#38404d', funnel: '#d4aa45',
-  gangway: '#8a9297', steel: '#5f6b73', board: '#1d2026',
+  gangway: '#8a9297', steel: '#5f6b73', board: '#1d2026', sign: '#2f4858',
 };
 const AMBER = '#f2b544';
 const BOARD_FONT = 'Menlo, "Courier New", monospace';
-export const INSPECTION_DOOR = { x: -1.28, z: -3.0 };
 
 // The inspector's eye is only just above the window, so everything to be seen
 // sits below eye height; the crowd walks well behind the traveller so it stays
@@ -65,6 +64,21 @@ function buildShip(group) {
   gangway.receiveShadow = false;
 }
 
+function buildSign(group) {
+  const at = new THREE.Vector3(-1.55, 1.5, SIGNS_Z);
+  const sign = textPlane(1.1, 0.24, (g, w, h) => {
+    g.fillStyle = COLORS.sign; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#f4efe2'; g.font = `600 ${h * 0.44}px system-ui, sans-serif`;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('WELCOME TO ANTARCTICA', w / 2, h * 0.53, w * 0.9);
+  }, 1024);
+  sign.redraw();
+  part(box(1.16, 0.3, 0.05, 0.015), mat(COLORS.steel), group, [at.x, at.y, at.z]);
+  sign.mesh.position.set(at.x, at.y, at.z + 0.03);
+  group.add(sign.mesh);
+  for (const dx of [-0.45, 0.45]) part(new THREE.CylinderGeometry(0.012, 0.012, 2, 8), mat(COLORS.steel), group, [at.x + dx, at.y + 1.15, at.z]);
+}
+
 function drawBoard(g, w, h) {
   g.fillStyle = COLORS.board; g.fillRect(0, 0, w, h);
   const rows = [
@@ -98,65 +112,6 @@ function buildBoard(group) {
   group.add(face.mesh);
   part(new THREE.CylinderGeometry(0.04, 0.05, at.y - 0.3, 10), mat(COLORS.steel), group, [at.x, (at.y - 0.3) / 2, at.z]);
   part(new THREE.CylinderGeometry(0.16, 0.18, 0.04, 16), mat(COLORS.steel), group, [at.x, 0.02, at.z]);
-}
-
-// Weathered paint over narrow timber panels gives the back wall an actual
-// surface, rather than the old blue sky reading as a blank wall.
-function wallPaint() {
-  const canvas = document.createElement('canvas');
-  canvas.width = canvas.height = 512;
-  const g = canvas.getContext('2d');
-  g.fillStyle = '#78969a'; g.fillRect(0, 0, 512, 512);
-  for (let x = 0; x < 512; x += 64) {
-    g.fillStyle = '#55777d'; g.fillRect(x, 0, 3, 512);
-    g.fillStyle = '#a4b8b4'; g.fillRect(x + 5, 0, 2, 512);
-  }
-  for (let i = 0; i < 900; i += 1) {
-    const x = (i * 127) % 512;
-    const y = (i * 347) % 512;
-    g.fillStyle = i % 3 ? '#c2d1c813' : '#324e561c';
-    g.fillRect(x, y, 1 + (i % 5), 1);
-  }
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 8;
-  return mapMat(texture);
-}
-
-// The arrivals door is cut into the left side of the painted back wall. The
-// dark recess is behind the waiting line, so those penguins remain visible.
-function buildInspectionWall(group) {
-  const { x, z } = INSPECTION_DOOR;
-  const wall = wallPaint();
-  const frame = mat('#e8e2d4');
-  const left = -3.6, right = 0.65, doorHalf = 0.5;
-  const leftEdge = x - doorHalf, rightEdge = x + doorHalf;
-  part(box(leftEdge - left, 2.6, 0.18), wall, group, [(left + leftEdge) / 2, 1.3, z - 0.09]);
-  part(box(right - rightEdge, 2.6, 0.18), wall, group, [(rightEdge + right) / 2, 1.3, z - 0.09]);
-  part(box(1.0, 0.63, 0.18), wall, group, [x, 2.285, z - 0.09]);
-  part(box(right - left, 0.075, 0.25, 0.01), mat('#526b70'), group, [(left + right) / 2, 2.61, z - 0.02]);
-  part(box(right - left, 0.13, 0.2), mat('#516c70'), group, [(left + right) / 2, 0.07, z + 0.015]);
-  for (const side of [-1, 1]) {
-    part(box(0.07, 1.96, 0.2), frame, group, [x + side * doorHalf, 0.98, z + 0.015]);
-  }
-  part(box(1.07, 0.075, 0.2), frame, group, [x, 1.98, z + 0.015]);
-  part(box(0.98, 2.0, 0.02), mat('#283b43'), group, [x, 1.0, z - 1.32], undefined, undefined, false);
-  part(box(1.05, 0.035, 0.4), mat('#5f6b73'), group, [x, 0.02, z + 0.1], undefined, undefined, false);
-  const leaf = new THREE.Group();
-  leaf.position.set(leftEdge + 0.05, 0, z + 0.04);
-  leaf.rotation.y = 1.3;
-  group.add(leaf);
-  part(box(0.9, 1.88, 0.045, 0.012), mat('#445f65'), leaf, [0.45, 0.95, 0]);
-  part(new THREE.SphereGeometry(0.023, 10, 8), mat('#c4a46b'), leaf, [0.8, 0.86, 0.045], undefined, undefined, false);
-  const label = textPlane(0.78, 0.18, (g, w, h) => {
-    g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h);
-    g.fillStyle = '#f4efe2'; g.font = `bold ${h * 0.47}px ${BOARD_FONT}`;
-    g.textAlign = 'center'; g.textBaseline = 'middle';
-    g.fillText('ARRIVALS', w / 2, h * 0.54);
-  }, 1024);
-  label.redraw();
-  label.mesh.position.set(x + 0.75, 2.28, z + 0.02);
-  group.add(label.mesh);
 }
 
 // Crowd penguins are re-dressed every time they come ashore (art direction,
@@ -208,7 +163,7 @@ function makeArrivals(group) {
 export function buildScenery(group) {
   buildIce(group);
   buildShip(group);
+  buildSign(group);
   buildBoard(group);
-  buildInspectionWall(group);
   return makeArrivals(group);
 }

@@ -375,7 +375,6 @@ async function finishTalking() {
 async function startShift() {
   started = true;
   $('start-screen').hidden = true;
-  booth?.setQueue(shift.queue);
   micSetup = live;
   if (live) hint('Allow the microphone, or type a question.');
   if (live) for (const id of shift.queue) if (getTraveller(id).bribe) fetchPlea(id);
@@ -397,7 +396,6 @@ async function startShift() {
 
 function playAgain() {
   shift = R.restartShift(shift);
-  booth?.setQueue(shift.queue);
   screenLookup = null;
   stopVoice();
   hint('');
@@ -526,7 +524,7 @@ function render() {
   $('hint').hidden = !playing;
   $('tool-tip').hidden = !playing;
   renderClock();
-  if (!stampingNow) booth?.show(playing ? R.currentTravellerId(shift) : null);
+  if (!stampingNow) booth?.show(over ? null : R.currentTravellerId(shift));
   if (over) {
     booth?.putDown();
     $('captions').hidden = true;
