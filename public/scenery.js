@@ -19,7 +19,7 @@ const BOARD_FONT = 'Menlo, "Courier New", monospace';
 // sits below eye height; the crowd walks well behind the traveller so it stays
 // smaller than him and doesn't hide the ship.
 const ICE_EDGE_Z = -4.4;
-const HULL_FRONT_Z = -4.55;
+const HULL_FRONT_Z = -6.2;   // moored out across the ice, so it reads as far off
 const SIGNS_Z = -2.4;
 
 // Flat things on a surface (art direction, section 1): no ink hull, no shadow.
@@ -62,6 +62,11 @@ function buildShip(group) {
   const gangway = part(box(0.6, 0.04, run.length(), 0.01), mat(COLORS.gangway), group,
     [GANGWAY_X, DECK_Y / 2, (HULL_FRONT_Z + WALK_Z + 0.1) / 2], [Math.atan2(DECK_Y, run.z), 0, 0]);
   gangway.receiveShadow = false;
+  // An open door at the top of the gangway, so the crowd walks out of the ship.
+  const doorZ = HULL_FRONT_Z - 0.35;
+  flat(box(0.62, 0.8, 0.02), '#1b2026', group, [GANGWAY_X, DECK_Y + 0.4, doorZ - 0.3]);
+  for (const dx of [-0.36, 0.36]) part(box(0.1, 0.86, 0.7, 0.02), mat(COLORS.cabin), group, [GANGWAY_X + dx, DECK_Y + 0.43, doorZ]);
+  part(box(0.82, 0.12, 0.7, 0.02), mat(COLORS.cabin), group, [GANGWAY_X, DECK_Y + 0.9, doorZ]);
 }
 
 function buildSign(group) {

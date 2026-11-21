@@ -165,7 +165,10 @@ async function main() {
 
     // Find each desk object by hovering a grid over the lower screen and reading
     // the hover tip; use the hit nearest the middle of each object's hits.
-    const desk = await evaluate(`(() => {
+    // Mapped only once the shift has started: the page now opens facing the
+    // terminal menu, where the only tool in sight is START SHIFT.
+    let desk = {};
+    const mapDesk = () => evaluate(`(() => {
       const canvas = document.querySelector('#booth canvas');
       const tip = document.getElementById('tool-tip');
       const hits = {};
@@ -209,9 +212,26 @@ async function main() {
       return false;
     };
 
-    await evaluate(`window.__startTimer(); document.getElementById('start').click(); true`);
+    // The main menu is on the terminal: find START SHIFT by its hover label and click it.
+    const started = await evaluate(`(() => {
+      const canvas = document.querySelector('#booth canvas');
+      const tip = document.getElementById('tool-tip');
+      const hits = [];
+      for (let y = 0; y < innerHeight; y += 8) for (let x = 0; x < innerWidth; x += 8) {
+        canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+        if (tip.textContent.startsWith('Start shift')) hits.push([x, y]);
+      }
+      if (!hits.length) return false;
+      const [x, y] = hits[Math.floor(hits.length / 2)];
+      window.__startTimer();
+      canvas.dispatchEvent(new PointerEvent('pointerup', { clientX: x, clientY: y, bubbles: true }));
+      return true;
+    })()`);
+    if (!started) throw new Error('could not find START SHIFT on the terminal');
+    if (!(await waitFor(`!document.getElementById('controls').hidden`, 5000))) throw new Error('the shift did not start from the terminal menu');
     note('Start shift');
-    await sleep(500);
+    await sleep(1500);   // let the camera finish turning from the terminal to the window
+    desk = await mapDesk();
 
     let clipIndex = 0;
     for (const step of DEMO) {

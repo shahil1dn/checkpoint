@@ -817,8 +817,28 @@ function drawReview(g, w, h, review) {
   g.textAlign = 'left';
 }
 
-function drawComputer(g, w, h, { calls = [], terminal = null, cursorOn = true, review = null } = {}) {
+// The main menu, on the terminal before the shift: what the old start card
+// said, and a START SHIFT button the inspector clicks on the screen itself.
+const MENU_BUTTON = { x: 0.3, y: 0.66, w: 0.4, h: 0.12 };   // fractions of the screen
+function drawMenu(g, w, h, cursorOn) {
+  const x = w * 0.04;
+  g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.fillStyle = AMBER; g.font = `600 ${h * 0.11}px ${TERMINAL}`;
+  g.fillText('CHECKPOINT', x, h * 0.24, w * 0.7);
+  g.fillStyle = TERM_TEXT; g.font = `${h * 0.042}px ${TERMINAL}`;
+  g.fillText('Talk to the penguins at your window. Decide who gets into Antarctica.', x, h * 0.35, w * 0.92);
+  g.fillStyle = TERM_STEP; g.font = `${h * 0.038}px ${TERMINAL}`;
+  ['Read their papers.', 'Hold Space and ask them anything, or type.', 'Stamp them through or turned away.']
+    .forEach((line, i) => g.fillText(`› ${line}`, x, h * (0.45 + i * 0.06), w * 0.92));
+  const b = MENU_BUTTON;
+  g.fillStyle = AMBER; g.fillRect(w * b.x, h * b.y, w * b.w, h * b.h);
+  g.fillStyle = '#14161a'; g.font = `600 ${h * 0.06}px ${TERMINAL}`; g.textAlign = 'center';
+  g.fillText(`START SHIFT${cursorOn ? ' █' : '  '}`, w * (b.x + b.w / 2), h * (b.y + b.h / 2), w * b.w * 0.9);
+}
+
+function drawComputer(g, w, h, { calls = [], terminal: shown = null, cursorOn = true, menu = false, review = null } = {}) {
   if (review) return drawReview(g, w, h, review);
+  const terminal = menu ? null : shown;   // no traveller on the menu
   g.fillStyle = '#14161a'; g.fillRect(0, 0, w, h);
   g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h * 0.11);
   g.textAlign = 'left'; g.textBaseline = 'middle';
@@ -828,7 +848,8 @@ function drawComputer(g, w, h, { calls = [], terminal = null, cursorOn = true, r
     g.textAlign = 'right'; g.fillStyle = terminal.left ? AMBER : TERM_DIM;
     g.fillText(`Lookups left: ${terminal.left} of ${terminal.max}`, w * 0.96, h * 0.058);
   }
-  drawTerminal(g, w, h, terminal, cursorOn);
+  if (menu) drawMenu(g, w, h, cursorOn);
+  else drawTerminal(g, w, h, terminal, cursorOn);
   // The Mistral calls strip: the latest two, small, under a rule.
   g.fillStyle = '#2b2f36'; g.fillRect(w * 0.04, h * 0.865, w * 0.92, h * 0.004);
   g.textAlign = 'left'; g.font = `${h * 0.03}px ${TERMINAL}`;
@@ -1239,7 +1260,9 @@ export function createBooth(container, handlers = {}) {
     // three's raycaster ignores visibility, so hidden parts (the transcript's
     // full page while the slip is down, a bribe not on offer) must be skipped,
     // or they catch the pointer meant for what's behind them.
-    const hit = raycaster.intersectObjects([...tools, bribe.holder, computer.mesh], true).find((h) => shown(h.object));
+    const onScreen = screenState.menu || screenState.review;
+    const hit = raycaster.intersectObjects([...tools, bribe.holder, ...(onScreen ? [computer.mesh] : [])], true).find((h) => shown(h.object));
+    if (hit?.object === computer.mesh && screenState.menu) return { tool: onMenuButton(hit.uv) ? 'start-shift' : null, line: null };
     let tool = null;
     for (let o = hit?.object; o && !tool; o = o.parent) tool = o.userData.tool ?? null;
     if (hit?.object === computer.mesh) tool = screenState.review && hit.uv && onPlayAgain(hit.uv) ? 'play-again' : null;
@@ -1252,6 +1275,11 @@ export function createBooth(container, handlers = {}) {
     const b = PLAY_AGAIN_BOX;
     return uv.x >= b.left && uv.x <= b.right && 1 - uv.y >= b.top && 1 - uv.y <= b.bottom;
   };
+  function onMenuButton(uv) {
+    const b = MENU_BUTTON;
+    const y = 1 - uv.y;
+    return uv.x >= b.x && uv.x <= b.x + b.w && y >= b.y && y <= b.y + b.h;
+  }
   function hoverLine(line) {
     if (line === hoveredLine) return;
     hoveredLine = line;
@@ -1293,6 +1321,7 @@ export function createBooth(container, handlers = {}) {
     }
     const { tool, line } = toolAt(event);
     if (line) handlers.onLookup?.(line);
+    else if (tool === 'start-shift') handlers.onStartClick?.();
     else if (['papers', 'notebook', 'transcript'].includes(tool)) booth.toggle(tool);
     else if (tool?.startsWith('stamp-')) handlers.onStampClick?.(tool.slice(6));
     else if (tool === 'bribe') handlers.onBribeClick?.();
@@ -1541,6 +1570,15 @@ export function createBooth(container, handlers = {}) {
       if (!VIEW_ORDER.includes(next) || next === view) return;
       view = next;
       lifted = null;
+      handlers.onView?.(view);
+    },
+    // The main menu on the terminal. Showing it faces the computer at once; hiding
+    // it turns the inspector back to the window, the way he goes back to his desk.
+    setMenu(on) {
+      screenState = { ...screenState, menu: on };
+      computer.redraw(screenState);
+      view = on ? 'left' : 'window';
+      if (on) yaw = VIEWS.left;
       handlers.onView?.(view);
     },
     // Lines already looked up get a mark on the paper they came from.

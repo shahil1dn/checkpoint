@@ -65,6 +65,7 @@ const TOOL_TIPS = {
   mic: 'Microphone: hold to ask (or hold Space)',
   'stamp-through': 'Stamp: let them through',
   'stamp-away': 'Stamp: turn them away',
+  'start-shift': 'Start shift: back to the desk',
 };
 const STAMP_WORDS = { through: 'Through', away: 'Turned away' };
 const END_REASONS = { queueEmpty: 'Queue cleared.' };
@@ -104,6 +105,7 @@ const booth = createBooth($('booth'), {
   onMicUp: () => finishTalking(),
   onStampClick: (verdict) => stampTraveller(verdict),
   onBribeClick: () => pocketBribe(),
+  onStartClick: () => startFromMenu(),
   onHover: (tool, detail) => { $('tool-tip').textContent = tipFor(tool, detail); },
   onLookup: (line) => lookUp(line),
   onPlayAgain: () => playAgain(),
@@ -448,6 +450,18 @@ async function startShift() {
   }
 }
 
+// START SHIFT on the terminal: the inspector turns back to his desk, and only
+// then does the shift (and its clock) begin.
+let leavingMenu = false;
+async function startFromMenu() {
+  if (started || leavingMenu) return;
+  leavingMenu = true;
+  $('tool-tip').textContent = '';
+  booth.setMenu(false);
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  startShift();
+}
+
 function playAgain() {
   shift = R.restartShift(shift);
   screenLookup = null;
@@ -623,7 +637,7 @@ function render() {
   $('fallback').hidden = Boolean(booth) || !playing;
   $('tools').hidden = Boolean(booth);
   $('hint').hidden = !playing;
-  $('tool-tip').hidden = !playing;
+  $('tool-tip').hidden = !playing && !(booth && !started);   // the menu's button has a tip too
   renderClock();
   if (!stampingNow) booth?.show(over ? null : R.currentTravellerId(shift));
   if (over) {
@@ -732,9 +746,15 @@ async function checkLive() {
 
 // Sounds follow what the page tells the booth (public/sounds.js).
 createSounds().follow(booth);
-if (booth) renderLook(booth.view());
+// With the 3D booth the main menu is on the terminal; the HTML card is the
+// fallback for a machine without it.
+if (booth) {
+  $('start-screen').hidden = true;
+  booth.setMenu(true);
+  renderLook(booth.view());
+}
 render();
 // Enter (or Space) on the focused button starts the shift.
-$('start').focus();
+if (!booth) $('start').focus();
 checkLive();
 requestAnimationFrame(frame);
