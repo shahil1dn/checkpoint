@@ -1,12 +1,20 @@
-// The booth, seen from the inspector's chair: the desk in front, the window,
-// and the traveller standing beyond it. Built from the Fang Street penguin cast
-// (ADR-6), loaded through the page's import map (ADR-7). Screen only: the
-// booth shows the mood it is given and decides nothing.
+// The booth, seen from the inspector's chair: the window, the traveller beyond
+// it, and the desk with its tools (papers, scratchpad, microphone, two stamps).
+// Built from the Fang Street penguin cast (ADR-6), loaded through the page's
+// import map (ADR-7). Screen only: the booth shows what it is told and reports
+// what was clicked; every rule is decided in app.js and src/rules.js.
 import * as THREE from 'three';
-import { createEngine, part, box, mat, PALETTE } from '/penguins/engine.js';
+import { createEngine, part, box, ball, mat, textPlane } from '/penguins/engine.js';
 import { makePenguin } from '/penguins/penguin.js';
 
-const COLORS = { ground: '#b8a48a', groundBase: '#8c7a63', booth: '#8fb3a8', frame: '#e8e2d4', desk: '#a8794f', deskTop: '#c8955f' };
+const COLORS = {
+  ground: '#b8a48a', groundBase: '#8c7a63', booth: '#8fb3a8', frame: '#e8e2d4', desk: '#a8794f', deskTop: '#c8955f',
+  paper: '#f4efe2', cover: '#3f6e8c', micBody: '#343845', micGrille: '#5a5f6b', wood: '#8c6448',
+  through: '#3f8f5a', away: '#c0453a', live: '#d8433a', off: '#6b6f78',
+};
+const INK = '#1f2126';
+const TYPEWRITER = '"American Typewriter", "Courier New", monospace';
+const HANDWRITING = '"Noteworthy", "Bradley Hand", "Marker Felt", cursive';
 
 // Each traveller's single accessory, so he reads at a glance (art direction, section 3).
 const LOOKS = {
@@ -15,7 +23,6 @@ const LOOKS = {
 };
 
 // One face per mood, the same for every traveller, so the face is a fair tell.
-// Mistral's six moods onto the cast's four expressions plus its body language.
 const FACES = {
   neutral: { expression: 'neutral' },
   confident: { expression: 'evil' },               // the sly grin: got away with it
@@ -24,31 +31,174 @@ const FACES = {
   frustrated: { expression: 'annoyed', footTap: true },
   sad: { expression: 'neutral', chinDown: true },
 };
+const STAMP_WORDS = { through: 'THROUGH', away: 'TURNED AWAY' };
 
+const SILL = 1.0;
 const TRAVELLER_AT = new THREE.Vector3(0, 0, -1.1);
-const EYE = new THREE.Vector3(0, 1.75, 2.4);
-const LOOK_AT = new THREE.Vector3(0, 1.45, -1.1);
+const EYE = new THREE.Vector3(0, 1.95, 2.25);
+// Looking slightly down keeps the bottom of the screen clear desk, where the
+// subtitles and the toolbar sit; held papers are raised above that strip too.
+const LOOK_AT = new THREE.Vector3(0, 1.0, -0.6);
+const READ_DISTANCE = 0.97;
+const READ_RAISE = 0.07;
+const WALK_OFF_X = 3.2;
 
-function buildBooth(group) {
-  // Outside: the ground the travellers stand on.
+// ---------- drawing the papers and the scratchpad ----------
+
+function wrap(g, text, maxWidth) {
+  const lines = [];
+  let line = '';
+  for (const word of text.split(' ')) {
+    const next = line ? `${line} ${word}` : word;
+    if (g.measureText(next).width > maxWidth && line) {
+      lines.push(line);
+      line = word;
+    } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines;
+}
+
+function drawPapers(g, w, h, papers, stamp) {
+  g.fillStyle = COLORS.paper; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#c9bfa8'; g.lineWidth = w * 0.006; g.strokeRect(w * 0.04, h * 0.03, w * 0.92, h * 0.94);
+  g.fillStyle = INK; g.textAlign = 'center';
+  g.font = `bold ${w * 0.07}px ${TYPEWRITER}`;
+  g.fillText('TRAVEL PAPERS', w / 2, h * 0.11);
+  g.textAlign = 'left';
+  let y = h * 0.21;
+  for (const [label, value] of Object.entries(papers ?? {})) {
+    g.fillStyle = '#6b6457'; g.font = `${w * 0.04}px ${TYPEWRITER}`;
+    g.fillText(label.toUpperCase(), w * 0.09, y);
+    g.fillStyle = INK; g.font = `${w * 0.055}px ${TYPEWRITER}`;
+    for (const line of wrap(g, value, w * 0.82)) {
+      y += h * 0.05;
+      g.fillText(line, w * 0.09, y);
+    }
+    y += h * 0.075;
+  }
+  if (stamp) {
+    g.save();
+    g.translate(w * 0.55, h * 0.8); g.rotate(-0.2);
+    g.strokeStyle = g.fillStyle = COLORS[stamp]; g.globalAlpha = 0.85;
+    g.lineWidth = w * 0.014;
+    g.font = `bold ${w * 0.085}px ${TYPEWRITER}`; g.textAlign = 'center';
+    const width = g.measureText(STAMP_WORDS[stamp]).width + w * 0.08;
+    g.strokeRect(-width / 2, -h * 0.055, width, h * 0.1);
+    g.fillText(STAMP_WORDS[stamp], 0, h * 0.025);
+    g.restore();
+  }
+}
+
+function drawNotes(g, w, h, name, notes) {
+  g.fillStyle = '#fbf8ef'; g.fillRect(0, 0, w, h);
+  g.strokeStyle = '#c8d8e4'; g.lineWidth = w * 0.003;
+  for (let y = h * 0.2; y < h; y += h * 0.075) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+  g.strokeStyle = '#e3a3a3'; g.beginPath(); g.moveTo(w * 0.1, 0); g.lineTo(w * 0.1, h); g.stroke();
+  g.fillStyle = INK; g.font = `${w * 0.06}px ${HANDWRITING}`;
+  g.fillText(`Notes: ${name ?? ''}`, w * 0.14, h * 0.13);
+  g.fillStyle = '#28406b'; g.font = `${w * 0.045}px ${HANDWRITING}`;
+  let y = h * 0.2 - h * 0.015;
+  const items = notes?.length ? notes : ['Nothing noted yet.'];
+  for (const note of items) {
+    for (const [i, line] of wrap(g, note, w * 0.8).entries()) {
+      y += h * 0.075;
+      if (y > h * 0.97) return;
+      g.fillText(`${i === 0 ? '- ' : '  '}${line}`, w * 0.13, y);
+    }
+  }
+}
+
+function drawLabel(g, w, h, text, colour) {
+  g.fillStyle = '#fbf8ef'; g.fillRect(0, 0, w, h);
+  g.fillStyle = colour; g.font = `bold ${h * 0.5}px ${TYPEWRITER}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, w / 2, h * 0.54, w * 0.9);
+}
+
+// ---------- building the booth ----------
+
+function buildRoom(group) {
   part(box(9, 0.3, 6, 0.05), mat(COLORS.ground), group, [0, -0.15, -3]);
   part(box(8.9, 0.5, 5.9, 0.05), mat(COLORS.groundBase), group, [0, -0.55, -3]);
-  // The booth's front wall, with the window cut out of it.
   const wall = mat(COLORS.booth);
-  const [sill, top, half] = [1.0, 2.3, 1.15];
-  part(box(6, sill, 0.16), wall, group, [0, sill / 2, 0]);
+  const [top, half] = [2.3, 1.15];
+  part(box(6, SILL, 0.16), wall, group, [0, SILL / 2, 0]);
   part(box(6, 3.4 - top, 0.16), wall, group, [0, (3.4 + top) / 2, 0]);
-  for (const s of [-1, 1]) part(box(3 - half, top - sill, 0.16), wall, group, [s * (3 + half) / 2, (sill + top) / 2, 0]);
-  // The window frame.
+  for (const s of [-1, 1]) part(box(3 - half, top - SILL, 0.16), wall, group, [s * (3 + half) / 2, (SILL + top) / 2, 0]);
   const frame = mat(COLORS.frame);
-  part(box(half * 2 + 0.16, 0.08, 0.24), frame, group, [0, sill, 0]);
+  part(box(half * 2 + 0.16, 0.08, 0.24), frame, group, [0, SILL, 0]);
   part(box(half * 2 + 0.16, 0.08, 0.24), frame, group, [0, top, 0]);
-  for (const s of [-1, 1]) part(box(0.08, top - sill, 0.24), frame, group, [s * half, (sill + top) / 2, 0]);
-  // The desk on the inspector's side, under the window.
-  part(box(3.2, 0.1, 1.3, 0.04), mat(COLORS.deskTop), group, [0, sill - 0.05, 0.75]);
-  part(box(3.1, sill - 0.1, 1.2, 0.04), mat(COLORS.desk), group, [0, (sill - 0.1) / 2, 0.75]);
+  for (const s of [-1, 1]) part(box(0.08, top - SILL, 0.24), frame, group, [s * half, (SILL + top) / 2, 0]);
+  part(box(3.4, 0.1, 1.4, 0.04), mat(COLORS.deskTop), group, [0, SILL - 0.05, 0.75]);
+  part(box(3.3, SILL - 0.1, 1.3, 0.04), mat(COLORS.desk), group, [0, (SILL - 0.1) / 2, 0.75]);
   // The booth throws no shadow outside, or the traveller would stand in the dark.
   group.traverse((o) => { o.castShadow = false; });
+}
+
+// A flat thing that lies on the desk and can be lifted up to the eyes.
+// Its face is local +z, so lying down is a quarter turn about x.
+function liftable(group, name, at, yaw, deskScale) {
+  const holder = new THREE.Group();
+  holder.userData.tool = name;
+  group.add(holder);
+  const desk = { position: at.clone(), quaternion: new THREE.Quaternion().setFromEuler(new THREE.Euler(-Math.PI / 2, 0, yaw, 'XYZ')), scale: deskScale };
+  return { name, holder, desk, t: 0 };
+}
+
+function buildPapers(group) {
+  const item = liftable(group, 'papers', new THREE.Vector3(-0.28, SILL + 0.012, 0.5), -0.06, 0.7);
+  part(box(0.42, 0.56, 0.008, 0.004), mat(COLORS.paper), item.holder);
+  const print = textPlane(0.42, 0.56, drawPapers, 2048);
+  print.mesh.position.z = 0.006;
+  item.holder.add(print.mesh);
+  item.redraw = print.redraw;
+  return item;
+}
+
+function buildNotebook(group) {
+  const item = liftable(group, 'notebook', new THREE.Vector3(-0.88, SILL + 0.02, 0.5), 0.18, 0.6);
+  item.cover = part(box(0.42, 0.56, 0.03, 0.01), mat(COLORS.cover), item.holder);
+  const label = textPlane(0.3, 0.08, (g, w, h) => drawLabel(g, w, h, 'SCRATCHPAD', INK), 1024);
+  label.redraw();
+  label.mesh.position.set(0, 0.12, 0.017);
+  item.cover.add(label.mesh);
+  const page = textPlane(0.42, 0.56, drawNotes, 2048);
+  page.mesh.position.z = 0.017;
+  page.mesh.visible = false;
+  item.holder.add(page.mesh);
+  item.page = page.mesh;
+  item.redraw = page.redraw;
+  return item;
+}
+
+function buildMic(group) {
+  const holder = new THREE.Group();
+  holder.userData.tool = 'mic';
+  holder.position.set(0.28, SILL, 0.32);
+  group.add(holder);
+  part(new THREE.CylinderGeometry(0.09, 0.11, 0.03, 20), mat(COLORS.micBody), holder, [0, 0.015, 0]);
+  part(new THREE.CylinderGeometry(0.012, 0.012, 0.22, 8), mat(COLORS.micGrille), holder, [0, 0.13, 0], [0.35, 0, 0]);
+  part(ball(0.05, 16, 12), mat(COLORS.micGrille), holder, [0, 0.25, -0.04], [0, 0, 0], [1, 1.3, 1]);
+  // Its own material: shared materials are cached by colour, so tinting one would tint them all.
+  const light = new THREE.MeshBasicMaterial({ color: COLORS.off });
+  part(ball(0.018, 10, 8), light, holder, [0.07, 0.035, 0.05]);
+  return { holder, light };
+}
+
+function buildStamp(group, verdict, x) {
+  const holder = new THREE.Group();
+  holder.userData.tool = `stamp-${verdict}`;
+  holder.position.set(x, SILL, 0.42);
+  group.add(holder);
+  part(box(0.16, 0.05, 0.11, 0.015), mat(COLORS[verdict]), holder, [0, 0.025, 0]);
+  part(new THREE.CylinderGeometry(0.025, 0.03, 0.12, 12), mat(COLORS.wood), holder, [0, 0.11, 0]);
+  part(ball(0.045, 14, 10), mat(COLORS.wood), holder, [0, 0.19, 0]);
+  const label = textPlane(0.22, 0.06, (g, w, h) => drawLabel(g, w, h, STAMP_WORDS[verdict], COLORS[verdict]), 1024);
+  label.redraw();
+  label.mesh.position.set(0, 0.03, 0.13);
+  label.mesh.rotation.x = -0.9;
+  holder.add(label.mesh);
+  return { holder, home: holder.position.clone() };
 }
 
 function makeTraveller(id) {
@@ -56,12 +206,15 @@ function makeTraveller(id) {
   const penguin = makePenguin({ scarf: style.scarf });
   penguin.setLook(style.look);
   penguin.showHearts = false;   // hearts are for love (art direction); nobody here is in love
-  penguin.root.position.copy(TRAVELLER_AT);
   return penguin;
 }
 
-// Returns null if this browser can't draw 3D; the game still works without it.
-export function createBooth(container) {
+const ease = (t) => t * t * (3 - 2 * t);
+
+// ---------- the booth ----------
+
+// Returns null if this browser can't draw 3D; the page then shows plain papers instead.
+export function createBooth(container, handlers = {}) {
   let engine;
   try {
     engine = createEngine(container);
@@ -72,43 +225,156 @@ export function createBooth(container) {
   engine.camera.fov = 42;
   const group = new THREE.Group();
   engine.scene.add(group);
-  buildBooth(group);
+  buildRoom(group);
   const dir = EYE.clone().sub(LOOK_AT);
   const fitHalfHeight = dir.length() * Math.tan(THREE.MathUtils.degToRad(engine.camera.fov / 2));
-  engine.setWorld({
-    group, camTarget: LOOK_AT, startDir: dir, fit: [1.9, fitHalfHeight],
-    walls: { backWall: [], sideWall: [], wallAt: -99 },
-  });
+  engine.setWorld({ group, camTarget: LOOK_AT, startDir: dir, fit: [1.7, fitHalfHeight], walls: { backWall: [], sideWall: [], wallAt: -99 } });
 
+  const papers = buildPapers(group);
+  const notebook = buildNotebook(group);
+  const liftables = [papers, notebook];
+  const mic = buildMic(group);
+  const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };
+  const tools = [papers.holder, notebook.holder, mic.holder, stamps.through.holder, stamps.away.holder];
+
+  let lifted = null;
   let traveller = null;
   let travellerId = null;
+  let leaving = null;
   let face = FACES.neutral;
   let talking = false;
+  let hovered = null;
+  let micHeld = false;
+  let stamping = false;
+  const tweens = [];
   const clock = new THREE.Clock();
 
+  // Runs step(progress) every frame for `seconds`, then resolves.
+  const tween = (seconds, step) => new Promise((resolve) => tweens.push({ seconds, age: 0, step, resolve }));
+
+  // ---- picking ----
+  const raycaster = new THREE.Raycaster();
+  const pointer = new THREE.Vector2();
+  const canvas = engine.renderer.domElement;
+  function toolAt(event) {
+    const box = canvas.getBoundingClientRect();
+    pointer.set(((event.clientX - box.left) / box.width) * 2 - 1, -((event.clientY - box.top) / box.height) * 2 + 1);
+    raycaster.setFromCamera(pointer, engine.camera);
+    const hit = raycaster.intersectObjects(tools, true)[0];
+    for (let o = hit?.object; o; o = o.parent) if (o.userData.tool) return o.userData.tool;
+    return null;
+  }
+  canvas.addEventListener('pointermove', (event) => {
+    const tool = toolAt(event);
+    if (tool === hovered) return;
+    hovered = tool;
+    canvas.style.cursor = tool ? 'pointer' : 'default';
+    handlers.onHover?.(tool);
+  });
+  canvas.addEventListener('pointerdown', (event) => {
+    const tool = toolAt(event);
+    if (tool === 'mic') {
+      micHeld = true;
+      canvas.setPointerCapture(event.pointerId);
+      handlers.onMicDown?.();
+    }
+  });
+  canvas.addEventListener('pointerup', (event) => {
+    if (micHeld) {
+      micHeld = false;
+      handlers.onMicUp?.();
+      return;
+    }
+    const tool = toolAt(event);
+    if (tool === 'papers' || tool === 'notebook') booth.toggle(tool);
+    else if (tool?.startsWith('stamp-')) handlers.onStampClick?.(tool.slice(6));
+    else if (lifted) booth.putDown();
+  });
+
+  // ---- every frame ----
+  const deskPos = new THREE.Vector3();
+  const readPos = new THREE.Vector3();
+  const forward = new THREE.Vector3();
+  const upward = new THREE.Vector3();
   function frame() {
     const dt = Math.min(clock.getDelta(), 0.1);
     const t = clock.elapsedTime;
+    for (const tw of [...tweens]) {
+      tw.age += dt;
+      tw.step(Math.min(1, tw.age / tw.seconds));
+      if (tw.age >= tw.seconds) { tweens.splice(tweens.indexOf(tw), 1); tw.resolve(); }
+    }
+    // Lifted things come up in front of the eyes, facing the inspector.
+    engine.camera.getWorldDirection(forward);
+    upward.copy(engine.camera.up).applyQuaternion(engine.camera.quaternion);
+    readPos.copy(engine.camera.position).addScaledVector(forward, READ_DISTANCE).addScaledVector(upward, READ_RAISE);
+    for (const item of liftables) {
+      item.t += ((lifted === item.name ? 1 : 0) - item.t) * Math.min(dt * 7, 1);
+      const k = ease(item.t);
+      deskPos.copy(item.desk.position).y += hovered === item.name && k < 0.01 ? 0.02 : 0;
+      item.holder.position.lerpVectors(deskPos, readPos, k);
+      item.holder.quaternion.slerpQuaternions(item.desk.quaternion, engine.camera.quaternion, k);
+      item.holder.scale.setScalar(item.desk.scale + (1 - item.desk.scale) * k);
+    }
+    notebook.cover.visible = notebook.t < 0.5;
+    notebook.page.visible = notebook.t >= 0.5;
+    for (const [verdict, s] of Object.entries(stamps)) {
+      if (!stamping) s.holder.position.y = s.home.y + (hovered === `stamp-${verdict}` ? 0.03 : 0);
+    }
+    mic.holder.position.y = SILL + (hovered === 'mic' && !micHeld ? 0.02 : 0);
     if (traveller) {
       traveller.update(t, dt);
       if (face.chinDown) traveller.head.rotation.x += 0.28;
-      // Beak moves while his voice plays.
       if (talking) traveller.jaw.rotation.x = 0.08 + Math.abs(Math.sin(t * 11)) * 0.3;
+      // He looks about while waiting, and turns to face you when he talks.
+      if (!traveller.walking) {
+        const target = talking ? 0 : Math.sin(t * 0.45) * 0.35;
+        traveller.root.rotation.y += (target - traveller.root.rotation.y) * Math.min(dt * 4, 1);
+      }
     }
+    if (leaving) leaving.update(t, dt);
     engine.render();
     requestAnimationFrame(frame);
   }
   requestAnimationFrame(frame);
 
-  return {
-    show(id) {
+  async function walkOff(penguin, mood) {
+    leaving = penguin;
+    penguin.setMood(mood);
+    await tween(0.35, () => {});
+    penguin.walking = true;
+    penguin.root.rotation.y = Math.PI / 2;
+    const from = penguin.root.position.x;
+    await tween(1.1, (p) => { penguin.root.position.x = from + (WALK_OFF_X - from) * p; });
+    group.remove(penguin.root);
+    if (leaving === penguin) leaving = null;
+  }
+
+  async function walkOn(penguin) {
+    penguin.root.position.set(-WALK_OFF_X, TRAVELLER_AT.y, TRAVELLER_AT.z);
+    penguin.root.rotation.y = Math.PI / 2;
+    penguin.walking = true;
+    group.add(penguin.root);
+    await tween(1.1, (p) => { penguin.root.position.x = -WALK_OFF_X + (TRAVELLER_AT.x + WALK_OFF_X) * p; });
+    penguin.walking = false;
+  }
+
+  const booth = {
+    // Swapping travellers walks the old one off and the new one on.
+    show(id, { reaction } = {}) {
       if (id === travellerId) return;
-      if (traveller) group.remove(traveller.root);
+      const old = traveller;
       travellerId = id;
       traveller = id ? makeTraveller(id) : null;
-      if (traveller) group.add(traveller.root);
-      this.setMood('neutral');
       talking = false;
+      face = FACES.neutral;
+      if (old) walkOff(old, reaction === 'through' ? 'happy' : reaction === 'away' ? 'annoyed' : 'neutral');
+      if (!traveller) return;
+      if (old) walkOn(traveller);
+      else {
+        traveller.root.position.copy(TRAVELLER_AT);
+        group.add(traveller.root);
+      }
     },
     setMood(mood) {
       face = FACES[mood] ?? FACES.neutral;
@@ -118,5 +384,28 @@ export function createBooth(container) {
       traveller.footTap = Boolean(face.footTap);
     },
     setTalking(on) { talking = on; },
+    setRecording(on) { mic.light.color.set(on ? COLORS.live : COLORS.off); },
+    setPapers(paperFields, stamp = null) { papers.redraw(paperFields, stamp); },
+    setNotes(name, notes) { notebook.redraw(name, notes); },
+    toggle(name) { lifted = lifted === name ? null : name; },
+    putDown() { lifted = null; },
+    lifted: () => lifted,
+    // The stamp comes down on the papers, leaves its mark, and goes home.
+    async stamp(verdict, paperFields) {
+      if (stamping) return;
+      stamping = true;
+      lifted = null;
+      const s = stamps[verdict];
+      const over = papers.desk.position.clone().setY(SILL + 0.06);
+      const lift = (a, b, p, h) => s.holder.position.lerpVectors(a, b, p).setY(s.holder.position.y + Math.sin(p * Math.PI) * h);
+      await tween(0.35, (p) => lift(s.home, over, ease(p), 0.25));
+      await tween(0.1, (p) => s.holder.position.setY(SILL + 0.06 - 0.05 * p));
+      papers.redraw(paperFields, verdict);
+      await tween(0.25, (p) => s.holder.position.setY(SILL + 0.01 + 0.05 * p));
+      await tween(0.3, (p) => lift(over, s.home, ease(p), 0.15));
+      s.holder.position.copy(s.home);
+      stamping = false;
+    },
   };
+  return booth;
 }

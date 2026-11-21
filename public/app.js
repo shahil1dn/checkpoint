@@ -6,34 +6,48 @@ import { mockReply } from '/src/mockBrain.js';
 import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
 import { createBooth } from '/booth.js';
 
-// The 3D booth is scenery: if this browser can't draw it, the game goes on without it.
-const booth = createBooth(document.getElementById('booth'));
-
 const $ = (id) => document.getElementById(id);
 
 let shift = R.newShift();
 let started = false;
 let live = false;
-let lastStamp = null;
 let voice = null;
+let stampingNow = false;
+let talkingTo = null;
 let lastFrame = performance.now();
 
 const HINTS = {
   empty: 'Ask something first.',
   tooLong: 'Keep it under 300 characters.',
   pending: 'Wait for the answer.',
-  outOfQuestions: 'No questions left. Stamp them.',
+  outOfQuestions: 'No questions left. Stamp the papers.',
   shiftOver: 'The shift is over.',
   unclear: 'They mumble something unclear. Ask again.',
-  tap: 'Hold Space while you talk, then let go.',
+  tap: 'Hold the microphone (or Space) while you talk, then let go.',
   notHeard: "Didn't catch that. Try again.",
   noMic: 'No microphone, so type your questions.',
   blocked: 'Click the page once so the browser lets them speak.',
+};
+const TOOL_TIPS = {
+  papers: 'Papers: click to read',
+  notebook: 'Scratchpad: click to open',
+  mic: 'Microphone: hold to ask (or hold Space)',
+  'stamp-through': 'Stamp: let them through',
+  'stamp-away': 'Stamp: turn them away',
 };
 const STAMP_WORDS = { through: 'Through', away: 'Turned away' };
 const END_REASONS = { queueEmpty: 'Queue cleared.', time: "Time's up. Anyone not stamped counts as wrong." };
 
 const hint = (text) => { $('hint').textContent = text; };
+
+// The 3D booth is scenery and controls together; without it the plain papers
+// panel and the toolbar still run the whole game.
+const booth = createBooth($('booth'), {
+  onMicDown: () => beginTalking(),
+  onMicUp: () => finishTalking(),
+  onStampClick: (verdict) => stampTraveller(verdict),
+  onHover: (tool) => { $('tool-tip').textContent = TOOL_TIPS[tool] ?? ''; },
+});
 
 // ---- Server calls. Each returns a value or an error name, never throws. ----
 
@@ -105,31 +119,38 @@ async function askQuestion(text) {
   render();
 }
 
-function onStamp(verdict) {
+// The stamp comes down on the papers first, then the rules record it and the
+// traveller reacts and walks off.
+async function stampTraveller(verdict) {
+  if (!started || stampingNow || shift.phase !== 'playing') return;
+  stampingNow = true;
   const travellerId = R.currentTravellerId(shift);
+  stopVoice();
+  await booth?.stamp(verdict, getTraveller(travellerId).papers);
+  stampingNow = false;
   const result = R.stamp(shift, verdict);
   if (result.error) return hint(HINTS[result.error]);
   shift = result.shift;
-  stopVoice();
-  lastStamp = { name: getTraveller(travellerId).name, verdict };
+  booth?.show(R.currentTravellerId(shift), { reaction: verdict });
+  $('last-stamp').textContent = `${getTraveller(travellerId).name}: stamped ${STAMP_WORDS[verdict].toUpperCase()}`;
   hint('');
   render();
 }
-
-let talkingTo = null;
 
 function beginTalking() {
   if (!started || shift.phase !== 'playing' || shift.pending || shift.hearing) return;
   stopVoice();
   if (!startClip()) return;
   talkingTo = R.currentTravellerId(shift);
+  booth?.setRecording(true);
   $('talk').textContent = 'Listening… let go to ask';
-  hint('');
+  hint('Listening… let go to ask.');
 }
 
 async function finishTalking() {
   if (!recording()) return;
-  $('talk').textContent = 'Hold to talk (or hold Space)';
+  booth?.setRecording(false);
+  $('talk').textContent = 'Hold to talk';
   const clip = await endClip();
   if (!clip) return hint(HINTS.tap);
   shift = R.setHearing(shift, true);
@@ -150,7 +171,6 @@ async function startShift() {
   if (live) {
     try {
       await prepareMic();
-      $('talk').hidden = false;
     } catch {
       hint(HINTS.noMic);
     }
@@ -161,16 +181,16 @@ async function startShift() {
 
 function playAgain() {
   shift = R.restartShift(shift);
-  lastStamp = null;
   stopVoice();
+  $('last-stamp').textContent = '';
   lastFrame = performance.now();
   render();
 }
 
 // ---- Drawing ----
 
-function renderPapers(traveller) {
-  $('traveller-name').textContent = traveller.name;
+// Without 3D, the papers and notes show as plain text instead of on the desk.
+function renderFallbackPanel(traveller) {
   $('papers').replaceChildren(...Object.entries(traveller.papers).flatMap(([label, value]) => {
     const dt = document.createElement('dt');
     dt.textContent = label;
@@ -178,32 +198,30 @@ function renderPapers(traveller) {
     dd.textContent = value;
     return [dt, dd];
   }));
-}
-
-function renderConversation(traveller) {
-  const lines = [];
-  // No mood label: mood comes through the voice (and the face), never as text.
-  for (const exchange of shift.cases[traveller.id].history) {
-    lines.push(`You: ${exchange.question}`);
-    const cracked = exchange.cracked ? ' [He cracked!]' : '';
-    lines.push(`${traveller.name}: ${exchange.reply}${cracked}`);
-  }
-  if (shift.pending) lines.push(`You: ${shift.pending.question}`, `${traveller.name}: …`);
-  $('conversation').replaceChildren(...lines.map((text) => {
-    const li = document.createElement('li');
-    li.textContent = text;
-    return li;
-  }));
-}
-
-function renderNotes(traveller) {
   const notes = shift.cases[traveller.id].notes;
-  const items = notes.length ? notes : ['Nothing noted yet.'];
-  $('notes').replaceChildren(...items.map((text) => {
+  $('notes').replaceChildren(...(notes.length ? notes : ['Nothing noted yet.']).map((text) => {
     const li = document.createElement('li');
     li.textContent = text;
     return li;
   }));
+}
+
+// Subtitles: the last question and the last answer. No mood label: mood
+// comes through the voice and the face, never as text.
+function renderCaptions(traveller) {
+  const { history } = shift.cases[traveller.id];
+  const last = history.at(-1);
+  if (shift.pending) {
+    $('you-said').textContent = `You: ${shift.pending.question}`;
+    $('subtitle').textContent = '';
+  } else if (last) {
+    $('you-said').textContent = `You: ${last.question}`;
+    $('subtitle').textContent = `${traveller.name}: ${last.reply}${last.cracked ? ' [He cracked!]' : ''}`;
+  } else {
+    $('you-said').textContent = '';
+    $('subtitle').textContent = '';
+  }
+  $('captions').hidden = !$('you-said').textContent;
 }
 
 function renderReport() {
@@ -230,31 +248,36 @@ function renderReport() {
 function renderClock() {
   const secondsLeft = Math.ceil(R.timeLeftMs(shift) / 1000);
   const clock = `${Math.floor(secondsLeft / 60)}:${String(secondsLeft % 60).padStart(2, '0')}`;
-  const paused = shift.pending || shift.hearing ? ' (paused while they think)' : '';
-  $('clock').textContent = started ? `Shift clock ${clock}${paused}` : '';
+  const paused = shift.pending || shift.hearing ? ' (paused)' : '';
+  $('clock').textContent = started ? `Clock ${clock}${paused}` : '';
 }
 
 function render() {
   const over = shift.phase === 'over';
-  $('desk').hidden = !started || over;
+  const playing = started && !over;
   $('report').hidden = !started || !over;
-  $('last-stamp').textContent = lastStamp ? `${lastStamp.name}: stamped ${STAMP_WORDS[lastStamp.verdict].toUpperCase()}` : '';
+  $('shift-info').hidden = !playing;
+  $('controls').hidden = !playing;
+  $('fallback').hidden = Boolean(booth) || !playing;
   renderClock();
-  booth?.show(over ? null : R.currentTravellerId(shift));
+  if (!stampingNow) booth?.show(over ? null : R.currentTravellerId(shift));
   if (over) {
-    $('queue-position').textContent = '';
+    booth?.putDown();
+    $('captions').hidden = true;
     return renderReport();
   }
   const traveller = getTraveller(R.currentTravellerId(shift));
-  $('queue-position').textContent = started ? `Traveller ${shift.current + 1} of ${shift.queue.length}` : '';
-  renderPapers(traveller);
-  renderNotes(traveller);
-  renderConversation(traveller);
   const left = R.questionsLeft(shift, traveller.id);
+  $('traveller-name').textContent = traveller.name;
+  $('queue-position').textContent = `Traveller ${shift.current + 1} of ${shift.queue.length}`;
   $('questions-left').textContent = `Questions left: ${left} of ${R.MAX_QUESTIONS}`;
+  booth?.setPapers(traveller.papers, shift.cases[traveller.id].stamp);
+  booth?.setNotes(traveller.name, shift.cases[traveller.id].notes);
+  if (!booth) renderFallbackPanel(traveller);
+  renderCaptions(traveller);
   const busy = Boolean(shift.pending || shift.hearing);
   $('ask').disabled = busy || left === 0;
-  $('talk').disabled = busy || left === 0;
+  $('talk').disabled = busy || left === 0 || !micReady();
 }
 
 function frame(now) {
@@ -262,6 +285,7 @@ function frame(now) {
     shift = R.tick(shift, now - lastFrame);
     if (shift.phase === 'over') {
       stopVoice();
+      booth?.show(null, { reaction: 'away' });
       render();
     } else {
       renderClock();
@@ -276,9 +300,13 @@ function frame(now) {
 const typingInBox = (event) => event.target instanceof HTMLInputElement;
 
 document.addEventListener('keydown', (event) => {
-  if (event.code !== 'Space' || event.repeat || typingInBox(event) || !micReady()) return;
-  event.preventDefault();
-  beginTalking();
+  if (typingInBox(event) || !started) return;
+  if (event.code === 'Space' && !event.repeat && micReady()) {
+    event.preventDefault();
+    beginTalking();
+  } else if (event.code === 'KeyP') booth?.toggle('papers');
+  else if (event.code === 'KeyN') booth?.toggle('notebook');
+  else if (event.code === 'Escape') booth?.putDown();
 });
 document.addEventListener('keyup', (event) => {
   if (event.code !== 'Space' || typingInBox(event) || !micReady()) return;
@@ -294,8 +322,10 @@ $('ask-form').addEventListener('submit', (event) => {
   $('question').value = '';
   askQuestion(text);
 });
-$('stamp-through').addEventListener('click', () => onStamp('through'));
-$('stamp-away').addEventListener('click', () => onStamp('away'));
+$('show-papers').addEventListener('click', () => booth?.toggle('papers'));
+$('show-notes').addEventListener('click', () => booth?.toggle('notebook'));
+$('stamp-through').addEventListener('click', () => stampTraveller('through'));
+$('stamp-away').addEventListener('click', () => stampTraveller('away'));
 $('start').addEventListener('click', startShift);
 $('again').addEventListener('click', playAgain);
 

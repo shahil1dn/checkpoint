@@ -11,39 +11,55 @@
 </head>
 <body>
   <div id="booth"></div>
-  <main id="panel">
-  <header>
-    <h1>Checkpoint</h1>
-    <p id="status">Connecting…</p>
-    <p><span id="clock"></span> <span id="queue-position"></span></p>
+
+  <header id="topbar">
+    <div id="shift-info" hidden>
+      <strong id="traveller-name"></strong>
+      <span id="queue-position"></span>
+      <span id="questions-left"></span>
+      <span id="clock"></span>
+      <span id="last-stamp"></span>
+    </div>
+    <span id="status">Connecting…</span>
   </header>
 
-  <section id="start-screen">
-    <p>You're the inspector. Question each traveller out loud, then stamp them through or turn them away.</p>
+  <section id="start-screen" class="card">
+    <h1>Checkpoint</h1>
+    <p>You're the inspector. Question each traveller out loud, read their papers, then stamp them through or turn them away.</p>
+    <p class="small">Hold the microphone on the desk (or Space) to ask. Click the papers and the scratchpad to read them.</p>
     <button id="start" type="button">Start shift</button>
   </section>
 
-  <section id="desk" hidden>
-    <p id="last-stamp"></p>
-    <h2 id="traveller-name"></h2>
+  <section id="fallback" class="card" hidden>
+    <h2>Papers</h2>
     <dl id="papers"></dl>
-    <h3>Scratchpad</h3>
+    <h2>Scratchpad</h2>
     <ul id="notes"></ul>
-    <p id="questions-left"></p>
-    <ol id="conversation"></ol>
-    <p><button id="talk" type="button" hidden>Hold to talk (or hold Space)</button></p>
-    <form id="ask-form">
-      <input id="question" type="text" maxlength="300" autocomplete="off" placeholder="Or type a question">
-      <button id="ask" type="submit">Ask</button>
-    </form>
-    <p>
-      <button id="stamp-through" type="button">Stamp: through</button>
-      <button id="stamp-away" type="button">Stamp: turned away</button>
-    </p>
-    <p id="hint" role="status"></p>
   </section>
 
-  <section id="report" hidden>
+  <div id="controls" hidden>
+    <div id="lines">
+      <p id="hint" role="status"></p>
+      <p id="tool-tip" aria-hidden="true"></p>
+    </div>
+    <div id="captions" hidden>
+      <p id="you-said"></p>
+      <p id="subtitle"></p>
+    </div>
+    <form id="ask-form">
+      <input id="question" type="text" maxlength="300" autocomplete="off" placeholder="Or type a question" aria-label="Type a question">
+      <button id="ask" type="submit">Ask</button>
+    </form>
+    <nav id="tools" aria-label="Desk tools">
+      <button id="talk" type="button">Hold to talk</button>
+      <button id="show-papers" type="button">Papers (P)</button>
+      <button id="show-notes" type="button">Scratchpad (N)</button>
+      <button id="stamp-through" type="button">Stamp: through</button>
+      <button id="stamp-away" type="button">Stamp: turned away</button>
+    </nav>
+  </div>
+
+  <section id="report" class="card" hidden>
     <h2>End of shift</h2>
     <p id="end-reason"></p>
     <table>
@@ -53,7 +69,6 @@
     <p id="score"></p>
     <button id="again" type="button">Play again</button>
   </section>
-  </main>
 
   <script type="module" src="/app.js"></script>
 </body>

@@ -1,8 +1,10 @@
 // A9: a timed run of the demo shift in real Chrome, voice in and out.
 // Each question is spoken by the Mac's voice into the page's own recorder
-// (standing in for the microphone), Space is held with real key presses,
-// every reply plays to the end, then the traveller is stamped. Saves a frame
-// a second as the recording. Needs `npm start` running. Run: npm run rehearse
+// (standing in for the microphone). The desk is used as a player would: real
+// mouse presses hold the desk mic (Space for follow-up questions), lift the
+// papers and bring the desk stamps down. Every reply plays to the end. Saves
+// a frame a second as the recording. Needs `npm start` running.
+// Run: npm run rehearse
 import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdtemp, readFile, rm, writeFile, mkdir } from 'node:fs/promises';
@@ -17,7 +19,7 @@ const OUT = 'docs/proof/s6-rehearsal';
 
 // The demo script: what the inspector says, and the stamp at the end.
 const DEMO = [
-  { traveller: 'Max Tokens', questions: [
+  { traveller: 'Max Tokens', readPapers: true, questions: [
     'Good evening. What brings you to the checkpoint?',
     'If you love Mistral so much, what is the nickname of Mistral Large 4?',
     'Then why did Frontier Horizon Labs pay for your ticket?',
@@ -28,6 +30,9 @@ const DEMO = [
 ];
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// The hover tip names each desk object, so hovering finds them on screen.
+const DESK_TIPS = { mic: 'Microphone', papers: 'Papers', through: 'Stamp: let', away: 'Stamp: turn' };
 
 // Synthetic test speech; written to a temp folder and deleted at the end.
 async function speakToMp3(dir, text, i) {
@@ -130,6 +135,44 @@ async function main() {
       } catch { /* page busy; skip a frame */ }
     }, 1000);
 
+    // Find each desk object by hovering a grid over the lower screen and reading
+    // the hover tip; use the hit nearest the middle of each object's hits.
+    const desk = await evaluate(`(() => {
+      const canvas = document.querySelector('#booth canvas');
+      const tip = document.getElementById('tool-tip');
+      const hits = {};
+      for (let y = innerHeight * 0.35; y < innerHeight * 0.95; y += 10) {
+        for (let x = 0; x < innerWidth; x += 10) {
+          canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+          if (tip.textContent) (hits[tip.textContent] ??= []).push([x, y]);
+        }
+      }
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 0, bubbles: true }));
+      const nearestMiddle = (pts) => {
+        const [mx, my] = pts.reduce(([a, b], [x, y]) => [a + x / pts.length, b + y / pts.length], [0, 0]);
+        return pts.reduce((best, p) => (Math.hypot(p[0] - mx, p[1] - my) < Math.hypot(best[0] - mx, best[1] - my) ? p : best));
+      };
+      return Object.fromEntries(Object.entries(hits).map(([name, pts]) => [name, nearestMiddle(pts)]));
+    })()`);
+    const spot = (tool) => {
+      const found = Object.entries(desk).find(([name]) => name.startsWith(DESK_TIPS[tool]));
+      if (!found) throw new Error(`could not find the ${tool} on the desk (found: ${Object.keys(desk).join(', ')})`);
+      return found[1];
+    };
+    const mouse = (type, [x, y]) => cdp.send('Input.dispatchMouseEvent', { type, x, y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
+    const click = async (tool) => {
+      await mouse('mouseMoved', spot(tool));
+      await mouse('mousePressed', spot(tool));
+      await mouse('mouseReleased', spot(tool));
+    };
+    const waitFor = async (condition, ms = 10000) => {
+      for (let waited = 0; waited < ms; waited += 100) {
+        if (await evaluate(condition)) return true;
+        await sleep(100);
+      }
+      return false;
+    };
+
     await evaluate(`window.__startTimer(); document.getElementById('start').click(); true`);
     note('Start shift');
     await sleep(500);
@@ -138,34 +181,58 @@ async function main() {
     for (const step of DEMO) {
       const name = await evaluate(`document.getElementById('traveller-name').textContent`);
       if (name !== step.traveller) throw new Error(`expected ${step.traveller}, desk shows ${name}`);
-      for (const question of step.questions) {
+      if (step.readPapers) {
+        await click('papers');
+        note('lifted the papers to read them');
+        await sleep(2500);
+        await click('papers');
+        note('put the papers down');
+        await sleep(500);
+      }
+      for (const [i, question] of step.questions.entries()) {
         const voicesBefore = await evaluate('window.__voices.length');
-        await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', code: 'Space', key: ' ', windowsVirtualKeyCode: 32 });
+        // The first question to each traveller holds the desk mic; the rest hold Space.
+        const byMic = i === 0;
+        if (byMic) {
+          await mouse('mouseMoved', spot('mic'));
+          await mouse('mousePressed', spot('mic'));
+        } else {
+          await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', code: 'Space', key: ' ', windowsVirtualKeyCode: 32 });
+        }
         await evaluate(`window.__say(${JSON.stringify(clips[clipIndex++])})`);
-        await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', code: 'Space', key: ' ', windowsVirtualKeyCode: 32 });
-        note(`asked out loud: "${question}"`);
-        // Wait for the reply to show and its voice to finish.
+        if (byMic) await mouse('mouseReleased', spot('mic'));
+        else await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', code: 'Space', key: ' ', windowsVirtualKeyCode: 32 });
+        note(`asked out loud, holding ${byMic ? 'the desk mic' : 'Space'}: "${question}"`);
+        // Wait for the reply's subtitle and voice, then for the voice to finish.
         let heard = null;
-        for (let i = 0; i < 100 && !heard; i += 1) {
+        for (let n = 0; n < 100 && !heard; n += 1) {
           await sleep(200);
           heard = await evaluate(`(() => {
-            const lines = [...document.querySelectorAll('#conversation li')].map((li) => li.textContent);
-            const last = lines.at(-1) ?? '';
-            const v = window.__voices.at(-1);
-            const spoke = window.__voices.length > ${voicesBefore};
-            if (!spoke || last.endsWith('…')) return document.getElementById('hint').textContent.startsWith("Didn't") ? { failed: document.getElementById('hint').textContent } : null;
-            return { transcript: lines.at(-2), reply: last, seconds: v.duration };
+            const hint = document.getElementById('hint').textContent;
+            if (hint.startsWith("Didn't")) return { failed: hint };
+            const reply = document.getElementById('subtitle').textContent;
+            if (window.__voices.length <= ${voicesBefore} || !reply) return null;
+            return {
+              transcript: document.getElementById('you-said').textContent.replace(/^You: /, ''),
+              reply,
+              fallback: hint.includes("wasn't counted") ? hint : '',
+              seconds: window.__voices.at(-1).duration,
+            };
           })()`);
         }
         if (!heard || heard.failed) throw new Error(`no reply: ${heard?.failed ?? 'timed out'}`);
         note(`page heard "${heard.transcript}"`);
-        note(`reply (${heard.seconds.toFixed(1)} s of voice): ${heard.reply}`);
+        note(heard.fallback ? `fallback, not counted: ${heard.fallback}` : `subtitle (${heard.seconds.toFixed(1)} s of voice): ${heard.reply}`);
         await evaluate(`new Promise((r) => { const v = window.__voices.at(-1); if (v.ended || v.paused) return r(true); v.addEventListener('ended', () => r(true)); setTimeout(() => r(false), ${LIMIT_S * 1000}); })`);
         note('voice finished');
       }
       await sleep(800);
-      await evaluate(`document.getElementById('stamp-${step.stamp}').click(); true`);
-      note(`stamped ${step.traveller}: ${step.stamp}`);
+      await click(step.stamp);
+      note(`brought the ${step.stamp} stamp down on ${step.traveller}'s papers`);
+      // The stamp lands first; then the rules move on to the next traveller.
+      const movedOn = await waitFor(`!document.getElementById('report').hidden || document.getElementById('traveller-name').textContent !== ${JSON.stringify(step.traveller)}`);
+      if (!movedOn) throw new Error(`stamping ${step.traveller} did not move the queue on`);
+      note('next');
       await sleep(800);
     }
 
