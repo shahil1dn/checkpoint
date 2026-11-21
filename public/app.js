@@ -5,6 +5,7 @@ import { getTraveller } from '/src/travellers/index.js';
 import { mockReply } from '/src/mockBrain.js';
 import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
 import { createBooth } from '/booth.js';
+import { createSounds } from '/sounds.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -48,6 +49,7 @@ const booth = createBooth($('booth'), {
   onStampClick: (verdict) => stampTraveller(verdict),
   onHover: (tool) => { $('tool-tip').textContent = TOOL_TIPS[tool] ?? ''; },
 });
+createSounds().follow(booth);
 
 // ---- Server calls. Each returns a value or an error name, never throws. ----
 

@@ -120,6 +120,15 @@ async function main() {
       next = await page.evaluate(`document.getElementById('traveller-name').textContent`);
     }
     check('stamping before any question moves the queue on', next !== first, { first, next, ...(await screen()) });
+
+    // Sounds: headless Chrome may have no audio device; the page must not mind.
+    const sound = await page.evaluate(`(() => {
+      const button = document.getElementById('mute');
+      const before = button?.textContent;
+      button?.click();
+      return { before, after: button?.textContent };
+    })()`);
+    check('the mute button turns the sound off', sound.before === 'Sound: on (M)' && sound.after === 'Sound: off (M)', sound);
     page.close();
   } finally {
     const exited = once(chrome, 'exit');
