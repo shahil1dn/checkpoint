@@ -17,7 +17,7 @@ let talkingTo = null;
 let lastFrame = performance.now();
 
 const HINTS = {
-  empty: 'Ask something first.',
+  empty: 'Say or type a question first.',
   tooLong: 'Keep it under 300 characters.',
   pending: 'Wait for the answer.',
   outOfQuestions: 'No questions left. Stamp the papers.',
