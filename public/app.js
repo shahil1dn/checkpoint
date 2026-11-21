@@ -96,7 +96,7 @@ const booth = createBooth($('booth'), {
   onMicUp: () => finishTalking(),
   onStampClick: (verdict) => stampTraveller(verdict),
   onBribeClick: () => pocketBribe(),
-  onHover: (tool, line) => { $('tool-tip').textContent = tool === 'line' ? lineTip(line) : TOOL_TIPS[tool] ?? ''; },
+  onHover: (tool, detail) => { $('tool-tip').textContent = tipFor(tool, detail); },
   onLookup: (line) => lookUp(line),
   onView: (view) => {
     renderLook(view);
@@ -104,6 +104,14 @@ const booth = createBooth($('booth'), {
     if (view === 'left' && [HINTS.recordsReady, HINTS.lookingUp].includes($('hint').textContent)) hint('');
   },
 });
+
+// detail is the line under the pointer, or how many things the tray or spike holds.
+function tipFor(tool, detail) {
+  if (tool === 'line') return lineTip(detail);
+  if (tool === 'tray') return `Confiscated papers: ${detail}`;
+  if (tool === 'spike') return `Finished transcripts: ${detail}`;
+  return TOOL_TIPS[tool] ?? '';
+}
 
 // The hover label on a line of a lifted paper.
 function lineTip(line) {
@@ -397,6 +405,7 @@ async function startShift() {
 function playAgain() {
   shift = R.restartShift(shift);
   screenLookup = null;
+  booth?.clearDesk();
   stopVoice();
   hint('');
   $('last-stamp').textContent = '';
