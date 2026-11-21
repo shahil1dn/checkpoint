@@ -86,7 +86,6 @@ const booth = createBooth($('booth'), {
   onHover: (tool) => { $('tool-tip').textContent = TOOL_TIPS[tool] ?? ''; },
   onView: (view) => renderLook(view),
 });
-createSounds().follow(booth);
 
 // ---- Server calls. Each returns a value or an error name, never throws. ----
 
@@ -501,6 +500,8 @@ async function checkLive() {
   $('status').textContent = live ? 'Live: Mistral connected.' : 'Offline: canned replies, no voices.';
 }
 
+// Sounds follow what the page tells the booth (public/sounds.js).
+createSounds().follow(booth);
 if (booth) renderLook(booth.view());
 render();
 checkLive();

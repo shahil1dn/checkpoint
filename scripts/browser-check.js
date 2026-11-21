@@ -91,6 +91,12 @@ async function openPage(url, port) {
 }
 
 async function main() {
+  // It normally takes about 10 s. A stuck Chrome once hung check.sh for 5 minutes;
+  // fail plainly instead, so a rerun is the obvious next step.
+  setTimeout(() => {
+    console.log('   FAIL the browser check took over 60 s (Chrome stuck?): run it again');
+    process.exit(1);
+  }, 60000).unref();
   let browser;
   try {
     browser = browserOnThisMachine();
@@ -142,6 +148,20 @@ async function main() {
       for (let i = 0; i < 50 && !done(now); i += 1) { await sleep(50); now = await desk(); }
       return now;
     };
+    // The transcript's full page is hidden while the slip is down; it must not
+    // catch the pointer above the slip, where the papers, mic and stamps are.
+    const aboveSlip = await page.evaluate(`(() => {
+      const canvas = document.querySelector('#booth canvas');
+      const tip = document.getElementById('tool-tip');
+      let caught = 0;
+      for (let y = innerHeight * 0.45; y < innerHeight * 0.68; y += 8) for (let x = 0; x < innerWidth; x += 8) {
+        canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: x, clientY: y, bubbles: true }));
+        if (tip.textContent.startsWith('Transcript')) caught += 1;
+      }
+      canvas.dispatchEvent(new PointerEvent('pointermove', { clientX: 0, clientY: 0, bubbles: true }));
+      return caught;
+    })()`);
+    check('hidden parts of the desk never catch the pointer', aboveSlip === 0, { transcriptAboveTheSlip: aboveSlip });
     await page.evaluate(`document.getElementById('start').click(); true`);
     await sleep(300);
     // Shahil 13:40: no button row in the booth; you click the desk, and a typed question goes with Enter.
@@ -224,9 +244,10 @@ async function main() {
       const button = document.getElementById('mute');
       const before = button?.textContent;
       button?.click();
-      return { before, after: button?.textContent };
+      return { chips: document.querySelectorAll('#mute').length, before, after: button?.textContent };
     })()`);
-    check('the mute button turns the sound off', sound.before === 'Sound: on (M)' && sound.after === 'Sound: off (M)', sound);
+    // One chip: wiring the sounds up twice doubled every sound and the chip.
+    check('the mute button turns the sound off', sound.chips === 1 && sound.before === 'Sound: on (M)' && sound.after === 'Sound: off (M)', sound);
     page.close();
   } finally {
     const exited = once(chrome, 'exit');

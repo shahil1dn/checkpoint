@@ -118,6 +118,8 @@ async function main() {
     await cdp.send('Page.enable');
     await cdp.send('Page.navigate', { url: APP });
     await sleep(1500);
+    // The 3D desk can take a few seconds more to appear on a busy machine.
+    for (let n = 0; n < 100 && !(await evaluate(`Boolean(document.querySelector('#booth canvas'))`)); n += 1) await sleep(100);
 
     // Stand-in microphone plus a play spy, so we know when a reply finishes.
     await evaluate(`(() => {
@@ -230,7 +232,8 @@ async function main() {
             const hint = document.getElementById('hint').textContent;
             if (hint.startsWith("Didn't")) return { failed: hint };
             const reply = document.getElementById('subtitle').textContent;
-            if (window.__voices.length <= ${voicesBefore} || !reply) return null;
+            // The voice's length is only known once its audio has loaded.
+            if (window.__voices.length <= ${voicesBefore} || !reply || !Number.isFinite(window.__voices.at(-1).duration)) return null;
             return {
               transcript: document.getElementById('you-said').textContent.replace(/^You: /, ''),
               reply,

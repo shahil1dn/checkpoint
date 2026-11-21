@@ -270,11 +270,12 @@ function buildTranscript(group) {
 
 // A bribe on the window ledge (PR #3): what the traveller slid across, shown
 // only while it's on offer. Click it to pocket it.
-const LEDGE = new THREE.Vector3(-0.52, SILL + 0.04, 0.02);
+const LEDGE = new THREE.Vector3(-0.62, SILL + 0.04, 0.04);
 function buildBribe(group) {
   const holder = new THREE.Group();
   holder.userData.tool = 'bribe';
   holder.position.copy(LEDGE);
+  holder.scale.setScalar(1.9);   // big enough to read from the chair
   holder.visible = false;
   group.add(holder);
   const croissant = new THREE.Group();
@@ -646,12 +647,18 @@ export function createBooth(container, handlers = {}) {
   const raycaster = new THREE.Raycaster();
   const pointer = new THREE.Vector2();
   const canvas = engine.renderer.domElement;
+  const shown = (object) => {
+    for (let o = object; o; o = o.parent) if (!o.visible) return false;
+    return true;
+  };
   function toolAt(event) {
     const box = canvas.getBoundingClientRect();
     pointer.set(((event.clientX - box.left) / box.width) * 2 - 1, -((event.clientY - box.top) / box.height) * 2 + 1);
     raycaster.setFromCamera(pointer, engine.camera);
-    // A hidden bribe can't be picked: three's raycaster ignores visibility.
-    const hit = raycaster.intersectObjects(bribe.holder.visible ? [...tools, bribe.holder] : tools, true)[0];
+    // three's raycaster ignores visibility, so hidden parts (the transcript's
+    // full page while the slip is down, a bribe not on offer) must be skipped,
+    // or they catch the pointer meant for what's behind them.
+    const hit = raycaster.intersectObjects([...tools, bribe.holder], true).find((h) => shown(h.object));
     for (let o = hit?.object; o; o = o.parent) if (o.userData.tool) return o.userData.tool;
     return null;
   }
