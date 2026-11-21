@@ -199,10 +199,11 @@ export function bribeOffer(shift) {
   return { travellerId, ...getTraveller(travellerId).bribe };
 }
 
-// True when this stamp would bring out his offer instead of landing.
+// True when this stamp would bring out his offer instead of landing. A
+// traveller without a bribe in his file has nothing to offer (Shahil 16:05).
 export function pleadsFirst(shift, verdict) {
   const travellerId = currentTravellerId(shift);
-  return verdict === 'away' && travellerId !== null && shift.cases[travellerId].bribe === null;
+  return verdict === 'away' && travellerId !== null && shift.cases[travellerId].bribe === null && Boolean(getTraveller(travellerId).bribe);
 }
 
 // Like a stamp, the offer drops a question still out. The clock waits while
@@ -235,8 +236,8 @@ export function tick(shift, dtMs) {
 }
 
 // Allowed at any time, even mid-question: the pending reply is dropped.
-// The first TURNED AWAY on each traveller returns { shift, offer } instead:
-// he pleads, and the stamp hasn't landed.
+// The first TURNED AWAY on each traveller with a bribe returns { shift, offer }
+// instead: he pleads, and the stamp hasn't landed.
 export function stamp(shift, verdict) {
   if (shift.phase !== 'playing') return { shift, error: 'shiftOver' };
   if (!VERDICTS.includes(verdict)) return { shift, error: 'badVerdict' };

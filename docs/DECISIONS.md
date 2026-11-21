@@ -140,8 +140,8 @@ stamp TURNED AWAY again to refuse (the stamp lands, the police take him). One of
 **Why the code decides, not the model:** like the truth (ADR-2), when a bribe happens is a game
 fact. The model's reply no longer has a `bribe` field, and no traveller is told to offer one
 while questioned. Each traveller's line and item live in his own file in `src/travellers/`.
-**Defaults chosen for Shahil** (his to change): honest travellers bribe too, so a bribe is never
-a tell; no more questions while an offer is on the ledge, so the model never has to know about
-it; THROUGH while an offer is out lets him through without taking it; the shift clock waits
+**Defaults chosen for Shahil** (his to change): a bribe is optional per traveller (Shahil 16:05:
+only some bribe, and bribing doesn't line up with lying; without one, TURNED AWAY lands at once); no more questions
+while an offer is on the ledge, so the model never has to know about it; THROUGH while an offer is out lets him through without taking it; the shift clock waits
 while the line is spoken, not while you decide.
 **Supersedes:** the model-flagged bribe from PR #3.

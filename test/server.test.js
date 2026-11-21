@@ -324,6 +324,19 @@ test("a traveller's plea is spoken from his own file, in his own voice, and made
   assert.equal(spoken.length, 2, 'the second plea reuses the first voice');
 });
 
+test('a traveller with no bribe has no plea, and no voice is made for one', async () => {
+  const colin = getTraveller('colin');
+  const kept = colin.bribe;
+  delete colin.bribe;
+  spoken.length = 0;
+  try {
+    assert.equal((await plea('travellerId=colin')).status, 404);
+    assert.equal(spoken.length, 0);
+  } finally {
+    colin.bribe = kept;
+  }
+});
+
 test('a plea for nobody is refused, and a failed voice comes back silent and is tried again', async () => {
   assert.equal((await plea('travellerId=nobody')).status, 400);
   assert.equal((await plea('')).status, 400);
