@@ -6,6 +6,7 @@ import { mockReply } from '/src/mockBrain.js';
 import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
 import { createBooth } from '/booth.js';
 import { MAX_LINES, lineForHeard, lineForSpeech, lineForTyped, linesForAnswer, modelName } from '/computer.js';
+import { createSounds } from '/sounds.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -67,6 +68,7 @@ const booth = createBooth($('booth'), {
   onHover: (tool) => { $('tool-tip').textContent = TOOL_TIPS[tool] ?? ''; },
   onView: (view) => renderLook(view),
 });
+createSounds().follow(booth);
 
 // ---- Server calls. Each returns a value or an error name, never throws. ----
 
