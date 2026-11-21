@@ -3,10 +3,7 @@
 // an interview, which is why the records terminal exists. The background
 // entries come from a fixed seed, so the search is real and every run sees
 // the same records. Each traveller's own entries live in his file here.
-import { records as maxRecords } from './max.js';
-import { records as colinRecords } from './colin.js';
-
-const TRAVELLER_RECORDS = [maxRecords, colinRecords];
+import { ALL_RECORDS } from './index.js';
 
 // Today's arrivals. Times are local to the post.
 export const SHIPS = [
@@ -116,12 +113,12 @@ const HOST = {
 
 function buildArchive() {
   const base = background();
-  const all = [base, ...TRAVELLER_RECORDS];
+  const all = [base, ...ALL_RECORDS];
   return {
     ships: SHIPS,
-    passengers: all.flatMap((r) => r.passengers),
-    people: all.flatMap((r) => r.people),
-    companies: [HOST, ...all.flatMap((r) => r.companies)],
+    passengers: all.flatMap((r) => r.passengers ?? []),
+    people: all.flatMap((r) => r.people ?? []),
+    companies: [HOST, ...all.flatMap((r) => r.companies ?? [])],
     rulebook: RULEBOOK,
   };
 }

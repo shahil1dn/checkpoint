@@ -178,12 +178,12 @@ async function main() {
     await page.evaluate(`document.getElementById('start').click(); true`);
     await waitFor(`!document.getElementById('controls').hidden`);
 
-    // ADR-12: lift the papers, click a line, and the records terminal looks it
+    // ADR-12: open the case folder, click a line, and the records terminal looks it
     // up (offline, by the code's own search). Facing the window, a hint says
     // the report is ready; turning to the computer clears it.
     await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'KeyP', bubbles: true })); true`);
     await sleep(700);   // the papers rise to the eyes
-    const sponsorAt = await page.evaluate(DESK_SPOT('Look up: Ticket sponsored by', { left: 0.2, right: 0.8, top: 0.05, bottom: 0.95 }));
+    const sponsorAt = await page.evaluate(DESK_SPOT('Look up: Sponsor', { left: 0.2, right: 0.8, top: 0.05, bottom: 0.95 }));
     if (sponsorAt) {
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) {
         await page.send('Input.dispatchMouseEvent', { type, x: sponsorAt[0], y: sponsorAt[1], button: type === 'mouseMoved' ? 'none' : 'left', clickCount: 1 });
@@ -194,7 +194,7 @@ async function main() {
     const looked = await page.evaluate(`({ left: document.getElementById('lookups-left').textContent, hint: document.getElementById('hint').textContent })`);
     await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowLeft', bubbles: true })); true`);
     const afterTurning = await page.evaluate(`document.getElementById('hint').textContent`);
-    check('clicking a line on the papers looks it up, and a hint says when the report is ready', Boolean(sponsorAt) && looked.left === 'Lookups left: 2 of 3' && looked.hint.startsWith('The records report is ready') && afterTurning === '', { sponsorAt, ...looked, afterTurning });
+    check('opening the case folder and clicking a line on his visa looks it up, and a hint says when the report is ready', Boolean(sponsorAt) && looked.left === 'Lookups left: 2 of 3' && looked.hint.startsWith('The records report is ready') && afterTurning === '', { sponsorAt, ...looked, afterTurning });
     await page.evaluate(`document.dispatchEvent(new KeyboardEvent('keydown', { code: 'ArrowRight', bubbles: true })); true`);
     // A line he never said, sent straight to the server, is refused and costs nothing.
     const refusedLine = await page.evaluate(`fetch('/api/lookup', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ travellerId: 'max', line: 'Is he a spy for a rival lab?', earlier: [] }) })

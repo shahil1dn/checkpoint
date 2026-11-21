@@ -79,7 +79,9 @@ test('the prompt carries the cover story, the secret and the papers', () => {
   const [system] = buildMessages(max, [], 'Hi');
   assert.match(system.content, /Mistral AI's biggest fan/);
   assert.match(system.content, /Frontier Horizon Labs, a rival AI lab/);
-  assert.match(system.content, /Ticket sponsored by: Frontier Horizon Labs/);
+  // His case folder's documents (ADR-12), so he knows what the inspector sees.
+  assert.match(system.content, /Entry visa, Sponsor: Frontier Horizon Labs/);
+  assert.match(system.content, /Passport, Name: Maximilian Tokens/);
 });
 
 // A11: with a fake fetch, see exactly what the note-taker sends to Mistral.

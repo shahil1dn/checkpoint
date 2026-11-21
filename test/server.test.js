@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createApp } from '../server/app.js';
 import { getTraveller } from '../src/travellers/index.js';
+import { papersFor } from '../src/records/index.js';
 import { FALLBACK_LINE } from '../src/rules.js';
 
 const FAKE_KEY = 'test-key-must-not-leak';
@@ -139,7 +140,7 @@ test('the note-taker gets only the papers and the conversation', async () => {
   await post({ ...valid, history: [pastExchange] });
   assert.equal(noted.length, 1);
   assert.deepEqual(Object.keys(noted[0]).sort(), ['earlierNotes', 'exchanges', 'papers']);
-  assert.deepEqual(noted[0].papers, getTraveller('max').papers);
+  assert.deepEqual(noted[0].papers, papersFor(getTraveller('max')));
   assert.deepEqual(noted[0].exchanges.map((e) => e.question), ['Hello?', 'Why are you here?']);
   assert.ok(!JSON.stringify(noted[0]).includes(getTraveller('max').truth.secret));
 });

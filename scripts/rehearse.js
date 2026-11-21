@@ -31,7 +31,7 @@ const DEMO = [
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // The hover tip names each desk object, so hovering finds them on screen.
-const DESK_TIPS = { mic: 'Microphone', papers: 'Papers', through: 'Stamp: let', away: 'Stamp: turn' };
+const DESK_TIPS = { mic: 'Microphone', papers: 'Case folder', through: 'Stamp: let', away: 'Stamp: turn' };
 
 // Synthetic test speech; written to a temp folder and deleted at the end.
 async function speakToMp3(dir, text, i) {

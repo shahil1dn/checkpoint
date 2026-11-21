@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { FALLBACK_LINE, checkLookupAnswer, checkNotes, cleanTranscript, gatheredFrom, judgeReply, parseReply, validateAskRequest, validateLookupRequest } from '../src/rules.js';
 import { getTraveller, voiceFor } from '../src/travellers/index.js';
-import { ticketFor } from '../src/records/tickets.js';
+import { documentsFor, nameOnDocuments, papersFor } from '../src/records/index.js';
 import { lookupWithoutModel } from '../src/records/search.js';
 import { AUDIO_TYPES } from './mistral.js';
 import { EARLY_CONFESSION_NUDGE } from './prompt.js';
@@ -128,7 +128,7 @@ export async function createApp({ ask, hear, speak, takeNotes, lookup, liveAvail
     const exchanges = [...history, { question, reply: reply.reply, mood: reply.mood }];
     const [speech, noted] = await Promise.all([
       timed(() => speakOrNull(traveller, reply)),
-      timed(async () => (reply.fallback ? [] : notesOrNone(traveller.papers, exchanges, earlierNotes))),
+      timed(async () => (reply.fallback ? [] : notesOrNone(papersFor(traveller), exchanges, earlierNotes))),
     ]);
     const timings = { answerMs, speechMs: speech.ms, notesMs: noted.ms };
     if (!reply.fallback) said.remember(travellerId, reply.reply);
@@ -150,7 +150,7 @@ export async function createApp({ ask, hear, speak, takeNotes, lookup, liveAvail
     if (!checked.ok) return send(res, 400, { error: checked.reason });
     const { travellerId, line } = checked.value;
     const traveller = getTraveller(travellerId);
-    const source = gatheredFrom(line, { papers: traveller.papers, ticket: ticketFor(travellerId), said: saidBy(traveller) });
+    const source = gatheredFrom(line, { documents: documentsFor(traveller), said: saidBy(traveller) });
     if (!source) return send(res, 403, { error: 'notGathered' });
     res.writeHead(200, { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store' });
     const write = (event) => res.write(`${JSON.stringify(event)}\n`);
@@ -159,7 +159,7 @@ export async function createApp({ ask, hear, speak, takeNotes, lookup, liveAvail
       const searched = await timed(() => (liveAvailable ? lookup : lookupWithoutModel)({
         line,
         source,
-        name: traveller.papers.Name,
+        name: nameOnDocuments(traveller),
         onStep: ({ step }) => { steps.push(step); write({ step }); },
       }));
       const { lines } = checkLookupAnswer(searched.value);

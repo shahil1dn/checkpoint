@@ -2,7 +2,7 @@
 // /src/rules.js; this file shows the shift and talks to our server.
 import * as R from '/src/rules.js';
 import { getTraveller } from '/src/travellers/index.js';
-import { ticketFor } from '/src/records/tickets.js';
+import { documentsFor } from '/src/records/index.js';
 import { mockReply } from '/src/mockBrain.js';
 import { endClip, micReady, prepareMic, recording, startClip } from '/mic.js';
 import { createBooth } from '/booth.js';
@@ -43,14 +43,13 @@ const HINTS = {
   lookupPending: 'The records terminal is still searching.',
   outOfLookups: 'No lookups left for this traveller.',
   alreadyLookedUp: 'Already looked up: the report is on the computer.',
-  notGathered: 'The terminal only checks lines from his papers, his ticket or his own answers.',
+  notGathered: 'The terminal only checks lines from his documents or his own answers.',
   noReport: "The records terminal found nothing it could report. That lookup wasn't counted.",
   lookupFailed: "The records terminal didn't answer. That lookup wasn't counted.",
   bribeOnTable: 'Take what he offered, or stamp the papers.',
 };
 const TOOL_TIPS = {
-  papers: 'Papers: click to read',
-  ticket: 'Ship ticket: click to read',
+  papers: 'Case folder: click to open it',
   notebook: 'Scratchpad: click to open',
   transcript: 'Transcript: click to read it all',
   bribe: 'A bribe: click (or B) to pocket it',
@@ -288,7 +287,7 @@ async function bringStampDown(verdict, rule) {
   stampingNow = true;
   const travellerId = R.currentTravellerId(shift);
   stopVoice();
-  await booth?.stamp(verdict, getTraveller(travellerId).papers);
+  await booth?.stamp(verdict, documentsFor(getTraveller(travellerId)));
   stampingNow = false;
   const result = rule(shift);
   if (result.error) {
@@ -520,8 +519,7 @@ function render() {
   $('queue-position').textContent = `Traveller ${shift.current + 1} of ${shift.queue.length}`;
   $('questions-left').textContent = `Questions left: ${left} of ${R.MAX_QUESTIONS}`;
   $('lookups-left').textContent = booth ? `Lookups left: ${R.lookupsLeft(shift, traveller.id)} of ${R.MAX_LOOKUPS}` : '';
-  booth?.setPapers(traveller.papers, shift.cases[traveller.id].stamp);
-  booth?.setTicket(ticketFor(traveller.id));
+  booth?.setPapers(documentsFor(traveller), shift.cases[traveller.id].stamp, { name: traveller.name, hatColor: traveller.look?.hatColor });
   booth?.setLookedUp(shift.cases[traveller.id].lookups.map((l) => l.line));
   renderTerminal();
   booth?.setNotes(traveller.name, shift.cases[traveller.id].notes);
@@ -565,7 +563,6 @@ document.addEventListener('keydown', (event) => {
     event.preventDefault();
     beginTalking();
   } else if (event.code === 'KeyP') booth?.toggle('papers');
-  else if (event.code === 'KeyT') booth?.toggle('ticket');
   else if (event.code === 'KeyN') booth?.toggle('notebook');
   else if (event.code === 'KeyB' && !event.repeat) pocketBribe();
   else if (event.code === 'Escape') booth?.putDown();

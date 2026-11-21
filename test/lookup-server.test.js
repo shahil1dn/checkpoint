@@ -40,9 +40,9 @@ async function events(res) {
   return (await res.text()).trim().split('\n').map((line) => JSON.parse(line));
 }
 
-const SPONSOR = 'Ticket sponsored by: Frontier Horizon Labs';
+const SPONSOR = 'Sponsor: Frontier Horizon Labs';   // on his entry visa
 
-test('a line from his papers is looked up: the steps stream, then the report', async () => {
+test('a line from his visa is looked up: the steps stream, then the report', async () => {
   lookups.length = 0;
   nextReport = '- Company register: Frontier Horizon Labs, AI research lab.';
   const res = await post(live.base, '/api/lookup', { travellerId: 'max', line: SPONSOR, earlier: [] });
@@ -54,13 +54,13 @@ test('a line from his papers is looked up: the steps stream, then the report', a
   // The terminal gets the line, where it came from and the name on his
   // papers: never the traveller.
   assert.deepEqual(Object.keys(lookups[0]).sort(), ['line', 'name', 'onStep', 'source']);
-  assert.equal(lookups[0].source, 'papers');
-  assert.equal(lookups[0].name, 'Max Tokens');
+  assert.equal(lookups[0].source, 'visa');
+  assert.equal(lookups[0].name, 'Maximilian Tokens');
 });
 
 test('a line from his ticket is looked up as a ticket line', async () => {
   lookups.length = 0;
-  const res = await post(live.base, '/api/lookup', { travellerId: 'max', line: 'Paid by: Frontier Horizon Labs, account FHL-0042' });
+  const res = await post(live.base, '/api/lookup', { travellerId: 'max', line: 'Ship: Seine Star' });
   assert.equal(res.status, 200);
   await res.text();
   assert.equal(lookups[0].source, 'ticket');
@@ -68,7 +68,8 @@ test('a line from his ticket is looked up as a ticket line', async () => {
 
 test('a made-up line, or the inspector\'s own question, is refused before anything runs', async () => {
   lookups.length = 0;
-  for (const line of ['Is he a spy for a rival lab?', 'Ticket sponsored by: Mistral AI']) {
+  // His old papers' sponsor line is no longer in his folder, so it is refused too.
+  for (const line of ['Is he a spy for a rival lab?', 'Sponsor: Mistral AI', 'Ticket sponsored by: Frontier Horizon Labs']) {
     const res = await post(live.base, '/api/lookup', { travellerId: 'max', line });
     assert.equal(res.status, 403, line);
     assert.deepEqual(await res.json(), { error: 'notGathered' });
@@ -115,8 +116,8 @@ test('a failed lookup reports the failure, so the page does not count it', async
   assert.deepEqual(done, { error: 'callFailed' });
 });
 
-test('offline, the code searches the records itself: Colin\'s ship is the delayed Paris ship', async () => {
-  const res = await post(offline.base, '/api/lookup', { travellerId: 'colin', line: 'Ship: Seine Star' });
+test('offline, the code searches the records itself: Max\'s ship is the delayed Paris ship', async () => {
+  const res = await post(offline.base, '/api/lookup', { travellerId: 'max', line: 'Ship: Seine Star' });
   assert.equal(res.status, 200);
   const all = await events(res);
   assert.match(all[0].step, /Seine Star list/);
@@ -131,4 +132,13 @@ test("offline, a canned answer counts as said, and a made-up one doesn't", async
 
 test('lookup takes POST only', async () => {
   assert.equal((await fetch(`${live.base}/api/lookup`)).status, 405);
+});
+
+test('a traveller with no documents in his records hands over his papers, and those lines are looked up', async () => {
+  lookups.length = 0;
+  const res = await post(live.base, '/api/lookup', { travellerId: 'colin', line: 'Arriving from: The Paris Cheese Fair' });
+  assert.equal(res.status, 200);
+  await res.text();
+  assert.equal(lookups[0].source, 'papers');
+  assert.equal(lookups[0].name, 'Colin Stilton');
 });

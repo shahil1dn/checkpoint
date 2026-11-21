@@ -2,6 +2,7 @@
 // Rebuilt on every call with the current state written in (C4), the way Fang
 // Street kept its characters from drifting.
 import { MAX_QUESTIONS, MOODS } from '../src/rules.js';
+import { papersFor } from '../src/records/index.js';
 
 export const REPLY_FORMAT = {
   type: 'json_schema',
@@ -47,7 +48,8 @@ export const EARLY_CONFESSION_NUDGE = 'It is too early to confess. Keep your cov
 const fence = (words) => `<inspector_says>${words.replace(/</g, '‹').replace(/>/g, '›')}</inspector_says>`;
 
 export function buildSystemPrompt(traveller, { questionNumber, confessed, nudge = '' }) {
-  const papers = Object.entries(traveller.papers).map(([k, v]) => `${k}: ${v}`).join('; ');
+  // What the inspector can see: his case folder's documents (ADR-12), or his papers.
+  const papers = Object.entries(papersFor(traveller)).map(([k, v]) => `${k}: ${v}`).join('; ');
   const state = [
     `This is question ${questionNumber} of ${MAX_QUESTIONS}.`,
     confessed ? 'You have already confessed. Stay confessed: never take it back.' : '',
@@ -123,7 +125,7 @@ export const LOOKUP_TOOLS = [
   }),
 ];
 
-export const LOOKUP_SOURCES = { papers: 'his travel papers', ticket: 'his ship ticket', said: 'what he told the inspector' };
+export const LOOKUP_SOURCES = { papers: 'his travel papers', passport: 'his passport', visa: 'his entry visa', ticket: 'his ship ticket', said: 'what he told the inspector' };
 
 const RECORDS_CLERK = [
   'You are the records terminal at an Antarctic border post. The inspector has sent you one line he gathered from a traveller. Check it against the border records with your tools, then report what the records say.',

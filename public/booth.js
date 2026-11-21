@@ -77,90 +77,108 @@ function wrap(g, text, maxWidth) {
   return lines;
 }
 
-// Lines on a paper can be clicked to look up on the records terminal
-// (ADR-12). Each paper keeps where its lines are, as fractions of its height,
-// so a click on the lifted paper finds its line.
+// ---------- the case folder (ADR-12, Shahil 15:40) ----------
+// He hands over one folder; opened, his passport, visa and ticket lie spread
+// out together. Every line on every document can be clicked to look it up on
+// the records terminal, so each document keeps where its lines are, as
+// fractions of its height.
 const LOOK_BAND = 'rgba(242, 181, 68, 0.32)';
 function markLine(g, w, top, bottom, line, marks) {
-  if (marks.hover === line) { g.fillStyle = LOOK_BAND; g.fillRect(w * 0.06, top, w * 0.88, bottom - top); }
-  if (marks.looked?.includes(line)) {
-    g.save();
-    g.fillStyle = '#9a6a12'; g.font = `bold ${w * 0.03}px ${TERMINAL}`; g.textAlign = 'right'; g.textBaseline = 'top';
-    g.fillText('LOOKED UP', w * 0.92, top + w * 0.008);
-    g.restore();
-  }
+  if (marks.hover === line) { g.fillStyle = LOOK_BAND; g.fillRect(w * 0.04, top, w * 0.92, bottom - top); }
+  // Looked up: an amber bar in the margin, clear of the words.
+  if (marks.looked?.includes(line)) { g.fillStyle = AMBER; g.fillRect(w * 0.035, top, w * 0.018, bottom - top); }
 }
 
-function drawPapers(g, w, h, papers, stamp, marks = {}) {
-  g.fillStyle = COLORS.paper; g.fillRect(0, 0, w, h);
-  g.strokeStyle = '#c9bfa8'; g.lineWidth = w * 0.006; g.strokeRect(w * 0.04, h * 0.03, w * 0.92, h * 0.94);
-  g.fillStyle = INK; g.textAlign = 'center';
-  g.font = `bold ${w * 0.07}px ${TYPEWRITER}`;
-  g.fillText('TRAVEL PAPERS', w / 2, h * 0.11);
-  g.textAlign = 'left';
-  let y = h * 0.21;
-  const rows = [];
-  for (const [label, value] of Object.entries(papers ?? {})) {
-    const line = `${label}: ${value}`;
-    g.font = `${w * 0.055}px ${TYPEWRITER}`;
-    const valueLines = wrap(g, value, w * 0.82);
-    const [top, bottom] = [y - h * 0.035, y + h * 0.05 * valueLines.length + h * 0.02];
-    markLine(g, w, top, bottom, line, marks);
-    rows.push({ line, top: top / h, bottom: bottom / h });
-    g.fillStyle = '#6b6457'; g.font = `${w * 0.04}px ${TYPEWRITER}`;
-    g.fillText(label.toUpperCase(), w * 0.09, y);
-    g.fillStyle = INK; g.font = `${w * 0.055}px ${TYPEWRITER}`;
-    for (const valueLine of valueLines) {
-      y += h * 0.05;
-      g.fillText(valueLine, w * 0.09, y);
-    }
-    y += h * 0.075;
-  }
-  marks.rows = rows;
-  if (stamp) {
-    g.save();
-    g.translate(w * 0.55, h * 0.8); g.rotate(-0.2);
-    g.strokeStyle = g.fillStyle = COLORS[stamp]; g.globalAlpha = 0.85;
-    g.lineWidth = w * 0.014;
-    g.font = `bold ${w * 0.085}px ${TYPEWRITER}`; g.textAlign = 'center';
-    const width = g.measureText(STAMP_WORDS[stamp]).width + w * 0.08;
-    g.strokeRect(-width / 2, -h * 0.055, width, h * 0.1);
-    g.fillText(STAMP_WORDS[stamp], 0, h * 0.025);
-    g.restore();
-  }
+const DOC_STYLE = {
+  passport: { paper: '#efe6d2', band: '#6e2a2a', title: '#f2d9a0', size: [0.34, 0.44] },
+  visa: { paper: '#eceee0', band: '#2f5a4a', title: '#f4efe2', size: [0.36, 0.44] },
+  ticket: { paper: '#efe4c8', band: '#2f4858', title: '#f4efe2', size: [0.34, 0.44] },
+  papers: { paper: COLORS.paper, band: '#6b6457', title: '#f4efe2', size: [0.42, 0.56] },
+};
+const docStyle = (doc) => DOC_STYLE[doc?.kind] ?? DOC_STYLE.papers;
+
+function drawStampMark(g, w, h, stamp, x, y) {
+  g.save();
+  g.translate(x, y); g.rotate(-0.2);
+  g.strokeStyle = g.fillStyle = COLORS[stamp]; g.globalAlpha = 0.85;
+  g.lineWidth = w * 0.014;
+  g.font = `bold ${w * 0.085}px ${TYPEWRITER}`; g.textAlign = 'center'; g.textBaseline = 'alphabetic';
+  const width = g.measureText(STAMP_WORDS[stamp]).width + w * 0.08;
+  g.strokeRect(-width / 2, -w * 0.075, width, w * 0.13);
+  g.fillText(STAMP_WORDS[stamp], 0, w * 0.03);
+  g.restore();
 }
 
-// The ship ticket, his second paper: label and value on one row each.
-function drawTicket(g, w, h, fields, marks = {}) {
-  g.fillStyle = '#efe4c8'; g.fillRect(0, 0, w, h);
-  g.fillStyle = '#2f4858'; g.fillRect(0, 0, w, h * 0.17);
-  g.fillStyle = '#f4efe2'; g.font = `bold ${h * 0.1}px ${TYPEWRITER}`; g.textAlign = 'left'; g.textBaseline = 'middle';
-  g.fillText('SHIP TICKET', w * 0.05, h * 0.09);
-  g.textAlign = 'right'; g.font = `${h * 0.06}px ${TYPEWRITER}`;
-  g.fillText('ANTARCTIC SEA LINES', w * 0.95, h * 0.09);
-  // The tear-off stub's perforations.
-  g.fillStyle = '#c9b98f';
-  for (let y = h * 0.21; y < h * 0.97; y += h * 0.05) g.fillRect(w * 0.8, y, w * 0.006, h * 0.025);
+// A cartoon penguin head for the passport photo, in his hat colour.
+function drawPhoto(g, x, y, pw, ph, hatColor) {
+  g.fillStyle = '#d9dde3'; g.fillRect(x, y, pw, ph);
+  g.fillStyle = '#1f2126';
+  g.beginPath(); g.ellipse(x + pw / 2, y + ph * 0.62, pw * 0.36, ph * 0.42, 0, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#f4efe2';
+  g.beginPath(); g.ellipse(x + pw / 2, y + ph * 0.7, pw * 0.24, ph * 0.3, 0, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#e8a33b';
+  g.beginPath(); g.moveTo(x + pw * 0.44, y + ph * 0.6); g.lineTo(x + pw * 0.56, y + ph * 0.6); g.lineTo(x + pw / 2, y + ph * 0.7); g.fill();
+  if (hatColor) { g.fillStyle = hatColor; g.fillRect(x + pw * 0.16, y + ph * 0.16, pw * 0.68, ph * 0.2); }
+  g.strokeStyle = 'rgba(0,0,0,0.3)'; g.lineWidth = pw * 0.02; g.strokeRect(x, y, pw, ph);
+}
+
+function drawDocument(g, w, h, doc, marks = {}, stamp = null) {
+  const style = docStyle(doc);
+  g.fillStyle = style.paper; g.fillRect(0, 0, w, h);
+  g.strokeStyle = 'rgba(0, 0, 0, 0.18)'; g.lineWidth = w * 0.006; g.strokeRect(w * 0.025, h * 0.02, w * 0.95, h * 0.96);
+  const band = Math.max(h * 0.1, w * 0.13);
+  g.fillStyle = style.band; g.fillRect(0, 0, w, band);
+  g.fillStyle = style.title; g.font = `bold ${band * 0.46}px ${TYPEWRITER}`; g.textAlign = 'left'; g.textBaseline = 'middle';
+  g.fillText((doc?.title ?? 'Travel papers').toUpperCase(), w * 0.06, band / 2, w * 0.88);
+  const photo = doc?.photo ? { x: w * 0.64, y: band + h * 0.04, w: w * 0.3, h: w * 0.36 } : null;
+  if (photo) drawPhoto(g, photo.x, photo.y, photo.w, photo.h, marks.hatColor);
+  const entries = Object.entries(doc?.fields ?? {});
+  const top = band + h * 0.04;
+  const rowH = Math.min(w * 0.21, (h * 0.96 - top) / Math.max(entries.length, 1));
   const rows = [];
-  const entries = Object.entries(fields ?? {});
-  const step = Math.min(h * 0.13, (h * 0.78) / Math.max(entries.length, 1));
   entries.forEach(([label, value], i) => {
     const line = `${label}: ${value}`;
-    const middle = h * 0.25 + step * (i + 0.5);
-    markLine(g, w * 0.82, middle - step / 2, middle + step / 2, line, marks);
-    rows.push({ line, top: (middle - step / 2) / h, bottom: (middle + step / 2) / h });
-    g.textBaseline = 'middle'; g.textAlign = 'left';
-    g.fillStyle = '#6b6457'; g.font = `${h * 0.055}px ${TYPEWRITER}`;
-    g.fillText(label.toUpperCase(), w * 0.05, middle, w * 0.22);
-    g.fillStyle = INK; g.font = `${h * 0.07}px ${TYPEWRITER}`;
-    g.fillText(value, w * 0.28, middle, w * 0.5);
+    const [y0, y1] = [top + i * rowH, top + (i + 1) * rowH];
+    markLine(g, w, y0, y1, line, marks);
+    rows.push({ line, top: y0 / h, bottom: y1 / h });
+    const besidePhoto = photo && y0 < photo.y + photo.h;
+    const width = besidePhoto ? photo.x - w * 0.1 : w * 0.86;
+    g.textAlign = 'left'; g.textBaseline = 'alphabetic';
+    g.fillStyle = '#6b6457'; g.font = `${Math.min(rowH * 0.26, w * 0.05)}px ${TYPEWRITER}`;
+    g.fillText(label.toUpperCase(), w * 0.07, y0 + rowH * 0.36, width);
+    g.fillStyle = INK; g.font = `${Math.min(rowH * 0.36, w * 0.068)}px ${TYPEWRITER}`;
+    g.fillText(value, w * 0.07, y0 + rowH * 0.8, width);
   });
   marks.rows = rows;
-  g.save();
-  g.translate(w * 0.9, h * 0.58); g.rotate(-Math.PI / 2);
-  g.fillStyle = '#6b6457'; g.font = `bold ${h * 0.07}px ${TYPEWRITER}`; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText('ADMIT ONE', 0, 0);
-  g.restore();
+  if (doc?.kind === 'visa') {
+    // The consulate's issuing stamp.
+    const issued = doc.fields['Issued at'] ?? '';
+    g.save();
+    g.translate(w * 0.74, h * 0.83); g.rotate(-0.35); g.globalAlpha = 0.5;
+    g.strokeStyle = g.fillStyle = '#5b3b8c'; g.lineWidth = w * 0.012;
+    g.beginPath(); g.arc(0, 0, w * 0.17, 0, Math.PI * 2); g.stroke();
+    g.font = `bold ${w * 0.05}px ${TYPEWRITER}`; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('ISSUED', 0, -w * 0.04);
+    g.font = `${w * 0.034}px ${TYPEWRITER}`;
+    g.fillText(issued.split(',').at(-1).trim().toUpperCase(), 0, w * 0.04, w * 0.3);
+    g.restore();
+  }
+  if (stamp) drawStampMark(g, w, h, stamp, w * 0.5, h * 0.82);
+}
+
+// The closed folder on the desk: what's inside, and the stamp once it lands.
+function drawFolderCover(g, w, h, name, documents, stamp) {
+  g.fillStyle = '#d8b878'; g.fillRect(0, 0, w, h);
+  g.fillStyle = '#c9a463'; g.fillRect(0, 0, w, h * 0.08);
+  g.fillStyle = '#fbf8ef'; g.fillRect(w * 0.12, h * 0.16, w * 0.76, h * 0.3);
+  g.fillStyle = INK; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.font = `bold ${w * 0.08}px ${TYPEWRITER}`;
+  g.fillText('CASE FILE', w / 2, h * 0.24, w * 0.7);
+  g.font = `${w * 0.07}px ${HANDWRITING}`;
+  g.fillText(name ?? '', w / 2, h * 0.37, w * 0.7);
+  g.fillStyle = '#6b5a35'; g.font = `${w * 0.052}px ${TYPEWRITER}`;
+  g.fillText((documents ?? []).map((d) => d.title).join(' · '), w / 2, h * 0.56, w * 0.86);
+  if (stamp) drawStampMark(g, w, h, stamp, w * 0.5, h * 0.78);
 }
 
 function drawNotes(g, w, h, name, notes) {
@@ -220,37 +238,63 @@ function liftable(group, name, at, yaw, deskScale, tilt = -Math.PI / 2) {
   return { name, holder, desk, t: 0 };
 }
 
-function buildPapers(group) {
-  const item = liftable(group, 'papers', new THREE.Vector3(-0.28, SILL + 0.012, 0.5), -0.06, 0.7);
-  // A sheet is a thin part (ART-DIRECTION section 1): no ink hull, which framed
-  // it in thick black when held up, and no shadow, which left a dark patch on the desk.
-  const sheet = part(box(0.42, 0.56, 0.008, 0.004), mat(COLORS.paper), item.holder, undefined, undefined, undefined, false);
-  sheet.castShadow = sheet.receiveShadow = false;
-  const print = textPlane(0.42, 0.56, drawPapers, 2048);
-  print.mesh.position.z = 0.006;
-  item.holder.add(print.mesh);
-  print.mesh.userData.paper = item;
-  item.marks = {};
-  item.repaint = () => print.redraw(item.fields, item.stamp, item.marks);
-  item.redraw = (fields, stamp) => { item.fields = fields; item.stamp = stamp; item.repaint(); };
+// The folder sits where the papers did; P and a click open it, and opened it
+// becomes the spread of documents in front of the eyes (the cover swaps out
+// half way up, as the scratchpad's does).
+const FOLDER_GAP = 0.03;
+function buildFolder(group) {
+  const item = liftable(group, 'papers', new THREE.Vector3(-0.28, SILL + 0.014, 0.5), -0.06, 1);
+  item.cover = new THREE.Group();
+  item.holder.add(item.cover);
+  const board = part(box(0.3, 0.4, 0.012, 0.004), mat('#c9a463'), item.cover, undefined, undefined, undefined, false);
+  board.castShadow = board.receiveShadow = false;
+  const face = textPlane(0.3, 0.4, drawFolderCover, 1024);
+  face.mesh.position.z = 0.007;
+  item.cover.add(face.mesh);
+  item.spread = new THREE.Group();
+  item.spread.visible = false;
+  item.holder.add(item.spread);
+  item.docs = [];
+  item.spreadWidth = 1;
+  // One sheet per document, laid left to right, tops level.
+  function layOut(documents) {
+    for (const doc of item.docs) item.spread.remove(doc.mesh);
+    const sizes = documents.map((d) => docStyle(d).size);
+    item.spreadWidth = sizes.reduce((sum, [w]) => sum + w, 0) + FOLDER_GAP * (sizes.length - 1);
+    const tallest = Math.max(...sizes.map(([, h]) => h));
+    let x = -item.spreadWidth / 2;
+    item.docs = documents.map((doc, i) => {
+      const [w, h] = sizes[i];
+      const print = textPlane(w, h, drawDocument, 1800);
+      print.mesh.position.set(x + w / 2, tallest / 2 - h / 2, 0.002 * i);
+      print.mesh.rotation.z = [0.02, -0.015, 0.025][i % 3];
+      x += w + FOLDER_GAP;
+      const sheet = { name: 'papers', owner: item, marks: {}, doc, mesh: print.mesh };
+      sheet.repaint = () => print.redraw(doc, sheet.marks, i === 0 ? item.stamp : null);
+      print.mesh.userData.paper = sheet;
+      item.spread.add(print.mesh);
+      return sheet;
+    });
+  }
+  // whose: { name, hatColor } of the traveller, for the cover and the photo.
+  item.redraw = (documents, stamp, whose) => {
+    const key = JSON.stringify(documents);
+    if (key !== item.layoutKey) {
+      item.layoutKey = key;
+      layOut(documents);
+    }
+    item.stamp = stamp;
+    if (whose) item.whose = whose;
+    for (const sheet of item.docs) {
+      sheet.marks.hatColor = item.whose?.hatColor;
+      sheet.repaint();
+    }
+    face.redraw(item.whose?.name, documents, stamp);
+  };
   return item;
 }
 
-function buildTicket(group) {
-  const item = liftable(group, 'ticket', new THREE.Vector3(0.1, SILL + 0.012, 0.8), 0.12, 0.62);
-  const card = part(box(0.5, 0.3, 0.006, 0.002), mat('#efe4c8'), item.holder, undefined, undefined, undefined, false);
-  card.castShadow = card.receiveShadow = false;
-  const print = textPlane(0.5, 0.3, drawTicket, 2048);
-  print.mesh.position.z = 0.005;
-  item.holder.add(print.mesh);
-  print.mesh.userData.paper = item;
-  item.marks = {};
-  item.repaint = () => print.redraw(item.fields, item.marks);
-  item.redraw = (fields) => { item.fields = fields; item.holder.visible = Boolean(fields); if (fields) item.repaint(); };
-  return item;
-}
-
-// The line under a point on a paper, as a fraction of its height from the top.
+// The line under a point on a document, as a fraction of its height from the top.
 const rowAt = (paper, y) => paper.marks.rows?.find((r) => y >= r.top && y <= r.bottom)?.line ?? null;
 
 function buildNotebook(group) {
@@ -515,7 +559,7 @@ function drawTerminal(g, w, h, terminal, cursorOn) {
     }
   };
   if (!lookup) {
-    write('Click a line on his papers or his ticket to look it up.', TERM_TEXT, h * 0.046);
+    write('Open his case folder and click any line to look it up.', TERM_TEXT, h * 0.046);
     y += h * 0.02;
     write("Today's records: 6 ship passenger lists, the penguin registry, the company register and the rulebook. Too much to read in an interview: the terminal searches them for you.", TERM_DIM, h * 0.04, { maxLines: 4 });
     y += h * 0.02;
@@ -524,7 +568,17 @@ function drawTerminal(g, w, h, terminal, cursorOn) {
   }
   write(`LOOKUP › "${lookup.line}"`, AMBER, h * 0.044, { maxLines: 2 });
   y += h * 0.01;
-  const steps = lookup.steps.slice(-4);
+  // Once the report is in, the steps fold into one line to leave it room.
+  const books = (list) => {
+    const counts = new Map();
+    for (const step of list) {
+      const book = step.split(/ \(|:/)[0];
+      counts.set(book, (counts.get(book) ?? 0) + 1);
+    }
+    return [...counts].map(([book, n]) => (n > 1 ? `${book} ×${n}` : book)).join(' · ');
+  };
+  const searched = lookup.steps.slice(1);
+  const steps = lookup.status === 'searching' ? lookup.steps.slice(-4) : [`searched ${searched.length ? books(searched) : 'nothing'}`];
   for (const [i, step] of steps.entries()) {
     const last = i === steps.length - 1 && lookup.status === 'searching';
     // One row each, squeezed to fit rather than cut.
@@ -807,19 +861,18 @@ export function createBooth(container, handlers = {}) {
   const fitHalfHeight = dir.length() * Math.tan(THREE.MathUtils.degToRad(engine.camera.fov / 2));
   engine.setWorld({ group, camTarget: LOOK_AT, startDir: dir, fit: [1.7, fitHalfHeight], walls: { backWall: [], sideWall: [], wallAt: -99 } });
 
-  const papers = buildPapers(group);
-  const ticket = buildTicket(group);
+  const papers = buildFolder(group);
   const notebook = buildNotebook(group);
   const { item: transcript, printer } = buildTranscript(group);
-  const liftables = [papers, ticket, notebook, transcript];
+  const liftables = [papers, notebook, transcript];
   const mic = buildMic(group);
   const computer = buildComputer(group);
   buildRightWall(group);
   const thoughtBubble = buildThoughtBubble(group);
   const bribe = buildBribe(group);
   const stamps = { through: buildStamp(group, 'through', 0.62), away: buildStamp(group, 'away', 0.88) };
-  const tools = [papers.holder, ticket.holder, notebook.holder, transcript.holder, printer, mic.holder, stamps.through.holder, stamps.away.holder];
-  const clickablePapers = [papers, ticket, transcript];
+  const tools = [papers.holder, notebook.holder, transcript.holder, printer, mic.holder, stamps.through.holder, stamps.away.holder];
+  const clickablePapers = () => [...papers.docs, transcript];
   let screenState = { calls: [], terminal: null };
   let hoveredLine = null;
 
@@ -861,15 +914,15 @@ export function createBooth(container, handlers = {}) {
     for (let o = hit?.object; o && !tool; o = o.parent) tool = o.userData.tool ?? null;
     // A line can be picked only on a paper held up to read.
     const paper = hit?.object.userData.paper;
-    const line = paper && lifted === paper.name && paper.t > 0.9 && hit.uv ? rowAt(paper, 1 - hit.uv.y) : null;
+    const line = paper && lifted === paper.name && (paper.owner ?? paper).t > 0.9 && hit.uv ? rowAt(paper, 1 - hit.uv.y) : null;
     return { tool, line };
   }
   function hoverLine(line) {
     if (line === hoveredLine) return;
     hoveredLine = line;
-    for (const paper of clickablePapers) {
+    for (const paper of clickablePapers()) {
       paper.marks.hover = line;
-      if (paper.fields) paper.repaint();
+      paper.repaint();
     }
   }
   canvas.addEventListener('pointermove', (event) => {
@@ -896,7 +949,7 @@ export function createBooth(container, handlers = {}) {
     }
     const { tool, line } = toolAt(event);
     if (line) handlers.onLookup?.(line);
-    else if (['papers', 'ticket', 'notebook', 'transcript'].includes(tool)) booth.toggle(tool);
+    else if (['papers', 'notebook', 'transcript'].includes(tool)) booth.toggle(tool);
     else if (tool?.startsWith('stamp-')) handlers.onStampClick?.(tool.slice(6));
     else if (tool === 'bribe') handlers.onBribeClick?.();
     else if (lifted) booth.putDown();
@@ -936,6 +989,11 @@ export function createBooth(container, handlers = {}) {
       item.holder.scale.setScalar(item.desk.scale + (1 - item.desk.scale) * k);
     }
     notebook.cover.visible = notebook.t < 0.5;
+    papers.cover.visible = papers.t < 0.5;
+    papers.spread.visible = papers.t >= 0.5;
+    // The spread fits the screen's width, whatever its shape, clear of the
+    // turn arrows at the screen's edges.
+    papers.spread.scale.setScalar(Math.min(1, (READ_HEIGHT * engine.camera.aspect * 0.8) / papers.spreadWidth));
     notebook.page.visible = notebook.t >= 0.5;
     transcript.feed(dt);
     transcript.slip.visible = transcript.t < 0.5;
@@ -1063,17 +1121,17 @@ export function createBooth(container, handlers = {}) {
       mic.light.color.set(on ? COLORS.live : COLORS.off);
       mic.ring.visible = on;
     },
-    setPapers(paperFields, stamp = null) { papers.redraw(paperFields, stamp); },
+    // The case folder: his documents, the stamp on it, and whose it is ({ name, hatColor }).
+    setPapers(documents, stamp = null, whose = null) { papers.redraw(documents, stamp, whose); },
     setNotes(name, notes) { notebook.redraw(name, notes); },
     // lines: [{ who, text }], oldest first; 'You' marks the inspector's own words.
     setTranscript(name, lines) { transcript.redraw(name, lines); },
     setComputer(lines) { screenState = { ...screenState, calls: lines }; computer.redraw(screenState); },
     // The records terminal's state, drawn above the calls; cursorOn blinks it.
     setTerminal(terminal, cursorOn = true) { screenState = { ...screenState, terminal, cursorOn }; computer.redraw(screenState); },
-    setTicket(fields) { ticket.redraw(fields); },
     // Lines already looked up get a mark on the paper they came from.
     setLookedUp(lines) {
-      for (const paper of clickablePapers) {
+      for (const paper of clickablePapers()) {
         paper.marks.looked = lines;
         if (paper.fields) paper.repaint();
       }
@@ -1081,8 +1139,9 @@ export function createBooth(container, handlers = {}) {
     // 'croissant', 'cheese' or 'sticker' on the window ledge, or null for none.
     setBribe(item) { bribe.show(item); },
     toggle(name) {
-      if (name === 'ticket' && !ticket.fields) return;
       lifted = lifted === name ? null : name;
+      hoverLine(null);
+      handlers.onHover?.(null);
     },
     // Turns one view left (-1) or right (+1); papers in hand go back on the desk.
     look(step) {
@@ -1093,7 +1152,11 @@ export function createBooth(container, handlers = {}) {
       handlers.onView?.(view);
     },
     view: () => view,
-    putDown() { lifted = null; },
+    putDown() {
+      lifted = null;
+      hoverLine(null);
+      handlers.onHover?.(null);
+    },
     lifted: () => lifted,
     // The stamp comes down on the papers, leaves its mark, and goes home.
     async stamp(verdict, paperFields) {

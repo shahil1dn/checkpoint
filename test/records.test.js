@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ARCHIVE } from '../src/records/archive.js';
 import { runTool, likeness } from '../src/records/search.js';
-import { ticketFor } from '../src/records/tickets.js';
+import { documentsFor, nameOnDocuments } from '../src/records/index.js';
 import { hasVerdictWord } from '../src/rules.js';
 import { TRAVELLERS } from '../src/travellers/index.js';
 
@@ -17,7 +17,7 @@ test('the archive holds a few hundred entries, the same every run', async () => 
 });
 
 test('no record and no ticket holds a verdict word', () => {
-  const texts = [everything, ...['max', 'colin'].map((id) => JSON.stringify(ticketFor(id)))];
+  const texts = [everything, ...TRAVELLERS.map((t) => JSON.stringify(documentsFor(t)))];
   for (const text of texts) assert.ok(!hasVerdictWord(text), text.match(/.{0,40}(lie|liar|lying|truth|honest|suspic|suspect|guilt|innocen).{0,40}/i)?.[0]);
 });
 
@@ -29,10 +29,16 @@ test("no record holds a traveller's secret, prompt or truth", () => {
   assert.doesNotMatch(everything, /\bspy\b|"honest"/i);
 });
 
-test('Max and Colin each carry a ship ticket', () => {
-  assert.equal(ticketFor('max').Ship, 'Seine Star');
-  assert.equal(ticketFor('colin').Ship, 'Seine Star');
-  assert.equal(ticketFor('nobody'), null);
+test("Max's case folder holds a passport, a visa and a ticket whose lines clash", () => {
+  const max = TRAVELLERS.find((t) => t.id === 'max');
+  const [passport, visa, ticket] = documentsFor(max);
+  assert.deepEqual([passport.kind, visa.kind, ticket.kind], ['passport', 'visa', 'ticket']);
+  assert.equal(passport.fields.Occupation, 'Freelance prompt artisan');
+  assert.equal(visa.fields.Sponsor, 'Frontier Horizon Labs');
+  assert.equal(ticket.fields.Ship, 'Seine Star');
+  assert.equal(nameOnDocuments(max), 'Maximilian Tokens');
+  // The innocent oddity: the long name is still him in the registry.
+  assert.equal(runTool('find_person', { name: 'Maximilian Tokens' }).result.matches[0].match, 'exact');
 });
 
 test("Max's ship has no Tokens on its list, but an M. Tokkens sailed on the account that paid", () => {

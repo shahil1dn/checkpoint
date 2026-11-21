@@ -234,14 +234,16 @@ export function validateLookupRequest(body) {
   return { ok: true, value: { travellerId: body.travellerId, line, earlier } };
 }
 
-// Where a line came from: 'papers', 'ticket' or 'said' (his own answers), or
-// null when the inspector never gathered it. His own questions don't count,
-// or a typed question would be free typing by the back door.
-export function gatheredFrom(text, { papers, ticket, said = [] }) {
+// Where a line came from: the kind of document it's on ('passport', 'visa',
+// 'ticket' or 'papers'), or 'said' for his own answers, or null when the
+// inspector never gathered it. His own questions don't count, or a typed
+// question would be free typing by the back door.
+export function gatheredFrom(text, { documents = [], said = [] }) {
   const line = sameLine(text);
-  const lines = (fields) => Object.entries(fields ?? {}).map(([label, value]) => sameLine(`${label}: ${value}`));
-  if (lines(papers).includes(line)) return 'papers';
-  if (lines(ticket).includes(line)) return 'ticket';
+  for (const doc of documents) {
+    const lines = Object.entries(doc.fields ?? {}).map(([label, value]) => sameLine(`${label}: ${value}`));
+    if (lines.includes(line)) return doc.kind;
+  }
   if (said.map(sameLine).includes(line)) return 'said';
   return null;
 }

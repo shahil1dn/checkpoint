@@ -112,7 +112,7 @@ const describe = {
 export async function lookupWithoutModel({ line, onStep = () => {} }) {
   const cut = line.indexOf(': ');
   const [label, value] = cut > 0 ? [line.slice(0, cut), line.slice(cut + 2)] : ['', line];
-  const onShip = /ship|sailed/i.test(label);
+  const onShip = /ship|sailed|port/i.test(label);
   const plan = onShip ? [['search_passenger_lists', { ship: value }]] : [['find_company', { name: value }], ['find_person', { name: value }], ['search_passenger_lists', { name: value }]];
   const report = [];
   for (const [name, args] of plan) {

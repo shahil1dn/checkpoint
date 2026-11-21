@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as R from '../src/rules.js';
 import { getTraveller } from '../src/travellers/index.js';
-import { ticketFor } from '../src/records/tickets.js';
+import { documentsFor } from '../src/records/index.js';
 
 const SPONSOR = 'Ticket sponsored by: Frontier Horizon Labs';
 const result = { steps: ['searched the company register'], answer: ['Company register: an AI lab.'] };
@@ -73,15 +73,30 @@ test('the server refuses a 4th lookup, a repeat, an unknown traveller and a bad 
   assert.equal(R.validateLookupRequest([]).reason, 'badBody');
 });
 
-test('only lines from his papers, his ticket or his own answers count as gathered', () => {
-  const max = getTraveller('max');
-  const gathered = { papers: max.papers, ticket: ticketFor('max'), said: ['Frontier who? Never heard of them.'] };
-  assert.equal(R.gatheredFrom(SPONSOR, gathered), 'papers');
-  assert.equal(R.gatheredFrom('Paid by: Frontier Horizon Labs, account FHL-0042', gathered), 'ticket');
+test('only lines from his documents or his own answers count as gathered', () => {
+  const gathered = { documents: documentsFor(getTraveller('max')), said: ['Frontier who? Never heard of them.'] };
+  assert.equal(R.gatheredFrom('Sponsor: Frontier Horizon Labs', gathered), 'visa');
+  assert.equal(R.gatheredFrom('Occupation: Freelance prompt artisan', gathered), 'passport');
+  assert.equal(R.gatheredFrom('Ship: Seine Star', gathered), 'ticket');
   assert.equal(R.gatheredFrom('Frontier who?  Never heard of them. ', gathered), 'said');
   assert.equal(R.gatheredFrom('Is Frontier Horizon Labs a rival AI lab?', gathered), null);
-  assert.equal(R.gatheredFrom('Ticket sponsored by: Mistral AI', gathered), null);
-  assert.equal(R.gatheredFrom(SPONSOR, { papers: max.papers, ticket: null, said: [] }), 'papers');
+  assert.equal(R.gatheredFrom('Sponsor: Mistral AI', gathered), null);
+  // His old papers are not in the folder any more, so they aren't gathered.
+  assert.equal(R.gatheredFrom(SPONSOR, gathered), null);
+});
+
+test('a traveller with no records file hands over his papers as one document', () => {
+  const nobody = { id: 'nobody', name: 'Pat Floe', papers: { Name: 'Pat Floe', From: 'Hobart' } };
+  assert.deepEqual(documentsFor(nobody), [{ kind: 'papers', title: 'Travel papers', fields: nobody.papers }]);
+  assert.equal(R.gatheredFrom('From: Hobart', { documents: documentsFor(nobody) }), 'papers');
+});
+
+test('a 3-traveller queue gets 3 lookups each', () => {
+  let shift = R.newShift(['max', 'colin', 'max']);
+  for (const id of shift.queue) assert.equal(R.lookupsLeft(shift, id), R.MAX_LOOKUPS);
+  shift = lookUp(shift, SPONSOR);
+  assert.equal(R.lookupsLeft(shift, 'max'), 2);
+  assert.equal(R.lookupsLeft(shift, 'colin'), 3);
 });
 
 test('a report keeps record lines and drops any line with a verdict word', () => {
