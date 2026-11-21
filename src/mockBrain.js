@@ -7,7 +7,7 @@ const LINES = {
     { reply: 'Frontier who? Never heard of them. Probably a typo on the ticket.', mood: 'frustrated' },
   ],
   colin: [
-    { reply: 'Cheese. Forty kilos of it, for the hackathon lunch. Same as Tuesday.', mood: 'neutral' },
+    { reply: "Cheese. Forty kilos. The French wouldn't buy a crumb, so it's going to the hackathon lunch.", mood: 'neutral' },
     { reply: 'Yes, Stilton is my real name. Yes, I am from Stilton. Taste?', mood: 'frustrated' },
   ],
 };
