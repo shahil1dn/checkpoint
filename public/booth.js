@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { createEngine, part, box, ball, mat, mapMat, textPlane } from '/penguins/engine.js';
 import { makePenguin } from '/penguins/penguin.js';
-import { buildScenery } from '/scenery.js';
+import { buildScenery, TRAIN_DOOR } from '/scenery.js';
 import { FORM_TITLE, NOTICES, RULE_SPOT, TIN_LABEL } from '/notices.js';
 import { getTraveller } from '/src/travellers/index.js';
 
@@ -1047,7 +1047,7 @@ export function createBooth(container, handlers = {}) {
   engine.scene.add(group);
   const wood = deskWood();
   buildRoom(group, wood);
-  const arrivals = buildScenery(group);
+  const train = buildScenery(group);
   const dir = EYE.clone().sub(LOOK_AT);
   const fitHalfHeight = dir.length() * Math.tan(THREE.MathUtils.degToRad(engine.camera.fov / 2));
   engine.setWorld({ group, camTarget: LOOK_AT, startDir: dir, fit: [1.7, fitHalfHeight], walls: { backWall: [], sideWall: [], wallAt: -99 } });
@@ -1070,6 +1070,7 @@ export function createBooth(container, handlers = {}) {
   let lifted = null;
   let traveller = null;
   let travellerId = null;
+  const waiting = new Map();
   let leaving = null;
   let officer = null;
   let face = FACES.neutral;
@@ -1228,7 +1229,7 @@ export function createBooth(container, handlers = {}) {
     }
     if (leaving) leaving.update(t, dt);
     if (officer) officer.update(t, dt);
-    arrivals.update(t, dt);
+    for (const penguin of waiting.values()) penguin.update(t, dt);
     engine.render();
     requestAnimationFrame(frame);
   }
@@ -1279,32 +1280,65 @@ export function createBooth(container, handlers = {}) {
   }
 
   async function walkOn(penguin) {
-    penguin.root.position.set(-WALK_OFF_X, TRAVELLER_AT.y, TRAVELLER_AT.z);
-    penguin.root.rotation.y = Math.PI / 2;
+    const from = penguin.root.position.clone();
+    const angle = Math.atan2(TRAVELLER_AT.x - from.x, TRAVELLER_AT.z - from.z);
+    penguin.root.rotation.y = angle;
     penguin.walking = true;
     group.add(penguin.root);
-    await tween(1.1, (p) => { penguin.root.position.x = -WALK_OFF_X + (TRAVELLER_AT.x + WALK_OFF_X) * p; });
+    await tween(1.35, (p) => {
+      penguin.root.position.lerpVectors(from, TRAVELLER_AT, p);
+      penguin.root.rotation.y = angle * (1 - p);
+    });
     penguin.walking = false;
   }
 
+  const queueAt = (i) => new THREE.Vector3(TRAIN_DOOR.x - i * 0.7, TRAVELLER_AT.y, TRAIN_DOOR.z + 0.75 - i * 0.35);
+
   const booth = {
+    async runArrival(ids) {
+      for (const penguin of waiting.values()) group.remove(penguin.root);
+      waiting.clear();
+      train.group.position.x = 6.2;
+      train.openDoors(0);
+      await tween(2.1, (p) => { train.group.position.x = 6.2 * (1 - ease(p)); });
+      await tween(0.25, () => {});
+      await tween(0.75, (p) => train.openDoors(ease(p)));
+      for (const [i, id] of ids.entries()) {
+        const penguin = makeTraveller(id);
+        const from = new THREE.Vector3(TRAIN_DOOR.x, TRAVELLER_AT.y, TRAIN_DOOR.z - 0.3);
+        penguin.root.position.copy(from);
+        penguin.walking = true;
+        group.add(penguin.root);
+        waiting.set(id, penguin);
+        const to = queueAt(i);
+        const angle = Math.atan2(to.x - from.x, to.z - from.z);
+        penguin.root.rotation.y = angle;
+        await tween(0.68, (p) => penguin.root.position.lerpVectors(from, to, p));
+        penguin.root.rotation.y = 0;
+        penguin.walking = false;
+      }
+    },
     // Swapping travellers walks the old one off and the new one on.
     show(id, { reaction } = {}) {
       if (id === travellerId) return;
       const old = traveller;
       travellerId = id;
-      traveller = id ? makeTraveller(id) : null;
+      traveller = id ? (waiting.get(id) ?? makeTraveller(id)) : null;
       talking = false;
       thinking = false;
       face = FACES.neutral;
       if (old && reaction === 'away') snatch(old);
       else if (old) walkOff(old, reaction === 'through' ? 'happy' : 'neutral');
       if (!traveller) return;
-      if (old) walkOn(traveller);
-      else {
-        traveller.root.position.copy(TRAVELLER_AT);
-        group.add(traveller.root);
+      waiting.delete(id);
+      let index = 0;
+      for (const queued of waiting.values()) {
+        const from = queued.root.position.clone();
+        const to = queueAt(index);
+        tween(0.55, (p) => queued.root.position.lerpVectors(from, to, p));
+        index += 1;
       }
+      walkOn(traveller);
     },
     setMood(mood) {
       face = FACES[mood] ?? FACES.neutral;

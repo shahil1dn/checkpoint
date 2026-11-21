@@ -373,8 +373,10 @@ async function finishTalking() {
 }
 
 async function startShift() {
-  started = true;
+  $('start').disabled = true;
   $('start-screen').hidden = true;
+  await booth?.runArrival(shift.queue);
+  started = true;
   micSetup = live;
   if (live) hint('Allow the microphone, or type a question.');
   if (live) for (const id of shift.queue) if (getTraveller(id).bribe) fetchPlea(id);
@@ -394,12 +396,19 @@ async function startShift() {
   }
 }
 
-function playAgain() {
+async function playAgain() {
   shift = R.restartShift(shift);
   screenLookup = null;
   stopVoice();
   hint('');
   $('last-stamp').textContent = '';
+  started = false;
+  $('report').hidden = true;
+  $('shift-info').hidden = true;
+  $('controls').hidden = true;
+  $('look').hidden = true;
+  await booth?.runArrival(shift.queue);
+  started = true;
   lastFrame = performance.now();
   render();
 }
@@ -524,7 +533,7 @@ function render() {
   $('hint').hidden = !playing;
   $('tool-tip').hidden = !playing;
   renderClock();
-  if (!stampingNow) booth?.show(over ? null : R.currentTravellerId(shift));
+  if (!stampingNow) booth?.show(playing ? R.currentTravellerId(shift) : null);
   if (over) {
     booth?.putDown();
     $('captions').hidden = true;
