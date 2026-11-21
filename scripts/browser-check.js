@@ -78,6 +78,12 @@ async function openPage(url) {
 }
 
 async function main() {
+  // It normally takes about 7 s. A stuck Chrome once hung check.sh for 5 minutes;
+  // fail plainly instead, so a rerun is the obvious next step.
+  setTimeout(() => {
+    console.log('   FAIL the browser check took over 60 s (Chrome stuck?): run it again');
+    process.exit(1);
+  }, 60000).unref();
   let browser;
   try {
     browser = browserOnThisMachine();
