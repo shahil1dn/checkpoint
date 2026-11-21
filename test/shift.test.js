@@ -112,9 +112,9 @@ test('a restarted shift never accepts a reply from the old one', () => {
   assert.equal(R.finishQuestion(next.shift, started.request.id, { reply: 'x', mood: 'sad', cracked: false }), next.shift);
 });
 
-test('the request sent to the server carries past exchanges without the cracked flag', () => {
+test('the request sent to the server carries past exchanges with their real cracked flag', () => {
   const shift = askAndAnswer(R.newShift());
   const { request } = R.startQuestion(shift, 'And?');
-  assert.deepEqual(Object.keys(request.history[0]).sort(), ['mood', 'question', 'reply']);
+  assert.deepEqual(Object.keys(request.history[0]).sort(), ['cracked', 'mood', 'question', 'reply']);
   assert.equal(R.validateAskRequest({ travellerId: request.travellerId, question: request.question, history: request.history }).ok, true);
 });

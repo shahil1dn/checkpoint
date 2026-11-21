@@ -39,20 +39,22 @@ function textOf(content) {
   return content.filter((part) => part?.type === 'text').map((part) => part.text ?? '').join('');
 }
 
-// Returns the model's raw reply text, still untrusted.
-export function makeMistralAsker({ fetchImpl = fetch } = {}) {
-  return async function ask({ traveller, history, question }) {
+// One JSON-schema chat call. Returns the model's raw text, still untrusted.
+export function makeMistralJsonChat({ fetchImpl = fetch } = {}) {
+  return async function chatJson({ messages, format, maxTokens = CHAT_MAX_TOKENS }) {
     const data = await postToMistral('/chat/completions', {
       contentType: 'application/json',
-      body: JSON.stringify({
-        model: CHAT_MODEL,
-        max_tokens: CHAT_MAX_TOKENS,
-        response_format: REPLY_FORMAT,
-        messages: buildMessages(traveller, history, question),
-      }),
+      body: JSON.stringify({ model: CHAT_MODEL, max_tokens: maxTokens, response_format: format, messages }),
     }, fetchImpl);
     return textOf(data?.choices?.[0]?.message?.content);
   };
+}
+
+// The traveller's reply to one question.
+export function makeMistralAsker({ fetchImpl = fetch } = {}) {
+  const chatJson = makeMistralJsonChat({ fetchImpl });
+  return ({ traveller, history, question, nudge }) =>
+    chatJson({ messages: buildMessages(traveller, history, question, { nudge }), format: REPLY_FORMAT });
 }
 
 export const HEAR_MODEL = 'voxtral-mini-latest';

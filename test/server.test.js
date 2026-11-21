@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { createApp } from '../server/app.js';
 import { getTraveller } from '../src/travellers.js';
+import { FALLBACK_LINE } from '../src/rules.js';
 
 const FAKE_KEY = 'test-key-must-not-leak';
 let server;
@@ -20,8 +21,9 @@ before(async () => {
     liveAvailable: true,
     ask: async (req) => {
       calls.push(req);
-      if (nextRaw instanceof Error) throw nextRaw;
-      return nextRaw;
+      const next = Array.isArray(nextRaw) ? nextRaw.shift() : nextRaw;
+      if (next instanceof Error) throw next;
+      return next;
     },
     hear: async (req) => {
       heard.push(req);
@@ -116,11 +118,62 @@ test('a failed Mistral call returns 502 without detail', async () => {
   assert.deepEqual(await res.json(), { error: 'callFailed' });
 });
 
-test('a reply that is not JSON returns 502, not a broken reply', async () => {
-  nextRaw = 'Sure! Here is my answer';
+// ---- C3 and C5: the code owns confessions; one retry, then "say that again" ----
+
+const raw = (reply, cracked = false) => JSON.stringify({ reply, mood: 'sad', cracked });
+const maxAt = (questionNumber) => ({ ...valid, history: Array(questionNumber - 1).fill(pastExchange) });
+
+test('a broken reply is retried once, and the retry is what the player gets', async () => {
+  calls.length = 0;
+  nextRaw = ['Sure! Here is my answer', raw('Second try.')];
+  const body = await (await post(valid)).json();
+  assert.equal(calls.length, 2);
+  assert.equal(body.reply, 'Second try.');
+  assert.equal(body.fallback, undefined);
+});
+
+test('two broken replies become an in-character "say that again", spoken', async () => {
+  calls.length = 0;
+  spoken.length = 0;
+  nextRaw = ['not json', '{"mood":"sad"}'];
   const res = await post(valid);
-  assert.equal(res.status, 502);
-  assert.deepEqual(await res.json(), { error: 'badReply' });
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.equal(calls.length, 2);
+  assert.deepEqual({ reply: body.reply, fallback: body.fallback, cracked: body.cracked }, { reply: FALLBACK_LINE, fallback: true, cracked: false });
+  assert.equal(spoken[0].text, FALLBACK_LINE);
+});
+
+test('a liar confessing at question 2 is refused and asked again with a nudge', async () => {
+  calls.length = 0;
+  nextRaw = [raw('Fine, I am a spy!', true), raw('Spy? Me? Never.')];
+  const body = await (await post(maxAt(2))).json();
+  assert.equal(calls.length, 2);
+  assert.equal(calls[0].nudge, undefined);
+  assert.match(calls[1].nudge, /too early to confess/);
+  assert.deepEqual([body.reply, body.cracked], ['Spy? Me? Never.', false]);
+});
+
+test('a liar who keeps confessing before question 3 gets the fallback, not a confession', async () => {
+  nextRaw = [raw('I confess!', true), raw('I confess again!', true)];
+  const body = await (await post(maxAt(1))).json();
+  assert.equal(body.fallback, true);
+  assert.equal(body.cracked, false);
+});
+
+test('a liar confessing from question 3 on is accepted at once', async () => {
+  calls.length = 0;
+  nextRaw = [raw('Fine. Frontier Horizon sent me.', true)];
+  const body = await (await post(maxAt(3))).json();
+  assert.equal(calls.length, 1);
+  assert.equal(body.cracked, true);
+});
+
+test("an honest traveller's confession is ignored", async () => {
+  nextRaw = [raw('Fine, I admit it, it is cheese.', true)];
+  const body = await (await post({ ...valid, travellerId: 'colin', history: Array(3).fill(pastExchange) })).json();
+  assert.equal(body.cracked, false);
+  assert.equal(body.fallback, undefined);
 });
 
 const postClip = (body, type = 'audio/webm;codecs=opus') => fetch(`${base}/api/hear`, {

@@ -3,9 +3,10 @@
 import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { cleanTranscript, parseReply, validateAskRequest } from '../src/rules.js';
+import { FALLBACK_LINE, cleanTranscript, judgeReply, parseReply, validateAskRequest } from '../src/rules.js';
 import { getTraveller, voiceFor } from '../src/travellers.js';
 import { AUDIO_TYPES } from './mistral.js';
+import { EARLY_CONFESSION_NUDGE } from './prompt.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const MAX_JSON_BYTES = 16 * 1024;
@@ -79,16 +80,29 @@ export async function createApp({ ask, hear, speak, liveAvailable, log = () => {
     if (!liveAvailable) return send(res, 503, { error: 'noKey' });
     const { travellerId, history, question } = checked.value;
     const traveller = getTraveller(travellerId);
-    let raw;
+    let reply;
     try {
-      raw = await ask({ traveller, history, question });
+      reply = await askUntilAcceptable(traveller, history, question);
     } catch (err) {
       log(err);
       return send(res, 502, { error: 'callFailed' });
     }
-    const reply = parseReply(raw);
-    if (!reply) return send(res, 502, { error: 'badReply' });
     return send(res, 200, { ...reply, audio: await speakOrNull(traveller, reply) });
+  }
+
+  // C5: a broken or refused reply gets one retry. After that the traveller
+  // asks the inspector to repeat himself, which the page doesn't count as a
+  // question, so a bad turn never looks like silence or costs anything.
+  async function askUntilAcceptable(traveller, history, question) {
+    const questionNumber = history.length + 1;
+    let nudge;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const parsed = parseReply(await ask({ traveller, history, question, nudge }));
+      const judged = parsed ? judgeReply(traveller, questionNumber, parsed) : { ok: false, reason: 'badReply' };
+      if (judged.ok) return judged.reply;
+      nudge = judged.reason === 'earlyConfession' ? EARLY_CONFESSION_NUDGE : undefined;
+    }
+    return { reply: FALLBACK_LINE, mood: 'neutral', cracked: false, fallback: true };
   }
 
   // A reply that can't be voiced is still shown, so speech failing never

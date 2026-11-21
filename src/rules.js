@@ -22,11 +22,26 @@ export function checkQuestion(text) {
 
 function checkPastExchange(item) {
   if (!isPlainObject(item)) return null;
-  const { question, reply, mood = 'neutral' } = item;
+  const { question, reply, mood = 'neutral', cracked = false } = item;
   if (!checkQuestion(question).ok) return null;
   if (typeof reply !== 'string' || reply.length === 0 || charCount(reply) > MAX_REPLY_CHARS) return null;
-  if (!MOODS.includes(mood)) return null;
-  return { question, reply, mood };
+  if (!MOODS.includes(mood) || typeof cracked !== 'boolean') return null;
+  return { question, reply, mood, cracked };
+}
+
+// ---- Confessions belong to the code (C3) ----
+
+export const CONFESS_FROM_QUESTION = 3;
+export const FALLBACK_LINE = 'Sorry, could you say that again?';
+export const hasConfessed = (history) => history.some((exchange) => exchange.cracked);
+
+// An honest traveller has nothing to confess, so his `cracked` is ignored.
+// A liar's confession before question 3 is refused, so one lucky push can't
+// end the interrogation.
+export function judgeReply(traveller, questionNumber, reply) {
+  if (traveller.truth.honest) return { ok: true, reply: { ...reply, cracked: false } };
+  if (reply.cracked && questionNumber < CONFESS_FROM_QUESTION) return { ok: false, reason: 'earlyConfession' };
+  return { ok: true, reply };
 }
 
 // The server runs this on every /api/ask body before any Mistral call.
@@ -90,7 +105,7 @@ export function startQuestion(shift, text) {
   const travellerId = currentTravellerId(shift);
   if (questionsLeft(shift, travellerId) <= 0) return { shift, error: 'outOfQuestions' };
   const pending = { id: shift.nextRequestId, travellerId, question: checked.question };
-  const request = { ...pending, history: shift.cases[travellerId].history.map(({ question, reply, mood }) => ({ question, reply, mood })) };
+  const request = { ...pending, history: shift.cases[travellerId].history.map(({ question, reply, mood, cracked }) => ({ question, reply, mood, cracked })) };
   return { shift: { ...shift, pending, nextRequestId: shift.nextRequestId + 1 }, request };
 }
 

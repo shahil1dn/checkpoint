@@ -15,7 +15,22 @@ test('an ask request keeps only the known fields of past exchanges', () => {
     travellerId: 'max', question: 'Why?', history: [{ question: 'a', reply: 'b', extra: 'x' }],
   });
   assert.equal(checked.ok, true);
-  assert.deepEqual(checked.value.history, [{ question: 'a', reply: 'b', mood: 'neutral' }]);
+  assert.deepEqual(checked.value.history, [{ question: 'a', reply: 'b', mood: 'neutral', cracked: false }]);
+});
+
+test('confessions: honest ignored, liar refused before question 3, accepted from 3', () => {
+  const colin = { truth: { honest: true } };
+  const max = { truth: { honest: false } };
+  const cracked = { reply: 'I did it', mood: 'sad', cracked: true };
+  assert.deepEqual(R.judgeReply(colin, 4, cracked), { ok: true, reply: { ...cracked, cracked: false } });
+  assert.deepEqual(R.judgeReply(max, 2, cracked), { ok: false, reason: 'earlyConfession' });
+  assert.deepEqual(R.judgeReply(max, 3, cracked), { ok: true, reply: cracked });
+  assert.equal(R.judgeReply(max, 1, { ...cracked, cracked: false }).ok, true);
+});
+
+test('a past exchange with a cracked flag that is not true or false is refused', () => {
+  const checked = R.validateAskRequest({ travellerId: 'max', question: 'Why?', history: [{ question: 'a', reply: 'b', cracked: 'yes' }] });
+  assert.equal(checked.reason, 'badHistory');
 });
 
 test('a past exchange with an unknown mood is refused', () => {

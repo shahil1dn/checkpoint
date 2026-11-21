@@ -83,10 +83,12 @@ async function askQuestion(text) {
 
   const { reply, error } = await fetchReply(asked.request);
   const before = shift;
-  shift = R.finishQuestion(shift, asked.request.id, reply ?? null);
+  // A "say that again" fallback is spoken but, like a failed call, not counted.
+  shift = R.finishQuestion(shift, asked.request.id, reply && !reply.fallback ? reply : null);
   // Unchanged means the traveller was stamped while we waited: stay quiet.
   if (shift === before) return;
-  hint(error ? HINTS[error] : '');
+  if (error) hint(HINTS[error]);
+  else hint(reply.fallback ? `${traveller.name}: "${reply.reply}" (that question wasn't counted)` : '');
   if (reply?.audio) playVoice(reply.audio);
   render();
 }
