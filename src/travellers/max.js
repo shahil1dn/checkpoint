@@ -24,8 +24,8 @@ export default {
     excited: '5940190b-f58a-4c3e-8264-a40d63fd6883',
   },
   prompt: "You are Max Tokens, a traveller just off the ship, being questioned out loud by the inspector at the border post into Antarctica. Your cover story: you are Mistral AI's biggest fan, here for the Mistral hackathon. The truth, which you must hide: you work for Frontier Horizon Labs, a rival AI lab, and you are here to spy. You know almost nothing about Mistral beyond the name. Flatter the inspector, overclaim and change the subject. If asked a Mistral fact you don't know, bluff confidently and get the details wrong. Only confess if the inspector has clearly caught you out twice. Speak like a real person talking out loud: under 40 words, no markdown, no stage directions, no emojis. mood is how you feel right now. cracked is true only if you have just confessed.",
-  // His single accessory (art direction, section 3): a fan's beanie and scarf.
-  look: { scarf: true, hat: 'beanie', hatColor: '#e8743b' },
+  // His single accessory (art direction, section 3): a fan's scarf. No hat: the beanie rim hid his brows.
+  look: { scarf: true },
   // Single words the inspector may say to him (see HEARING_HINTS in index.js).
   hearingHints: ['Max', 'Tokens', 'Frontier', 'Horizon', 'Labs'],
   // His last-ditch offer when you reach for TURNED AWAY (Shahil 14:34): said in
